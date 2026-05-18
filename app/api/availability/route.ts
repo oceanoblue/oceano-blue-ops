@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { localToUtc, dayOfWeekInTz } from '@/lib/utils/timezone';
+import { fetchBusyRanges } from '@/lib/google-calendar/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,6 +105,24 @@ export async function GET(request: Request) {
     if (!ph) continue;
     ph.busy.push({ start: new Date(b.starts_at).getTime(), end: new Date(b.ends_at).getTime() });
   }
+
+  // Layer in Google Calendar busy events (best-effort, parallel).
+  await Promise.all(
+    Array.from(photographers.values()).map(async (ph) => {
+      try {
+        const ranges = await fetchBusyRanges(
+          ph.id,
+          new Date(dayStart).toISOString(),
+          new Date(dayEnd).toISOString()
+        );
+        for (const r of ranges) {
+          ph.busy.push({ start: new Date(r.start).getTime(), end: new Date(r.end).getTime() });
+        }
+      } catch {
+        // Calendar fetch failure should not block slot generation.
+      }
+    })
+  );
 
   // For each photographer, generate their slots, then merge with photographer attribution.
   type Slot = { iso: string; photographer_id: string };

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
+import { insertEvent } from '@/lib/google-calendar/api';
 
 const Body = z.object({
   client_email: z.string().email(),
@@ -74,6 +75,33 @@ export async function POST(request: Request) {
       .from('orders')
       .update({ photographer_id: b.photographer_id })
       .eq('id', data);
+
+    // Push to the photographer's Google Calendar (best-effort).
+    try {
+      const start = new Date(b.scheduled_at);
+      const end = new Date(start.getTime() + b.duration_minutes * 60_000);
+      const ev = await insertEvent(b.photographer_id, {
+        summary: `Shoot · ${b.address_line1}`,
+        description: [
+          `Client: ${b.client_name} <${b.client_email}>`,
+          b.client_phone ? `Phone: ${b.client_phone}` : null,
+          b.access_method ? `Access: ${b.access_method}` : null,
+          b.highlights ? `Highlights: ${b.highlights}` : null,
+          `\nBooked via Oceano Blue Ops.`,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        location: `${b.address_line1}, ${b.city}, ${b.state} ${b.zip}`,
+        startIso: start.toISOString(),
+        endIso: end.toISOString(),
+        timezone: b.timezone,
+      });
+      if (ev?.id) {
+        await supabase.from('orders').update({ gcal_event_id: ev.id }).eq('id', data);
+      }
+    } catch {
+      // Calendar push is a nice-to-have; don't fail the booking.
+    }
   }
   return NextResponse.json({ order_id: data });
 }
