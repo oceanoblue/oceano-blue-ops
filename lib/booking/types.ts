@@ -59,6 +59,7 @@ export interface Product {
   short_description: string | null;
   long_description: string | null;
   cover_image_url: string | null;
+  gallery_image_urls: string[];
   is_addon: boolean;
   price_cents: number;
   base_price_cents: number;

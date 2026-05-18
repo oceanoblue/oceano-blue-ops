@@ -86,12 +86,17 @@ export function ProductsStep({
 
       {detailFor && (
         <Drawer onClose={() => setDetailFor(null)} title={detailFor.name}>
-          {detailFor.cover_image_url && (
-            <img src={detailFor.cover_image_url} alt="" className="w-full h-56 object-cover rounded-md" />
-          )}
-          <p className="mt-4 text-sm text-slate-700">{detailFor.long_description ?? detailFor.short_description}</p>
-          <div className="mt-4 text-2xl font-semibold">{fmtCents(detailFor.price_cents)}</div>
-          <div className="mt-auto pt-4">
+          <ProductGallery product={detailFor} />
+          <p className="mt-4 text-sm leading-relaxed text-slate-700">
+            {detailFor.long_description ?? detailFor.short_description}
+          </p>
+          <div className="mt-4 flex items-baseline gap-2">
+            <span className="text-3xl font-semibold text-ocean-950">{fmtCents(detailFor.price_cents)}</span>
+            {detailFor.duration_minutes > 0 && (
+              <span className="text-sm text-slate-500">· {detailFor.duration_minutes} min</span>
+            )}
+          </div>
+          <div className="mt-auto pt-6">
             {itemIds.has(detailFor.id) ? (
               <button className="btn-secondary w-full" onClick={() => removeItem(detailFor.id)}>
                 <X className="h-4 w-4" /> Remove from order
@@ -206,6 +211,44 @@ function AddonCard({
           {selected ? 'Remove' : 'Add'}
         </button>
       </div>
+    </div>
+  );
+}
+
+function ProductGallery({ product }: { product: Product }) {
+  const images = [product.cover_image_url, ...(product.gallery_image_urls ?? [])].filter(
+    (u): u is string => !!u
+  );
+  const [idx, setIdx] = useState(0);
+  if (images.length === 0) {
+    return (
+      <div className="aspect-[4/3] w-full rounded-lg bg-gradient-to-br from-ocean-100 to-ocean-50 grid place-items-center text-ocean-700 text-xs uppercase tracking-wide">
+        {product.kind}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <div className="relative aspect-[4/3] w-full rounded-lg overflow-hidden bg-slate-100">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={images[idx]} alt="" className="h-full w-full object-cover" />
+      </div>
+      {images.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto">
+          {images.map((url, i) => (
+            <button
+              key={url}
+              onClick={() => setIdx(i)}
+              className={`shrink-0 h-14 w-20 overflow-hidden rounded-md ring-2 transition ${
+                i === idx ? 'ring-ocean-500' : 'ring-transparent hover:ring-slate-200'
+              }`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt="" className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

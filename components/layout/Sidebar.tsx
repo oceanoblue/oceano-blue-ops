@@ -9,6 +9,7 @@ import {
   Home,
   Users,
   Image as ImageIcon,
+  Package,
   Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
@@ -20,6 +21,7 @@ const NAV = [
   { href: '/dashboard/listings', label: 'Listings', icon: Home },
   { href: '/dashboard/photos', label: 'Photos', icon: ImageIcon },
   { href: '/dashboard/clients', label: 'Clients', icon: Users },
+  { href: '/dashboard/products', label: 'Products', icon: Package },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
