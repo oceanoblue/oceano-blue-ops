@@ -1,74 +1,125 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { localToUtc, dayOfWeekInTz } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Public endpoint — returns 30-min slots between BUSINESS_HOURS where
- * an appointment of `duration` minutes can fit without colliding with
- * an existing order or a schedule_block.
+ * GET /api/availability?date=YYYY-MM-DD&duration=N
  *
- * Query: ?date=YYYY-MM-DD&duration=60
+ * Returns 30-min start slots where AT LEAST ONE active photographer
+ * is free for `duration` minutes, given their team_availability hours
+ * and existing scheduled orders / schedule_blocks.
+ *
+ * Each slot includes the photographer_id that will fulfil it (first match).
  */
-const BUSINESS_HOURS = { startHour: 8, endHour: 18 }; // 8 AM – 6 PM
 const SLOT_MINUTES = 30;
+
+interface Photographer {
+  id: string;
+  timezone: string;
+  // List of {startUtcMs, endUtcMs} working windows on the requested day
+  windows: Array<{ start: number; end: number }>;
+  // Existing busy ranges (orders + blocks)
+  busy: Array<{ start: number; end: number }>;
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const dateStr = url.searchParams.get('date');
-  const duration = Math.max(30, parseInt(url.searchParams.get('duration') || '60', 10));
+  const duration = Math.max(15, parseInt(url.searchParams.get('duration') || '60', 10));
   if (!dateStr) return NextResponse.json({ error: 'date required' }, { status: 400 });
 
-  const day = new Date(`${dateStr}T00:00:00`);
-  if (isNaN(day.getTime())) return NextResponse.json({ error: 'bad date' }, { status: 400 });
-
-  // Don't allow same-day or past
+  // Don't allow past dates
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  if (day < today) return NextResponse.json({ slots: [] });
+  const requested = new Date(`${dateStr}T12:00:00Z`);
+  if (requested < today) return NextResponse.json({ slots: [] });
 
   const supabase = createAdminClient();
-  const start = new Date(day);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(day);
-  end.setHours(23, 59, 59, 999);
 
-  const { data: orders } = await supabase
-    .from('orders')
-    .select('scheduled_at, duration_minutes, status')
-    .gte('scheduled_at', start.toISOString())
-    .lte('scheduled_at', end.toISOString())
-    .not('status', 'in', '("cancelled","draft")');
+  // Active photographers with at least one availability row
+  const { data: members } = await supabase
+    .from('team_members')
+    .select('id, role, is_active')
+    .in('role', ['admin', 'photographer'])
+    .eq('is_active', true);
 
-  const { data: blocks } = await supabase
-    .from('schedule_blocks')
-    .select('starts_at, ends_at, is_available')
-    .gte('starts_at', start.toISOString())
-    .lte('ends_at', end.toISOString())
-    .eq('is_available', false);
+  if (!members?.length) return NextResponse.json({ slots: [] });
+  const memberIds = members.map((m: any) => m.id);
 
-  const busy: Array<[number, number]> = []; // unix-ms ranges
-  for (const o of orders ?? []) {
-    const sa = new Date((o as any).scheduled_at).getTime();
-    const dur = ((o as any).duration_minutes ?? 60) * 60 * 1000;
-    busy.push([sa, sa + dur]);
+  const { data: avail } = await supabase
+    .from('team_availability')
+    .select('team_member_id, day_of_week, start_local, end_local, timezone, is_active')
+    .in('team_member_id', memberIds)
+    .eq('is_active', true);
+
+  if (!avail?.length) return NextResponse.json({ slots: [], reason: 'no_hours_configured' });
+
+  // Compute the broad UTC range for the day so we can fetch busy events once.
+  // Use a generous window (24h either side) since we don't know each TZ yet.
+  const dayStart = new Date(`${dateStr}T00:00:00Z`).getTime() - 24 * 3600 * 1000;
+  const dayEnd = new Date(`${dateStr}T00:00:00Z`).getTime() + 48 * 3600 * 1000;
+
+  const [{ data: orders }, { data: blocks }] = await Promise.all([
+    supabase
+      .from('orders')
+      .select('photographer_id, scheduled_at, duration_minutes, status')
+      .gte('scheduled_at', new Date(dayStart).toISOString())
+      .lte('scheduled_at', new Date(dayEnd).toISOString())
+      .not('status', 'in', '("cancelled","draft")'),
+    supabase
+      .from('schedule_blocks')
+      .select('team_member_id, starts_at, ends_at, is_available')
+      .gte('starts_at', new Date(dayStart).toISOString())
+      .lte('ends_at', new Date(dayEnd).toISOString())
+      .eq('is_available', false),
+  ]);
+
+  // Build per-photographer state
+  const photographers = new Map<string, Photographer>();
+  for (const a of avail as any[]) {
+    const dow = dayOfWeekInTz(dateStr, a.timezone);
+    if (dow !== a.day_of_week) continue;
+    const start = localToUtc(dateStr, a.start_local.slice(0, 5), a.timezone).getTime();
+    const end = localToUtc(dateStr, a.end_local.slice(0, 5), a.timezone).getTime();
+    const ph = photographers.get(a.team_member_id) ?? {
+      id: a.team_member_id,
+      timezone: a.timezone,
+      windows: [],
+      busy: [],
+    };
+    ph.windows.push({ start, end });
+    photographers.set(a.team_member_id, ph);
   }
-  for (const b of blocks ?? []) {
-    busy.push([new Date((b as any).starts_at).getTime(), new Date((b as any).ends_at).getTime()]);
+  for (const o of (orders ?? []) as any[]) {
+    if (!o.photographer_id) continue;
+    const ph = photographers.get(o.photographer_id);
+    if (!ph) continue;
+    const s = new Date(o.scheduled_at).getTime();
+    ph.busy.push({ start: s, end: s + (o.duration_minutes ?? 60) * 60 * 1000 });
+  }
+  for (const b of (blocks ?? []) as any[]) {
+    const ph = photographers.get(b.team_member_id);
+    if (!ph) continue;
+    ph.busy.push({ start: new Date(b.starts_at).getTime(), end: new Date(b.ends_at).getTime() });
   }
 
-  const slots: string[] = [];
-  for (let h = BUSINESS_HOURS.startHour; h < BUSINESS_HOURS.endHour; h++) {
-    for (let m = 0; m < 60; m += SLOT_MINUTES) {
-      const t = new Date(day);
-      t.setHours(h, m, 0, 0);
-      const tEnd = t.getTime() + duration * 60 * 1000;
-      const endHour = new Date(day).setHours(BUSINESS_HOURS.endHour, 0, 0, 0);
-      if (tEnd > endHour) continue;
-      const overlaps = busy.some(([s, e]) => t.getTime() < e && tEnd > s);
-      if (!overlaps) slots.push(t.toISOString());
+  // For each photographer, generate their slots, then merge with photographer attribution.
+  type Slot = { iso: string; photographer_id: string };
+  const slotMap = new Map<string, Slot>();
+  for (const ph of photographers.values()) {
+    for (const w of ph.windows) {
+      for (let t = w.start; t + duration * 60_000 <= w.end; t += SLOT_MINUTES * 60_000) {
+        const tEnd = t + duration * 60_000;
+        const overlaps = ph.busy.some((b) => t < b.end && tEnd > b.start);
+        if (overlaps) continue;
+        const iso = new Date(t).toISOString();
+        if (!slotMap.has(iso)) slotMap.set(iso, { iso, photographer_id: ph.id });
+      }
     }
   }
 
+  const slots = Array.from(slotMap.values()).sort((a, b) => a.iso.localeCompare(b.iso));
   return NextResponse.json({ slots, duration });
 }

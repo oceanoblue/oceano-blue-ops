@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { SettingsNav } from '@/components/layout/SettingsNav';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ export default async function SettingsPage() {
         <h1 className="text-2xl font-semibold text-ocean-950">Settings</h1>
         <p className="text-sm text-slate-600">Team, AI providers, and integrations.</p>
       </div>
+      <SettingsNav />
 
       <section className="card p-6">
         <h2 className="font-semibold mb-4">Team</h2>

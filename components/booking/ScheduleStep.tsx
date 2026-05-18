@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, addMonths, format, isSameDay, isSameMonth, startOfMonth, startOfWeek, endOfMonth, endOfWeek } from 'date-fns';
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
-import type { ScheduleData } from '@/lib/booking/types';
+import type { ScheduleData, AvailabilitySlot } from '@/lib/booking/types';
 import { cn } from '@/lib/utils/cn';
 
 export function ScheduleStep({
@@ -23,7 +23,7 @@ export function ScheduleStep({
   });
   const [monthCursor, setMonthCursor] = useState(() => startOfMonth(s.scheduled_at ? new Date(s.scheduled_at) : new Date()));
   const [selectedDay, setSelectedDay] = useState<Date | null>(s.scheduled_at ? new Date(s.scheduled_at) : null);
-  const [slots, setSlots] = useState<string[] | null>(null);
+  const [slots, setSlots] = useState<AvailabilitySlot[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [hour24, setHour24] = useState(false);
 
@@ -46,6 +46,7 @@ export function ScheduleStep({
       .then((r) => r.json())
       .then((d) => setSlots(d.slots ?? []))
       .finally(() => setLoading(false));
+  // re-run when the date changes or the picked duration changes
   }, [selectedDay, s.duration_minutes]);
 
   const today = new Date();
@@ -158,13 +159,13 @@ export function ScheduleStep({
             ) : (slots?.length ?? 0) === 0 ? (
               <p className="text-sm text-slate-500">No slots available — try another day.</p>
             ) : (
-              slots!.map((iso) => {
-                const t = new Date(iso);
-                const active = s.scheduled_at === iso;
+              slots!.map((slot) => {
+                const t = new Date(slot.iso);
+                const active = s.scheduled_at === slot.iso;
                 return (
                   <button
-                    key={iso}
-                    onClick={() => setS({ ...s, scheduled_at: iso })}
+                    key={slot.iso}
+                    onClick={() => setS({ ...s, scheduled_at: slot.iso, photographer_id: slot.photographer_id })}
                     className={cn(
                       'block w-full rounded-md border px-3 py-2 text-sm text-left',
                       active

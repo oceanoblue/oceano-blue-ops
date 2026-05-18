@@ -27,6 +27,12 @@ export interface ScheduleData {
   timezone: string;
   access_method: string;
   highlights: string;
+  photographer_id: string | null;      // auto-assigned from availability response
+}
+
+export interface AvailabilitySlot {
+  iso: string;
+  photographer_id: string;
 }
 
 export interface ContactData {

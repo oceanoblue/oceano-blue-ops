@@ -23,6 +23,7 @@ const EMPTY: BookingState = {
     timezone: 'America/New_York',
     access_method: '',
     highlights: '',
+    photographer_id: null,
   },
   contact: { email: '', name: '', phone: '', brokerage: '' },
 };
@@ -69,6 +70,7 @@ export default function BookingWizardPage() {
           timezone: state.schedule.timezone,
           access_method: state.schedule.access_method,
           highlights: state.schedule.highlights,
+          photographer_id: state.schedule.photographer_id,
           items: state.items,
         }),
       });

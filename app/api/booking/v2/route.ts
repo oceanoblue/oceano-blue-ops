@@ -20,6 +20,7 @@ const Body = z.object({
   scheduled_at: z.string().datetime(),
   duration_minutes: z.number().int().min(15),
   timezone: z.string().default('America/New_York'),
+  photographer_id: z.string().uuid().nullable().optional(),
 
   access_method: z.string().optional().default(''),
   highlights: z.string().optional().default(''),
@@ -65,5 +66,14 @@ export async function POST(request: Request) {
     p_items: b.items,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Best-effort: stamp the photographer onto the order. Done as a separate
+  // update so the RPC signature stays stable.
+  if (b.photographer_id) {
+    await supabase
+      .from('orders')
+      .update({ photographer_id: b.photographer_id })
+      .eq('id', data);
+  }
   return NextResponse.json({ order_id: data });
 }
