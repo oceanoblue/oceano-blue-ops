@@ -13,4 +13,3 @@ next-env.d.ts
 supabase/.branches
 supabase/.temp
 DEPLOY_CREDENTIALS.md
-tsconfig.tsbuildinfo

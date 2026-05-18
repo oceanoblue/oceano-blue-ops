@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 const PUBLIC_PATHS = [
   '/', '/book', '/login', '/gallery', '/portal',
   '/api/delivery', '/api/booking', '/api/portal',
+  '/api/products', '/api/availability',
 ];
 
 function isPublic(pathname: string) {

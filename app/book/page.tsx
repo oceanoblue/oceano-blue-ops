@@ -1,178 +1,202 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { StepHeader } from '@/components/booking/StepHeader';
+import { OrderSummary } from '@/components/booking/OrderSummary';
+import { AddressStep } from '@/components/booking/AddressStep';
+import { PropertyStep } from '@/components/booking/PropertyStep';
+import { ProductsStep } from '@/components/booking/ProductsStep';
+import { ScheduleStep } from '@/components/booking/ScheduleStep';
+import { ContactStep } from '@/components/booking/ContactStep';
+import type { BookingState, Product } from '@/lib/booking/types';
+import { fmtCents, fmtDateTime, fmtAddress } from '@/lib/utils/format';
 
-const SERVICE_CHOICES: Array<{ id: string; label: string; price: string }> = [
-  { id: 'photos_hdr', label: 'HDR photos', price: '$245' },
-  { id: 'photos_standard', label: 'Standard photos', price: '$195' },
-  { id: 'twilight', label: 'Twilight shoot', price: '$150' },
-  { id: 'drone_photos', label: 'Drone photos', price: '$125' },
-  { id: 'drone_video', label: 'Drone video', price: '$200' },
-  { id: 'video_walkthrough', label: 'Cinematic walkthrough', price: '$350' },
-  { id: 'virtual_tour', label: 'Virtual tour', price: '$125' },
-  { id: 'floor_plan', label: 'Floor plan', price: '$95' },
-  { id: 'matterport', label: 'Matterport 3D tour', price: '$295' },
-  { id: 'rush_delivery', label: '24-hour rush delivery', price: '+$95' },
-];
+const EMPTY: BookingState = {
+  step: 1,
+  address: null,
+  property: { sqft: 0 },
+  items: [],
+  schedule: {
+    scheduled_at: null,
+    duration_minutes: 60,
+    timezone: 'America/New_York',
+    access_method: '',
+    highlights: '',
+  },
+  contact: { email: '', name: '', phone: '', brokerage: '' },
+};
 
-const STATES = ['NJ', 'NY', 'PA', 'CT', 'FL'];
+export default function BookingWizardPage() {
+  const [state, setState] = useState<BookingState>(EMPTY);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<{ orderId: string } | null>(null);
 
-export default function BookPage() {
-  const [form, setForm] = useState({
-    client_name: '',
-    client_email: '',
-    client_phone: '',
-    client_brokerage: '',
-    address_line1: '',
-    city: '',
-    state: 'NJ',
-    zip: '',
-    bedrooms: 3,
-    bathrooms: 2,
-    sqft: 1800,
-    requested_at: '',
-    services: ['photos_hdr'],
-    notes: '',
-  });
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const totalDuration = useMemo(() => {
+    return state.items.reduce((sum, it) => {
+      const p = products.find((x) => x.id === it.product_id);
+      return sum + (p?.duration_minutes ?? 0) * it.quantity;
+    }, 0) || 60;
+  }, [state.items, products]);
 
-  function toggleService(id: string) {
-    setForm((f) => ({
-      ...f,
-      services: f.services.includes(id) ? f.services.filter((s) => s !== id) : [...f.services, id],
-    }));
-  }
+  const goto = (step: BookingState['step']) => setState((s) => ({ ...s, step }));
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    const r = await fetch('/api/booking', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        ...form,
-        bedrooms: Number(form.bedrooms),
-        bathrooms: Number(form.bathrooms),
-        sqft: Number(form.sqft),
-        requested_at: new Date(form.requested_at).toISOString(),
-      }),
-    });
-    setBusy(false);
-    if (!r.ok) {
+  async function submitBooking(contact: typeof state.contact) {
+    if (!state.address || !state.schedule.scheduled_at) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/booking/v2', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          client_email: contact.email,
+          client_name: contact.name || contact.email.split('@')[0],
+          client_phone: contact.phone,
+          client_brokerage: contact.brokerage,
+          address_line1: state.address.address_line1,
+          address_line2: state.address.address_line2,
+          city: state.address.city,
+          state: state.address.state,
+          zip: state.address.zip,
+          lat: state.address.lat,
+          lng: state.address.lng,
+          sqft: state.property.sqft,
+          scheduled_at: state.schedule.scheduled_at,
+          duration_minutes: totalDuration,
+          timezone: state.schedule.timezone,
+          access_method: state.schedule.access_method,
+          highlights: state.schedule.highlights,
+          items: state.items,
+        }),
+      });
       const data = await r.json();
-      setErr(data.error || 'Booking failed');
-      return;
+      if (!r.ok) {
+        setError(data.error || 'Booking failed');
+      } else {
+        setDone({ orderId: data.order_id });
+        setState((s) => ({ ...s, step: 5, contact }));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSubmitting(false);
     }
-    setDone(true);
   }
 
   if (done) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-6">
+      <div className="min-h-screen grid place-items-center bg-slate-50 px-6">
         <div className="card max-w-md w-full p-8 text-center">
-          <h1 className="text-2xl font-semibold text-ocean-900">Shoot requested 🎉</h1>
-          <p className="mt-2 text-slate-600">
-            Thanks! Our team will confirm the date and details by email within a few hours.
+          <h1 className="text-2xl font-semibold text-ocean-900">Booking confirmed 🎉</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            Thanks! Your shoot is booked for{' '}
+            <strong>{fmtDateTime(state.schedule.scheduled_at!)}</strong> at{' '}
+            <strong>{state.address ? fmtAddress(state.address) : ''}</strong>.
           </p>
-          <Link href="/" className="btn-secondary mt-6 inline-flex">Back home</Link>
+          <p className="mt-2 text-sm text-slate-600">
+            We'll send a confirmation email and a link to view your listing in the customer portal.
+          </p>
+          <div className="mt-6 flex gap-2 justify-center">
+            <Link href="/portal" className="btn-secondary">Open portal</Link>
+            <Link href="/" className="btn-ghost">Home</Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-12">
-      <div className="mx-auto max-w-2xl px-6">
-        <Link href="/" className="text-sm text-ocean-700 hover:underline">← Back</Link>
-        <h1 className="mt-4 text-3xl font-semibold text-ocean-950">Book a shoot</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Fill this out and we'll confirm by email within a few hours.
-        </p>
+    <div className="min-h-screen bg-slate-50">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="h-7 w-7 rounded bg-ocean-700 grid place-items-center text-white text-sm font-bold">O</div>
+            <span className="font-semibold text-ocean-950">Oceano Blue</span>
+          </Link>
+          <StepHeader current={state.step} />
+        </div>
+      </header>
 
-        <form onSubmit={submit} className="card mt-8 p-6 space-y-6">
-          <fieldset className="space-y-4">
-            <legend className="font-semibold text-slate-900">Your details</legend>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Full name"><input className="input" required value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} /></Field>
-              <Field label="Email"><input className="input" type="email" required value={form.client_email} onChange={(e) => setForm({ ...form, client_email: e.target.value })} /></Field>
-              <Field label="Phone"><input className="input" value={form.client_phone} onChange={(e) => setForm({ ...form, client_phone: e.target.value })} /></Field>
-              <Field label="Brokerage"><input className="input" value={form.client_brokerage} onChange={(e) => setForm({ ...form, client_brokerage: e.target.value })} /></Field>
-            </div>
-          </fieldset>
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
+        {state.step === 1 && (
+          <AddressStep
+            initial={state.address}
+            onComplete={(a) => setState((s) => ({ ...s, address: a, step: 2 }))}
+          />
+        )}
 
-          <fieldset className="space-y-4">
-            <legend className="font-semibold text-slate-900">Property</legend>
-            <Field label="Address"><input className="input" required value={form.address_line1} onChange={(e) => setForm({ ...form, address_line1: e.target.value })} /></Field>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="City"><input className="input" required value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></Field>
-              <Field label="State">
-                <select className="input" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}>
-                  {STATES.map((s) => <option key={s}>{s}</option>)}
-                </select>
-              </Field>
-              <Field label="ZIP"><input className="input" required value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value })} /></Field>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Bedrooms"><input className="input" type="number" min={0} value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: +e.target.value })} /></Field>
-              <Field label="Bathrooms"><input className="input" type="number" step="0.5" min={0} value={form.bathrooms} onChange={(e) => setForm({ ...form, bathrooms: +e.target.value })} /></Field>
-              <Field label="Sq ft"><input className="input" type="number" min={0} value={form.sqft} onChange={(e) => setForm({ ...form, sqft: +e.target.value })} /></Field>
-            </div>
-          </fieldset>
+        {state.step === 2 && state.address && (
+          <PropertyStep
+            address={state.address}
+            property={state.property}
+            onBack={() => goto(1)}
+            onEditAddress={() => goto(1)}
+            onComplete={(a, p) =>
+              setState((s) => ({ ...s, address: a, property: p, step: 3 }))
+            }
+          />
+        )}
 
-          <fieldset className="space-y-4">
-            <legend className="font-semibold text-slate-900">Shoot date</legend>
-            <Field label="Preferred date / time">
-              <input className="input" type="datetime-local" required value={form.requested_at} onChange={(e) => setForm({ ...form, requested_at: e.target.value })} />
-            </Field>
-          </fieldset>
+        {state.step === 3 && (
+          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+            <ProductsStep
+              sqft={state.property.sqft}
+              items={state.items}
+              onBack={() => goto(2)}
+              onChange={(items) => setState((s) => ({ ...s, items }))}
+              onComplete={() => goto(4)}
+              onLoaded={setProducts}
+            />
+            <OrderSummary
+              state={state}
+              products={products}
+              onRemoveItem={(id) =>
+                setState((s) => ({ ...s, items: s.items.filter((i) => i.product_id !== id) }))
+              }
+            />
+          </div>
+        )}
 
-          <fieldset className="space-y-2">
-            <legend className="font-semibold text-slate-900">Services</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {SERVICE_CHOICES.map((s) => (
-                <label
-                  key={s.id}
-                  className={`flex items-center justify-between rounded-md border px-3 py-2 cursor-pointer ${
-                    form.services.includes(s.id) ? 'border-ocean-500 bg-ocean-50' : 'border-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={form.services.includes(s.id)}
-                      onChange={() => toggleService(s.id)}
-                    />
-                    <span className="text-sm">{s.label}</span>
-                  </div>
-                  <span className="text-xs text-slate-500">{s.price}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+        {state.step === 4 && (
+          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+            <ScheduleStep
+              schedule={state.schedule}
+              totalDuration={totalDuration}
+              onBack={() => goto(3)}
+              onComplete={(schedule) => setState((s) => ({ ...s, schedule, step: 5 }))}
+            />
+            <OrderSummary
+              state={state}
+              products={products}
+              onEditAddress={() => goto(1)}
+              onRemoveItem={(id) =>
+                setState((s) => ({ ...s, items: s.items.filter((i) => i.product_id !== id) }))
+              }
+            />
+          </div>
+        )}
 
-          <Field label="Anything else we should know?">
-            <textarea className="input" rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-          </Field>
-
-          {err && <p className="text-sm text-rose-700">{err}</p>}
-          <button className="btn-primary w-full" disabled={busy}>
-            {busy ? 'Sending…' : 'Request shoot'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="label">{label}</label>
-      {children}
+        {state.step === 5 && (
+          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+            <ContactStep
+              contact={state.contact}
+              onBack={() => goto(4)}
+              onSubmit={submitBooking}
+              submitting={submitting}
+              error={error}
+            />
+            <OrderSummary
+              state={state}
+              products={products}
+              onEditAddress={() => goto(1)}
+              onEditSchedule={() => goto(4)}
+            />
+          </div>
+        )}
+      </main>
     </div>
   );
 }
