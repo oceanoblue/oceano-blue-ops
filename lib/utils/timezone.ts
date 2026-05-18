@@ -31,6 +31,47 @@ export function localToUtc(dateStr: string, hhmm: string, timezone: string): Dat
   return new Date(utcGuess - offsetMs);
 }
 
+/** Format an ISO timestamp as time-of-day in the given timezone. */
+export function fmtTimeInTz(
+  iso: string | Date,
+  timezone: string,
+  opts: { hour12?: boolean } = {}
+): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: opts.hour12 ?? true,
+  }).format(d);
+}
+
+/** Format an ISO timestamp as full date in the given timezone. */
+export function fmtDateInTz(iso: string | Date, timezone: string, pattern: 'short' | 'long' | 'iso' = 'short'): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (pattern === 'iso') {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+  }
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: pattern === 'long' ? 'long' : 'short',
+    day: 'numeric',
+  }).format(d);
+}
+
+/** Same-day check in a specific timezone (date-only comparison). */
+export function isSameDayInTz(a: Date | string, b: Date | string, timezone: string): boolean {
+  const da = typeof a === 'string' ? new Date(a) : a;
+  const db = typeof b === 'string' ? new Date(b) : b;
+  return fmtDateInTz(da, timezone, 'iso') === fmtDateInTz(db, timezone, 'iso');
+}
+
 /** Return day-of-week (0=Sun..6=Sat) for the given date in the given timezone. */
 export function dayOfWeekInTz(dateStr: string, timezone: string): number {
   const utcMidday = localToUtc(dateStr, '12:00', timezone);

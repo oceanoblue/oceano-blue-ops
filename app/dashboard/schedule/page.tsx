@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
+import { format, startOfWeek, addDays, parseISO } from 'date-fns';
 import { fmtAddress, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
 import { fetchEvents, type GCalEvent } from '@/lib/google-calendar/events';
+import { fmtTimeInTz, isSameDayInTz } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,19 @@ export default async function SchedulePage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Use the team member's primary timezone from team_availability.
+  // Fall back to America/New_York for anyone without rows yet.
+  let teamTz = 'America/New_York';
+  if (user) {
+    const { data: tz } = await supabase
+      .from('team_availability')
+      .select('timezone')
+      .eq('team_member_id', user.id)
+      .limit(1)
+      .maybeSingle();
+    if (tz?.timezone) teamTz = (tz as any).timezone;
+  }
 
   const today = new Date();
   const weekStart = searchParams.week
@@ -85,10 +99,10 @@ export default async function SchedulePage({
       <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
         {days.map((d) => {
           const dayOrders = (orders ?? []).filter(
-            (o: any) => o.scheduled_at && isSameDay(new Date(o.scheduled_at), d)
+            (o: any) => o.scheduled_at && isSameDayInTz(new Date(o.scheduled_at), d, teamTz)
           );
-          const dayGcal = gcalEvents.filter((e) => isSameDay(new Date(e.startIso), d));
-          const isToday = isSameDay(d, today);
+          const dayGcal = gcalEvents.filter((e) => isSameDayInTz(new Date(e.startIso), d, teamTz));
+          const isToday = isSameDayInTz(d, today, teamTz);
           // Combine into a single time-ordered list
           type Item =
             | { kind: 'order'; t: number; order: any }
@@ -118,7 +132,7 @@ export default async function SchedulePage({
                       <li key={`o-${o.id}`} className={`rounded-md p-2 text-xs ${STATUS_COLOR[o.status]}`}>
                         <Link href={`/dashboard/orders/${o.id}`} className="block">
                           <div className="font-medium">
-                            {format(new Date(o.scheduled_at), 'h:mm a')} · #{o.order_number}
+                            {fmtTimeInTz(o.scheduled_at, teamTz)} · #{o.order_number}
                           </div>
                           <div className="truncate">{o.listings ? fmtAddress(o.listings) : ''}</div>
                           {o.team_members?.full_name && (
@@ -129,7 +143,6 @@ export default async function SchedulePage({
                     );
                   }
                   const e = item.event;
-                  const endT = new Date(e.endIso);
                   return (
                     <li
                       key={`g-${e.id}`}
@@ -137,7 +150,7 @@ export default async function SchedulePage({
                       title="Busy on your Google Calendar — title hidden for privacy"
                     >
                       <div className="font-medium">
-                        {format(new Date(e.startIso), 'h:mm a')} – {format(endT, 'h:mm a')}
+                        {fmtTimeInTz(e.startIso, teamTz)} – {fmtTimeInTz(e.endIso, teamTz)}
                       </div>
                       <div className="opacity-75 italic">Busy</div>
                     </li>
