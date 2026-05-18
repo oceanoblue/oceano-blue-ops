@@ -34,7 +34,17 @@ export async function GET(request: Request) {
   const accountEmail = emailFromIdToken(tokens.id_token);
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
-  await supabase
+  // Guard against the foreign-key failure when the auth user isn't a team_member yet.
+  const { data: tmCheck } = await supabase
+    .from('team_members')
+    .select('id')
+    .eq('id', teamMemberId)
+    .maybeSingle();
+  if (!tmCheck) {
+    return NextResponse.redirect(`${back}?gcal_error=not_team_member`);
+  }
+
+  const { error: upsertErr } = await supabase
     .from('team_calendar_connections')
     .upsert(
       {
@@ -52,5 +62,10 @@ export async function GET(request: Request) {
       { onConflict: 'team_member_id,provider' }
     );
 
+  if (upsertErr) {
+    return NextResponse.redirect(
+      `${back}?gcal_error=${encodeURIComponent(upsertErr.message)}`
+    );
+  }
   return NextResponse.redirect(`${back}?gcal_connected=1`);
 }

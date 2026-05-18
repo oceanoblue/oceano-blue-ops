@@ -4,7 +4,11 @@ import { SettingsNav } from '@/components/layout/SettingsNav';
 
 export const dynamic = 'force-dynamic';
 
-export default async function IntegrationsPage() {
+export default async function IntegrationsPage({
+  searchParams,
+}: {
+  searchParams: { gcal_error?: string; gcal_connected?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
@@ -25,6 +29,20 @@ export default async function IntegrationsPage() {
         <p className="text-sm text-slate-600">Connect external services.</p>
       </div>
       <SettingsNav />
+
+      {searchParams.gcal_error && (
+        <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          <strong>Google Calendar connection failed:</strong>{' '}
+          {searchParams.gcal_error === 'not_team_member'
+            ? "Your auth account isn't linked to a team_member row yet. Ask an admin to add you."
+            : searchParams.gcal_error}
+        </div>
+      )}
+      {searchParams.gcal_connected && !gcal && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          OAuth completed but the connection didn't save. Check the database / logs.
+        </div>
+      )}
 
       <section className="card p-6">
         <div className="flex items-start justify-between gap-4">
@@ -53,7 +71,8 @@ export default async function IntegrationsPage() {
           )}
         </div>
         <p className="mt-4 text-xs text-slate-500">
-          Coming in the next deploy — wiring up the OAuth flow.
+          When connected, new bookings push to your calendar and existing calendar
+          events automatically block availability for the booking wizard.
         </p>
       </section>
     </div>
