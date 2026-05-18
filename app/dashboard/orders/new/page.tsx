@@ -4,19 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ClipboardList, User, Home, Calendar, Camera } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { AppointmentPicker } from '@/components/scheduling/AppointmentPicker';
 
 interface ClientOpt { id: string; full_name: string; email: string }
 interface ListingOpt { id: string; address_line1: string; city: string; state: string; zip: string }
 interface PhotographerOpt { id: string; full_name: string; role: string }
-
-/** Returns "YYYY-MM-DDTHH:MM" for tomorrow at 10:00 AM in local browser time. */
-function defaultScheduledAt(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  d.setHours(10, 0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export default function NewOrderPage() {
   const router = useRouter();
@@ -25,10 +17,18 @@ export default function NewOrderPage() {
   const [photographers, setPhotographers] = useState<PhotographerOpt[]>([]);
   const [clientId, setClientId] = useState('');
   const [listingId, setListingId] = useState('');
-  const [scheduledAt, setScheduledAt] = useState(defaultScheduledAt);
-  const [photographerId, setPhotographerId] = useState('');
+  const [appointment, setAppointment] = useState<{
+    scheduledAt: string | null;
+    photographerId: string | null;
+    durationMinutes: number;
+    timezone: string;
+  }>({
+    scheduledAt: null,
+    photographerId: null,
+    durationMinutes: 60,
+    timezone: 'America/New_York',
+  });
   const [package_, setPackage] = useState('Essential');
-  const [duration, setDuration] = useState(60);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -65,12 +65,13 @@ export default function NewOrderPage() {
       .insert({
         client_id: clientId,
         listing_id: listingId,
-        scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
-        duration_minutes: duration,
-        photographer_id: photographerId || null,
+        scheduled_at: appointment.scheduledAt,
+        duration_minutes: appointment.durationMinutes,
+        timezone: appointment.timezone,
+        photographer_id: appointment.photographerId,
         package_name: package_,
         client_notes: notes,
-        status: scheduledAt ? 'scheduled' : 'booked',
+        status: appointment.scheduledAt ? 'scheduled' : 'booked',
       })
       .select('id')
       .single();
@@ -80,7 +81,7 @@ export default function NewOrderPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-5xl space-y-6">
       <div className="flex items-center gap-3">
         <div className="h-10 w-10 rounded-lg bg-ocean-100 text-ocean-700 grid place-items-center">
           <ClipboardList className="h-5 w-5" />
@@ -122,43 +123,14 @@ export default function NewOrderPage() {
           </div>
         </Section>
 
-        {/* Date + Duration */}
-        <Section icon={<Calendar className="h-4 w-4" />} title="When">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2">
-              <label className="label">Date & time</label>
-              <input
-                type="datetime-local"
-                className="input"
-                value={scheduledAt}
-                onChange={(e) => setScheduledAt(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="label">Duration</label>
-              <select className="input" value={duration} onChange={(e) => setDuration(+e.target.value)}>
-                <option value={30}>30 min</option>
-                <option value={45}>45 min</option>
-                <option value={60}>60 min</option>
-                <option value={75}>75 min</option>
-                <option value={90}>90 min</option>
-                <option value={120}>2 hours</option>
-                <option value={180}>3 hours</option>
-              </select>
-            </div>
-          </div>
-        </Section>
-
-        {/* Assignment */}
-        <Section icon={<Camera className="h-4 w-4" />} title="Photographer">
-          <select className="input" value={photographerId} onChange={(e) => setPhotographerId(e.target.value)}>
-            <option value="">Unassigned — assign later</option>
-            {photographers.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name} <span className="capitalize">({p.role})</span>
-              </option>
-            ))}
-          </select>
+        {/* Schedule */}
+        <Section icon={<Calendar className="h-4 w-4" />} title="Schedule">
+          <AppointmentPicker
+            value={appointment}
+            onChange={setAppointment}
+            photographers={photographers.map((p) => ({ id: p.id, full_name: p.full_name }))}
+            allowOverride
+          />
         </Section>
 
         {/* Package + Notes */}
