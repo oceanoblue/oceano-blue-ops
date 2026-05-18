@@ -196,7 +196,12 @@ export interface ActivityLog {
  * The plain interfaces above (TeamMember, Order, Photo, ...) remain useful as
  * hand-typed shapes you can import where you want stricter typing.
  */
-type AnyTable<R> = { Row: R; Insert: Partial<R> & Record<string, any>; Update: Partial<R> & Record<string, any> };
+type AnyTable<R> = {
+  Row: R & Record<string, any>;
+  Insert: Partial<R> & Record<string, any>;
+  Update: Partial<R> & Record<string, any>;
+  Relationships: [];
+};
 
 export interface Database {
   public: {

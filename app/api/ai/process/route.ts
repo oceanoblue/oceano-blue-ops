@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       }
     }
   } else {
-    const target = photo_ids?.length ? photo_ids : photos.map((p) => p.id);
+    const target = photo_ids?.length ? photo_ids : (photos as any[]).map((p) => p.id);
     jobInputs = target.map((id) => [id]);
   }
 
