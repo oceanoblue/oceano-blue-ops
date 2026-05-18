@@ -1,9 +1,31 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { format, startOfWeek, addDays, parseISO } from 'date-fns';
 import { fmtAddress, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
 import { fetchEvents, type GCalEvent } from '@/lib/google-calendar/events';
-import { fmtTimeInTz, isSameDayInTz } from '@/lib/utils/timezone';
+import { fmtTimeInTz, fmtDateInTz, isSameDayInTz, dayOfWeekInTz } from '@/lib/utils/timezone';
+
+/** Build a Date anchored at noon UTC for a given YYYY-MM-DD. */
+function anchorDate(isoDate: string): Date {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+}
+
+function addDaysUtc(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setUTCDate(r.getUTCDate() + n);
+  return r;
+}
+
+/** Get Monday of the week containing `date` in the given timezone. */
+function startOfWeekInTz(date: Date, tz: string): Date {
+  const iso = fmtDateInTz(date, tz, 'iso'); // "2026-05-18"
+  const anchor = anchorDate(iso);
+  const dow = dayOfWeekInTz(iso, tz); // 0=Sun..6=Sat
+  const offsetToMonday = dow === 0 ? -6 : 1 - dow;
+  return addDaysUtc(anchor, offsetToMonday);
+}
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const dynamic = 'force-dynamic';
 
@@ -31,10 +53,11 @@ export default async function SchedulePage({
   }
 
   const today = new Date();
-  const weekStart = searchParams.week
-    ? startOfWeek(parseISO(searchParams.week), { weekStartsOn: 1 })
-    : startOfWeek(today, { weekStartsOn: 1 });
-  const weekEnd = addDays(weekStart, 7);
+  // Anchor week start at noon UTC of Monday IN THE TEAM'S TIMEZONE, so
+  // day-of-month labels match the team's calendar (not the server's UTC).
+  const anchorBase = searchParams.week ? anchorDate(searchParams.week) : today;
+  const weekStart = startOfWeekInTz(anchorBase, teamTz);
+  const weekEnd = addDaysUtc(weekStart, 7);
 
   const { data: orders } = await supabase
     .from('orders')
@@ -57,25 +80,25 @@ export default async function SchedulePage({
     }
   }
 
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const days = Array.from({ length: 7 }, (_, i) => addDaysUtc(weekStart, i));
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-ocean-950">Schedule</h1>
-          <p className="text-sm text-slate-600">Week of {format(weekStart, 'MMMM d, yyyy')}</p>
+          <p className="text-sm text-slate-600">Week of {fmtDateInTz(weekStart, teamTz, 'long')}</p>
         </div>
         <div className="flex gap-2">
           <Link
-            href={`/dashboard/schedule?week=${format(addDays(weekStart, -7), 'yyyy-MM-dd')}`}
+            href={`/dashboard/schedule?week=${fmtDateInTz(addDaysUtc(weekStart, -7), teamTz, 'iso')}`}
             className="btn-secondary"
           >
             ← Prev
           </Link>
           <Link href="/dashboard/schedule" className="btn-secondary">Today</Link>
           <Link
-            href={`/dashboard/schedule?week=${format(addDays(weekStart, 7), 'yyyy-MM-dd')}`}
+            href={`/dashboard/schedule?week=${fmtDateInTz(addDaysUtc(weekStart, 7), teamTz, 'iso')}`}
             className="btn-secondary"
           >
             Next →
@@ -121,8 +144,12 @@ export default async function SchedulePage({
               key={d.toISOString()}
               className={`card p-3 min-h-[180px] ${isToday ? 'ring-2 ring-ocean-300' : ''}`}
             >
-              <div className="text-xs uppercase tracking-wide text-slate-500">{format(d, 'EEE')}</div>
-              <div className="text-lg font-semibold text-ocean-900">{format(d, 'd')}</div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">
+                {DAY_NAMES[dayOfWeekInTz(fmtDateInTz(d, teamTz, 'iso'), teamTz)]}
+              </div>
+              <div className="text-lg font-semibold text-ocean-900">
+                {Number(fmtDateInTz(d, teamTz, 'iso').split('-')[2])}
+              </div>
               <ul className="mt-3 space-y-2">
                 {items.length === 0 && <li className="text-xs text-slate-400">Nothing scheduled</li>}
                 {items.map((item) => {

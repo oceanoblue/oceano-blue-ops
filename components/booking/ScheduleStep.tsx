@@ -5,6 +5,7 @@ import { addDays, addMonths, format, isSameDay, isSameMonth, startOfMonth, start
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import type { ScheduleData, AvailabilitySlot } from '@/lib/booking/types';
 import { cn } from '@/lib/utils/cn';
+import { fmtTimeInTz, fmtDateInTz } from '@/lib/utils/timezone';
 
 export function ScheduleStep({
   schedule,
@@ -42,7 +43,8 @@ export function ScheduleStep({
   useEffect(() => {
     if (!selectedDay) return;
     setLoading(true);
-    fetch(`/api/availability?date=${format(selectedDay, 'yyyy-MM-dd')}&duration=${s.duration_minutes}`)
+    // Send the date as YYYY-MM-DD in the TEAM timezone, not browser-local
+    fetch(`/api/availability?date=${fmtDateInTz(selectedDay, s.timezone, 'iso')}&duration=${s.duration_minutes}`)
       .then((r) => r.json())
       .then((d) => setSlots(d.slots ?? []))
       .finally(() => setLoading(false));
@@ -67,7 +69,15 @@ export function ScheduleStep({
               <Clock className="h-3 w-3" /> Selected time
             </div>
             <div className="mt-1 text-base">
-              {s.scheduled_at ? format(new Date(s.scheduled_at), hour24 ? 'HH:mm' : 'h:mm a') + ' – ' + format(new Date(new Date(s.scheduled_at).getTime() + s.duration_minutes * 60000), hour24 ? 'HH:mm' : 'h:mm a') : '— —'}
+              {s.scheduled_at
+                ? fmtTimeInTz(s.scheduled_at, s.timezone, { hour12: !hour24 }) +
+                  ' – ' +
+                  fmtTimeInTz(
+                    new Date(new Date(s.scheduled_at).getTime() + s.duration_minutes * 60000),
+                    s.timezone,
+                    { hour12: !hour24 }
+                  )
+                : '— —'}
             </div>
           </div>
           <div>
@@ -173,7 +183,7 @@ export function ScheduleStep({
                         : 'border-slate-200 hover:bg-slate-50'
                     )}
                   >
-                    {format(t, hour24 ? 'HH:mm' : 'h:mm a')}
+                    {fmtTimeInTz(t, s.timezone, { hour12: !hour24 })}
                   </button>
                 );
               })

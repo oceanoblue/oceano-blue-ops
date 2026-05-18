@@ -39,6 +39,22 @@ export async function GET(request: Request) {
 
   const supabase = createAdminClient();
 
+  // Load org-wide booking guards.
+  const { data: settings } = await supabase
+    .from('business_settings')
+    .select('buffer_minutes, min_notice_hours, max_notice_days, default_timezone')
+    .eq('id', true)
+    .maybeSingle();
+  const bufferMs = ((settings as any)?.buffer_minutes ?? 30) * 60_000;
+  const minNoticeMs = ((settings as any)?.min_notice_hours ?? 4) * 3_600_000;
+  const maxNoticeDays = (settings as any)?.max_notice_days ?? 30;
+
+  // Reject dates outside the max-notice window
+  const horizon = new Date();
+  horizon.setHours(0, 0, 0, 0);
+  horizon.setDate(horizon.getDate() + maxNoticeDays);
+  if (requested > horizon) return NextResponse.json({ slots: [], reason: 'outside_max_notice' });
+
   // Active photographers with at least one availability row
   const { data: members } = await supabase
     .from('team_members')
@@ -125,13 +141,17 @@ export async function GET(request: Request) {
   );
 
   // For each photographer, generate their slots, then merge with photographer attribution.
+  const earliestAllowed = Date.now() + minNoticeMs;
   type Slot = { iso: string; photographer_id: string };
   const slotMap = new Map<string, Slot>();
   for (const ph of photographers.values()) {
     for (const w of ph.windows) {
       for (let t = w.start; t + duration * 60_000 <= w.end; t += SLOT_MINUTES * 60_000) {
         const tEnd = t + duration * 60_000;
-        const overlaps = ph.busy.some((b) => t < b.end && tEnd > b.start);
+        // Min notice
+        if (t < earliestAllowed) continue;
+        // Buffer-aware conflict check
+        const overlaps = ph.busy.some((b) => t < b.end + bufferMs && tEnd + bufferMs > b.start);
         if (overlaps) continue;
         const iso = new Date(t).toISOString();
         if (!slotMap.has(iso)) slotMap.set(iso, { iso, photographer_id: ph.id });
