@@ -30,7 +30,11 @@ const Body = z.object({
     .default('auto'),
   photo_ids: z.array(z.string().uuid()).optional(), // explicit selection
   prompt_extra: z.string().optional(),
-  run_inline: z.boolean().default(true),            // run synchronously by default
+  // Default false: enqueue jobs and let the background cron run them. The
+  // synchronous path is kept for small batches and dev tests, but for any
+  // real session you want this off so 75-120 photos don't timeout the
+  // single Vercel function invocation.
+  run_inline: z.boolean().default(false),
 });
 
 export async function POST(request: Request) {

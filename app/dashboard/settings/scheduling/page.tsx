@@ -14,7 +14,7 @@ export default async function SchedulingSettingsPage() {
 
   const { data: settings } = await supabase
     .from('business_settings')
-    .select('buffer_minutes, min_notice_hours, max_notice_days, default_timezone, business_name')
+    .select('buffer_minutes, min_notice_hours, max_notice_days, default_timezone, business_name, raw_retention_days')
     .eq('id', true)
     .maybeSingle();
 
@@ -35,6 +35,7 @@ export default async function SchedulingSettingsPage() {
             max_notice_days: 30,
             default_timezone: 'America/New_York',
             business_name: 'Oceano Blue',
+            raw_retention_days: 30,
           }
         }
       />

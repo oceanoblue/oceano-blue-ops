@@ -6,6 +6,8 @@ import { OrderStatusControl } from '@/components/orders/OrderStatusControl';
 import { AssignTeamControl } from '@/components/orders/AssignTeamControl';
 import { PhotoManager } from '@/components/photos/PhotoManager';
 import { DeliveryControl } from '@/components/orders/DeliveryControl';
+import { RawCleanupControl } from '@/components/orders/RawCleanupControl';
+import { CostSummary } from '@/components/orders/CostSummary';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +27,16 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
   if (error || !data) notFound();
   const order = data as any;
+
+  // Count camera-RAW originals so the cleanup button can show the number and
+  // hide itself when there are none left.
+  const RAW_EXT = /\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i;
+  const { data: rawPhotos } = await supabase
+    .from('photos')
+    .select('filename')
+    .eq('order_id', params.id)
+    .eq('kind', 'raw');
+  const rawOriginalsCount = ((rawPhotos ?? []) as any[]).filter((p) => RAW_EXT.test(p.filename)).length;
 
   const { data: team } = await supabase
     .from('team_members')
@@ -105,9 +117,19 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             </div>
           </section>
 
+          <CostSummary jobs={(order.ai_jobs ?? []) as any[]} />
+
           <section className="card p-6">
             <h2 className="font-semibold mb-4">Delivery</h2>
             <DeliveryControl orderId={order.id} />
+            {order.status === 'delivered' && rawOriginalsCount > 0 && (
+              <div className="mt-4 border-t pt-4">
+                <RawCleanupControl orderId={order.id} rawCount={rawOriginalsCount} />
+                <p className="mt-1 text-xs text-slate-500">
+                  Removes ARW / CR2 / NEF originals. Converted JPEGs and processed photos stay.
+                </p>
+              </div>
+            )}
           </section>
 
           {order.client_notes && (

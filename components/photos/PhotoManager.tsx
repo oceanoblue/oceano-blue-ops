@@ -61,6 +61,20 @@ export function PhotoManager({ orderId }: { orderId: string }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  // Poll for job status updates while anything is still working. We stop the
+  // moment everything is in a terminal state — saves browser CPU and database
+  // round-trips when the user leaves the page open.
+  useEffect(() => {
+    const hasInFlight = jobs.some(
+      (j) => j.status === 'pending' || j.status === 'queued' || j.status === 'running'
+    );
+    if (!hasInFlight) return;
+    const id = setInterval(() => {
+      refresh();
+    }, 4000);
+    return () => clearInterval(id);
+  }, [jobs, refresh]);
+
   const onDrop = useCallback(
     async (files: File[]) => {
       if (!files.length) return;
@@ -178,9 +192,12 @@ export function PhotoManager({ orderId }: { orderId: string }) {
     });
   }
 
+  const [queueMessage, setQueueMessage] = useState<string | null>(null);
+
   async function runJob() {
     setRunning(true);
     setError(null);
+    setQueueMessage(null);
     const body = {
       order_id: orderId,
       job_type: jobType,
@@ -193,7 +210,15 @@ export function PhotoManager({ orderId }: { orderId: string }) {
       body: JSON.stringify(body),
     });
     const data = await r.json();
-    if (!r.ok) setError(data.error || 'failed');
+    if (!r.ok) {
+      setError(data.error || 'failed');
+    } else if (Array.isArray(data.queued)) {
+      // New default: jobs run in the background, picked up by the cron.
+      const n = data.queued.length;
+      setQueueMessage(
+        `Queued ${n} job${n === 1 ? '' : 's'}. Processing in the background — refreshing as they complete.`
+      );
+    }
     setRunning(false);
     setSelected(new Set());
     refresh();
@@ -269,6 +294,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
           </button>
         </div>
         {error && <p className="mt-2 text-sm text-rose-700">{error}</p>}
+        {queueMessage && <p className="mt-2 text-sm text-ocean-700">{queueMessage}</p>}
       </div>
 
       <PhotoGrid

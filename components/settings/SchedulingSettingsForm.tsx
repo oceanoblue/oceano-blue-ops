@@ -10,6 +10,7 @@ interface Settings {
   max_notice_days: number;
   default_timezone: string;
   business_name: string;
+  raw_retention_days: number;
 }
 
 const TIMEZONES = [
@@ -111,6 +112,24 @@ export function SchedulingSettingsForm({ initial }: { initial: Settings }) {
             value={s.business_name}
             onChange={(e) => setS({ ...s, business_name: e.target.value })}
           />
+        </div>
+
+        <div className="border-t pt-5">
+          <label className="label">RAW retention (days)</label>
+          <input
+            type="number"
+            min={0}
+            max={365}
+            className="input max-w-xs"
+            value={s.raw_retention_days ?? 30}
+            onChange={(e) =>
+              setS({ ...s, raw_retention_days: Math.max(0, +e.target.value) })
+            }
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Daily cron auto-deletes camera-RAW originals (ARW / CR2 / NEF / DNG) on delivered orders
+            older than this. Converted JPEGs and processed photos always stay. Set to 0 to disable.
+          </p>
         </div>
       </div>
 

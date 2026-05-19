@@ -25,21 +25,22 @@ export async function runAiJob(jobId: string): Promise<{
   const supabase = createAdminClient();
   const startedAt = Date.now();
 
-  // 1. Claim the job
-  const { data: job, error: jobErr } = await supabase
-    .from('ai_jobs')
-    .select('*')
-    .eq('id', jobId)
-    .single();
-  if (jobErr || !job) throw new Error(`Job ${jobId} not found`);
-  if (job.status !== 'pending' && job.status !== 'queued') {
-    return { jobId, status: 'skipped' };
-  }
-
-  await supabase
+  // 1. Atomically claim the job. The conditional .eq('status', 'pending')
+  // turns the UPDATE into a single Postgres statement that only succeeds when
+  // the row is still pending — so if a second cron invocation tries to grab
+  // the same job a fraction of a second later, it gets nothing back and we
+  // return early. No double-processing, no doubled API spend.
+  const { data: claimed } = await supabase
     .from('ai_jobs')
     .update({ status: 'running', started_at: new Date().toISOString() })
-    .eq('id', jobId);
+    .eq('id', jobId)
+    .in('status', ['pending', 'queued'])
+    .select('*')
+    .maybeSingle();
+  if (!claimed) {
+    return { jobId, status: 'skipped' };
+  }
+  const job = claimed as any;
   await supabase
     .from('photos')
     .update({ processing_status: 'running' })
