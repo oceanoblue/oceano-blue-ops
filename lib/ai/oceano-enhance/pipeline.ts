@@ -100,19 +100,21 @@ async function toneCurve(
   const lift = shadowLift * 32; // up to 32 levels (12% of 255)
   const liftGain = 1 - shadowLift * 0.05;
 
-  // Highlight recovery via gamma. Higher gamma compresses highlights, pulling
-  // window detail back without crushing the rest.
-  const highlightGamma = 1 + highlightRecover * 0.4; // up to 1.4
+  // Highlight recovery via gamma. Sharp's `.gamma()` only accepts values
+  // between 1.0 and 3.0; higher values compress highlights, pulling window
+  // detail back. Clamp to 1.0 so we never throw.
+  const highlightGamma = Math.max(1.0, 1 + highlightRecover * 0.4); // up to 1.4
 
-  // Mid-tone contrast (parametric S-curve approximation): apply a second
-  // gentle gamma in the opposite direction to boost separation in the middle
-  // of the histogram where most of the photo lives.
-  const midContrast = 1 / (1 + (shadowLift + highlightRecover) * 0.05);
+  // Slight global contrast bump via .linear() with a centered gain. We add a
+  // small gain > 1 around mid-grey and offset it back down so blacks stay
+  // black and whites don't clip.
+  const contrastGain = 1 + (shadowLift + highlightRecover) * 0.06;
+  const contrastBias = -((contrastGain - 1) * 128);
 
   return sharp(buf)
     .linear(liftGain, lift)
     .gamma(highlightGamma)
-    .gamma(midContrast)
+    .linear(contrastGain, contrastBias)
     .toBuffer();
 }
 

@@ -48,18 +48,27 @@ export function PhotoViewer({
   const [mode, setMode] = useState<Mode>('fit');
   const [showBefore, setShowBefore] = useState(false);
   const [parentUrl, setParentUrl] = useState<string | null>(null);
+  const [parentFetching, setParentFetching] = useState(false);
   const [busy, setBusy] = useState<null | 'rotate' | 'rerun'>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const hasParent = Boolean(photo?.parent_photo_id);
 
   // Fetch the raw "before" URL when looking at a processed photo
   useEffect(() => {
     setShowBefore(false);
     setParentUrl(null);
+    setError(null);
     if (!photo?.parent_photo_id) return;
+    setParentFetching(true);
     fetch(`/api/photo-url?photo_id=${photo.parent_photo_id}`)
       .then((r) => r.json())
-      .then((d) => setParentUrl(d.url ?? null))
-      .catch(() => {});
+      .then((d) => {
+        if (d.url) setParentUrl(d.url);
+        else setError(`Couldn't load original: ${d.error || 'no url'}`);
+      })
+      .catch((err) => setError(`Couldn't load original: ${err?.message || err}`))
+      .finally(() => setParentFetching(false));
   }, [photo?.id, photo?.parent_photo_id]);
 
   const url = photo ? urls[photo.id] : null;
@@ -79,13 +88,13 @@ export function PhotoViewer({
       else if (e.key === 'ArrowLeft') prev();
       else if (e.key === ' ') {
         e.preventDefault();
-        if (parentUrl) setShowBefore((s) => !s);
+        if (hasParent) setShowBefore((s) => !s);
       } else if (e.key === '+' || e.key === '=') setMode('zoom');
       else if (e.key === '-' || e.key === '_') setMode('fit');
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, next, prev, parentUrl]);
+  }, [onClose, next, prev, hasParent]);
 
   async function rotate(degrees: 90 | -90 | 180) {
     if (!photo) return;
@@ -176,13 +185,24 @@ export function PhotoViewer({
           >
             {mode === 'fit' ? <ZoomIn className="h-4 w-4" /> : <ZoomOut className="h-4 w-4" />}
           </ToolbarBtn>
-          {parentUrl && (
+          {hasParent && (
             <ToolbarBtn
               onClick={() => setShowBefore((s) => !s)}
-              tip="Toggle before / after (Space)"
+              tip={
+                parentFetching
+                  ? 'Loading original…'
+                  : parentUrl
+                  ? 'Toggle before / after (Space)'
+                  : 'Original unavailable'
+              }
               active={showBefore}
+              disabled={!parentUrl}
             >
-              <GitCompareArrows className="h-4 w-4" />
+              {parentFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <GitCompareArrows className="h-4 w-4" />
+              )}
             </ToolbarBtn>
           )}
           <ToolbarBtn onClick={() => rotate(-90)} tip="Rotate left" disabled={busy === 'rotate'}>
