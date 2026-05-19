@@ -40,7 +40,9 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
-  // Resolve which photos to operate on
+  // Resolve which photos to operate on. Skip RAW formats — they need JPEG
+  // conversion before being sent to OpenAI / Gemini.
+  const RAW_EXT = /\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i;
   const { data: photos } = await admin
     .from('photos')
     .select('*')
@@ -49,23 +51,37 @@ export async function POST(request: Request) {
   if (!photos?.length) {
     return NextResponse.json({ error: 'no_raw_photos' }, { status: 400 });
   }
+  const eligible = (photos as any[]).filter((p) => !RAW_EXT.test(p.filename));
+  const rawSkipped = (photos as any[]).length - eligible.length;
+  if (!eligible.length) {
+    return NextResponse.json(
+      {
+        error: 'all_uploads_are_raw',
+        hint: 'Convert ARW/CR2/CR3/NEF/DNG to JPEG before running AI jobs. The AI models accept JPEG/PNG only.',
+      },
+      { status: 400 }
+    );
+  }
 
   let jobInputs: string[][];
+  const eligibleIds = new Set(eligible.map((p: any) => p.id));
   if (job_type === 'hdr_merge') {
     if (photo_ids && photo_ids.length >= 3) {
-      jobInputs = [photo_ids];
+      jobInputs = [photo_ids.filter((id) => eligibleIds.has(id))];
     } else {
-      const groups = detectBrackets(photos as Photo[]);
+      const groups = detectBrackets(eligible as Photo[]);
       jobInputs = Array.from(groups.values());
       if (jobInputs.length === 0) {
         return NextResponse.json(
-          { error: 'no_brackets_detected', hint: 'Pass photo_ids explicitly.' },
+          { error: 'no_brackets_detected', hint: 'Pass photo_ids explicitly or upload bracketed JPEGs.' },
           { status: 400 }
         );
       }
     }
   } else {
-    const target = photo_ids?.length ? photo_ids : (photos as any[]).map((p) => p.id);
+    const target = photo_ids?.length
+      ? photo_ids.filter((id) => eligibleIds.has(id))
+      : eligible.map((p: any) => p.id);
     jobInputs = target.map((id) => [id]);
   }
 

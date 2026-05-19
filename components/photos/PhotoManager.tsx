@@ -81,7 +81,12 @@ export function PhotoManager({ orderId }: { orderId: string }) {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'image/*': [] },
+    // Accept common JPEG/PNG plus RAW extensions even when the browser reports
+    // no specific mime type (most browsers don't have a MIME for ARW/CR2/etc.)
+    accept: {
+      'image/*': ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.webp'],
+      'application/octet-stream': ['.arw', '.cr2', '.cr3', '.nef', '.dng', '.raf', '.rw2', '.orf'],
+    },
     disabled: uploading,
   });
 
@@ -130,10 +135,21 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         <p className="mt-2 text-sm text-slate-700">
           {uploading
             ? `Uploading ${progress?.done ?? 0}/${progress?.total ?? 0}…`
-            : 'Drop raw photos here, or click to choose files'}
+            : 'Drop photos here, or click to choose files'}
         </p>
-        <p className="text-xs text-slate-500">Bracketed HDR sets are detected automatically by EXIF.</p>
+        <p className="text-xs text-slate-500">
+          JPEG / PNG / TIFF / WebP for AI processing. ARW / CR2 / CR3 / NEF / DNG accepted for storage
+          but must be converted to JPEG before AI editing.
+        </p>
       </div>
+
+      {photos.some((p) => /\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i.test(p.filename)) && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <strong>Heads up:</strong> RAW files uploaded above can't be sent directly to GPT Image or
+          Gemini. Export them to JPEG (sRGB, 2048-3000px on the long edge) in Lightroom / Capture One
+          first, then upload the JPEGs to run an AI job.
+        </div>
+      )}
 
       <div className="card p-4 bg-slate-50">
         <div className="flex flex-wrap items-end gap-3">
