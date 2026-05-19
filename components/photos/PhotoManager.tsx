@@ -5,6 +5,7 @@ import { useDropzone } from 'react-dropzone';
 import { Upload, Wand2, RefreshCw, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
+import { PhotoViewer } from './PhotoViewer';
 
 const JOB_TYPES: Array<{ id: AiJobType; label: string; helper: string }> = [
   { id: 'hdr_merge', label: 'HDR merge (brackets)', helper: 'Detects 3/5/7-shot brackets and merges each set' },
@@ -38,6 +39,11 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   >('auto');
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // URL cache keyed by photo_id — share between thumbnails and the viewer so
+  // we don't fetch the signed URL twice.
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string | null>>({});
+  // Viewer state: which photo list + index is open. null = closed.
+  const [viewer, setViewer] = useState<{ list: 'raw' | 'processed'; index: number } | null>(null);
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -255,16 +261,33 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         photos={rawPhotos}
         selected={selected}
         onToggle={toggle}
+        onOpen={(i) => setViewer({ list: 'raw', index: i })}
+        urls={photoUrls}
+        setUrls={setPhotoUrls}
       />
       <PhotoGrid
         title={`Processed (${processedPhotos.length})`}
         photos={processedPhotos}
         selected={selected}
         onToggle={toggle}
+        onOpen={(i) => setViewer({ list: 'processed', index: i })}
+        urls={photoUrls}
+        setUrls={setPhotoUrls}
         processed
       />
 
       {jobs.length > 0 && <JobsTable jobs={jobs} />}
+
+      {viewer && (
+        <PhotoViewer
+          photos={viewer.list === 'raw' ? rawPhotos : processedPhotos}
+          index={viewer.index}
+          urls={photoUrls}
+          onClose={() => setViewer(null)}
+          onIndexChange={(i) => setViewer({ ...viewer, index: i })}
+          onPhotosChanged={refresh}
+        />
+      )}
     </div>
   );
 }
@@ -274,12 +297,18 @@ function PhotoGrid({
   photos,
   selected,
   onToggle,
+  onOpen,
+  urls,
+  setUrls,
   processed,
 }: {
   title: string;
   photos: Photo[];
   selected: Set<string>;
   onToggle: (id: string) => void;
+  onOpen: (index: number) => void;
+  urls: Record<string, string | null>;
+  setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
   processed?: boolean;
 }) {
   if (photos.length === 0) return null;
@@ -287,8 +316,17 @@ function PhotoGrid({
     <div>
       <h3 className="text-sm font-medium text-slate-700 mb-2">{title}</h3>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-        {photos.map((p) => (
-          <Thumbnail key={p.id} photo={p} selected={selected.has(p.id)} onToggle={onToggle} processed={processed} />
+        {photos.map((p, i) => (
+          <Thumbnail
+            key={p.id}
+            photo={p}
+            selected={selected.has(p.id)}
+            onToggle={onToggle}
+            onOpen={() => onOpen(i)}
+            urls={urls}
+            setUrls={setUrls}
+            processed={processed}
+          />
         ))}
       </div>
     </div>
@@ -299,27 +337,34 @@ function Thumbnail({
   photo,
   selected,
   onToggle,
+  onOpen,
+  urls,
+  setUrls,
   processed,
 }: {
   photo: Photo;
   selected: boolean;
   onToggle: (id: string) => void;
+  onOpen: () => void;
+  urls: Record<string, string | null>;
+  setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
   processed?: boolean;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const url = urls[photo.id];
   useEffect(() => {
+    if (url !== undefined) return; // already fetched (or null on failure)
     fetch(`/api/photo-url?photo_id=${photo.id}`)
       .then((r) => r.json())
-      .then((d) => setUrl(d.url ?? null))
-      .catch(() => {});
-  }, [photo.id]);
+      .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
+      .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
+  }, [photo.id, url, setUrls]);
 
   return (
-    <button
-      onClick={() => onToggle(photo.id)}
-      className={`relative aspect-square overflow-hidden rounded-md ring-2 transition ${
+    <div
+      className={`group relative aspect-square overflow-hidden rounded-md ring-2 transition cursor-zoom-in ${
         selected ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'
       }`}
+      onClick={onOpen}
     >
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -329,6 +374,24 @@ function Thumbnail({
           loading…
         </div>
       )}
+
+      {/* Selection checkbox — stop click so it doesn't open the viewer */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle(photo.id);
+        }}
+        className={`absolute top-1 left-1 h-5 w-5 grid place-items-center rounded border text-[10px] transition ${
+          selected
+            ? 'bg-ocean-600 border-ocean-600 text-white'
+            : 'bg-white/85 border-slate-300 text-slate-500 opacity-0 group-hover:opacity-100'
+        }`}
+        title={selected ? 'Deselect' : 'Select for batch'}
+      >
+        {selected ? '✓' : ''}
+      </button>
+
       {photo.processing_status === 'running' && (
         <div className="absolute inset-0 bg-black/50 grid place-items-center text-white">
           <Loader2 className="h-5 w-5 animate-spin" />
@@ -344,7 +407,7 @@ function Thumbnail({
           <CheckCircle2 className="h-4 w-4" />
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
