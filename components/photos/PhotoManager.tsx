@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Wand2, RefreshCw, CheckCircle2, AlertCircle, Loader2, FileImage } from 'lucide-react';
+import { Upload, Wand2, RefreshCw, CheckCircle2, AlertCircle, Loader2, FileImage, Camera } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
 import { PhotoViewer } from './PhotoViewer';
@@ -243,18 +243,9 @@ export function PhotoManager({ orderId }: { orderId: string }) {
             : 'Drop photos here, or click to choose files'}
         </p>
         <p className="text-xs text-slate-500">
-          JPEG / PNG / TIFF / WebP for AI processing. ARW / CR2 / CR3 / NEF / DNG accepted for storage
-          but must be converted to JPEG before AI editing.
+          JPEG / PNG / TIFF / WebP runs through AI directly. ARW / CR2 / NEF / DNG auto-convert to JPEG via the worker.
         </p>
       </div>
-
-      {photos.some((p) => /\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i.test(p.filename)) && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <strong>Heads up:</strong> RAW files uploaded above can't be sent directly to GPT Image or
-          Gemini. Export them to JPEG (sRGB, 2048-3000px on the long edge) in Lightroom / Capture One
-          first, then upload the JPEGs to run an AI job.
-        </div>
-      )}
 
       <div className="card p-4 bg-slate-50">
         <div className="flex flex-wrap items-end gap-3">
@@ -401,14 +392,18 @@ function Thumbnail({
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
   const isRaw = /\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i.test(photo.filename);
+  const rawExt = (photo.filename.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toUpperCase();
 
   useEffect(() => {
-    if (url !== undefined) return; // already fetched (or null on failure)
+    // No point fetching a signed URL for a RAW file — the browser can't
+    // render ARW/CR2/NEF anyway. We show a stylized placeholder instead.
+    if (isRaw) return;
+    if (url !== undefined) return;
     fetch(`/api/photo-url?photo_id=${photo.id}`)
       .then((r) => r.json())
       .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
-  }, [photo.id, url, setUrls]);
+  }, [photo.id, url, setUrls, isRaw]);
 
   async function convert() {
     setConverting(true);
@@ -421,28 +416,47 @@ function Thumbnail({
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setConvertError(data.error || 'convert_failed');
+        setConvertError(data.error || `error_${r.status}`);
       } else {
         onConverted?.();
       }
+    } catch (err: any) {
+      setConvertError(err?.message || 'network_error');
     } finally {
       setConverting(false);
     }
   }
+
+  const sizeMB = photo.byte_size ? (photo.byte_size / 1024 / 1024).toFixed(1) : null;
 
   return (
     <div
       className={`group relative aspect-square overflow-hidden rounded-md ring-2 transition cursor-zoom-in ${
         selected ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'
       }`}
-      onClick={onOpen}
+      onClick={isRaw ? undefined : onOpen}
     >
-      {url ? (
+      {isRaw ? (
+        // Clean RAW placeholder card — camera icon, extension chip, filename,
+        // file size. No broken-image icons.
+        <div className="h-full w-full bg-gradient-to-br from-slate-700 to-slate-900 text-slate-100 flex flex-col items-center justify-center p-3 text-center">
+          <Camera className="h-8 w-8 mb-1 text-slate-300" strokeWidth={1.5} />
+          <div className="text-[10px] font-mono tracking-wider px-2 py-0.5 rounded bg-amber-500 text-amber-950 font-semibold">
+            {rawExt}
+          </div>
+          <div className="mt-2 text-[10px] text-slate-300 truncate max-w-full">
+            {photo.filename}
+          </div>
+          {sizeMB && (
+            <div className="text-[10px] text-slate-400">{sizeMB} MB</div>
+          )}
+        </div>
+      ) : url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt={photo.filename} className="h-full w-full object-cover" />
       ) : (
-        <div className="h-full w-full bg-slate-100 grid place-items-center text-slate-400 text-xs">
-          loading…
+        <div className="h-full w-full bg-slate-100 grid place-items-center text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
         </div>
       )}
 
@@ -453,9 +467,9 @@ function Thumbnail({
           e.stopPropagation();
           onToggle(photo.id);
         }}
-        className={`absolute top-1 left-1 h-5 w-5 grid place-items-center rounded border text-[10px] transition ${
+        className={`absolute top-1 left-1 h-5 w-5 grid place-items-center rounded border text-[10px] transition z-10 ${
           selected
-            ? 'bg-ocean-600 border-ocean-600 text-white'
+            ? 'bg-ocean-600 border-ocean-600 text-white opacity-100'
             : 'bg-white/85 border-slate-300 text-slate-500 opacity-0 group-hover:opacity-100'
         }`}
         title={selected ? 'Deselect' : 'Select for batch'}
@@ -479,12 +493,9 @@ function Thumbnail({
         </div>
       )}
 
-      {/* RAW badge + Convert button (only on the raw side) */}
+      {/* Convert button — full-width pill at the bottom of RAW thumbnails */}
       {isRaw && !processed && (
         <>
-          <div className="absolute bottom-1 left-1 text-[10px] font-semibold uppercase tracking-wide bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded">
-            RAW
-          </div>
           <button
             type="button"
             onClick={(e) => {
@@ -492,20 +503,26 @@ function Thumbnail({
               convert();
             }}
             disabled={converting}
-            className="absolute bottom-1 right-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-ocean-600/90 text-white hover:bg-ocean-700 disabled:opacity-60 inline-flex items-center gap-1"
+            className="absolute inset-x-2 bottom-2 text-[11px] font-medium px-2 py-1.5 rounded-md bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-60 inline-flex items-center justify-center gap-1.5 shadow-lg z-10"
             title="Convert RAW to JPEG via worker"
           >
             {converting ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Converting…
+              </>
             ) : (
-              <FileImage className="h-3 w-3" />
+              <>
+                <FileImage className="h-3 w-3" />
+                Convert to JPEG
+              </>
             )}
-            {converting ? 'Converting' : 'Convert'}
           </button>
           {convertError && (
             <div
-              className="absolute top-1 left-1/2 -translate-x-1/2 text-[10px] bg-rose-600 text-white px-1.5 py-0.5 rounded shadow"
+              className="absolute top-7 left-1 right-1 text-[10px] bg-rose-600 text-white px-1.5 py-1 rounded shadow truncate z-10"
               onClick={(e) => e.stopPropagation()}
+              title={convertError}
             >
               {convertError}
             </div>

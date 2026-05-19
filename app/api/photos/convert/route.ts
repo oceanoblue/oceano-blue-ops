@@ -11,7 +11,11 @@ const Body = z.object({
   photo_id: z.string().uuid(),
 });
 
-export const maxDuration = 60; // give the worker round-trip room
+// Fly cold-start (2-3s) + 50-100MB ARW download from Supabase (~3-5s) +
+// dcraw decode (3-8s) + Sharp encode (~1s) + JPEG upload back (~2s) — full
+// round trip can easily hit 60s. Bump to 300 (Vercel Pro max) so we don't
+// false-fail conversions that would have completed.
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const supabase = createClient();
