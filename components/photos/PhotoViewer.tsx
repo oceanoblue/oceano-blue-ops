@@ -203,9 +203,12 @@ export function PhotoViewer({
         </div>
       </div>
 
-      {/* Image area */}
+      {/* Image area. min-h-0 lets the flex child actually shrink to the
+          remaining viewport instead of growing to its natural content size. */}
       <div
-        className={`flex-1 relative overflow-${mode === 'zoom' ? 'auto' : 'hidden'} grid place-items-center`}
+        className={`flex-1 min-h-0 relative ${
+          mode === 'zoom' ? 'overflow-auto' : 'overflow-hidden'
+        }`}
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
         }}
@@ -231,23 +234,45 @@ export function PhotoViewer({
         )}
 
         {displayUrl ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={displayUrl}
-            alt={photo.filename}
-            className={
-              mode === 'fit'
-                ? 'max-h-full max-w-full object-contain'
-                : 'block max-w-none cursor-zoom-out'
-            }
-            onClick={() => setMode((m) => (m === 'fit' ? 'zoom' : 'fit'))}
-          />
+          mode === 'fit' ? (
+            // Fit mode: full-bleed flex centering so the image is constrained
+            // to viewport regardless of its natural pixel size.
+            <div
+              className="absolute inset-0 flex items-center justify-center p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) onClose();
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={displayUrl}
+                alt={photo.filename}
+                className="max-h-full max-w-full object-contain cursor-zoom-in select-none"
+                onClick={() => setMode('zoom')}
+                draggable={false}
+              />
+            </div>
+          ) : (
+            // Zoom mode: render at natural size; parent has overflow-auto so
+            // the user can scroll around. Padding keeps the image clear of
+            // the prev/next buttons.
+            <div className="min-h-full min-w-full flex items-start justify-start p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={displayUrl}
+                alt={photo.filename}
+                className="block max-w-none cursor-zoom-out select-none"
+                onClick={() => setMode('fit')}
+                draggable={false}
+              />
+            </div>
+          )
         ) : (
-          <div className="text-white/60">Loading…</div>
+          <div className="absolute inset-0 grid place-items-center text-white/60">Loading…</div>
         )}
 
         {showBefore && parentUrl && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-xs px-2 py-1 rounded shadow">
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-xs px-2 py-1 rounded shadow z-10">
             BEFORE
           </div>
         )}
