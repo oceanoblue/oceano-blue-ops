@@ -16,6 +16,15 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import sharp from 'sharp';
+import WebSocket from 'ws';
+
+// supabase-js eagerly imports its realtime module which needs a global
+// WebSocket. Node 22 has one natively but on older Node this would crash at
+// `createClient`. Polyfill defensively so the worker boots cleanly regardless
+// of the base image.
+if (typeof globalThis.WebSocket === 'undefined') {
+  globalThis.WebSocket = WebSocket;
+}
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const SUPABASE_URL = process.env.SUPABASE_URL;
