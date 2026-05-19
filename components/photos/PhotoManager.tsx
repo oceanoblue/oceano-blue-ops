@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Wand2, RefreshCw, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, Wand2, RefreshCw, CheckCircle2, AlertCircle, Loader2, FileImage } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
 import { PhotoViewer } from './PhotoViewer';
+import { tusUpload, RESUMABLE_THRESHOLD_BYTES } from '@/lib/storage/tus-upload';
 
 const JOB_TYPES: Array<{ id: AiJobType; label: string; helper: string }> = [
   { id: 'hdr_merge', label: 'HDR merge (brackets)', helper: 'Detects 3/5/7-shot brackets and merges each set' },
@@ -90,16 +91,30 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         const storagePath = `${orderId}/${photoId}-${safeName}`;
         const contentType = file.type || 'application/octet-stream';
 
-        const { error } = await supabase.storage
-          .from('raw-photos')
-          .upload(storagePath, file, {
-            contentType,
-            upsert: false,
-            cacheControl: '3600',
-          });
-        if (error) {
+        try {
+          if (file.size >= RESUMABLE_THRESHOLD_BYTES) {
+            // Large files (ARW etc.) use chunked resumable uploads. Survives
+            // network blips and any plan size cap that single-PUT would hit.
+            await tusUpload({
+              file,
+              bucket: 'raw-photos',
+              objectName: storagePath,
+              contentType,
+            });
+          } else {
+            // Small files: a single PUT is faster (no chunk negotiation).
+            const { error } = await supabase.storage
+              .from('raw-photos')
+              .upload(storagePath, file, {
+                contentType,
+                upsert: false,
+                cacheControl: '3600',
+              });
+            if (error) throw error;
+          }
+        } catch (err: any) {
           aborted = true;
-          setError(`Upload failed: ${error.message}`);
+          setError(`Upload failed: ${err?.message || err}`);
           return;
         }
         registered.push({
@@ -264,6 +279,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         onOpen={(i) => setViewer({ list: 'raw', index: i })}
         urls={photoUrls}
         setUrls={setPhotoUrls}
+        onConverted={refresh}
       />
       <PhotoGrid
         title={`Processed (${processedPhotos.length})`}
@@ -301,6 +317,7 @@ function PhotoGrid({
   urls,
   setUrls,
   processed,
+  onConverted,
 }: {
   title: string;
   photos: Photo[];
@@ -310,6 +327,7 @@ function PhotoGrid({
   urls: Record<string, string | null>;
   setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
   processed?: boolean;
+  onConverted?: () => void;
 }) {
   if (photos.length === 0) return null;
   return (
@@ -326,6 +344,7 @@ function PhotoGrid({
             urls={urls}
             setUrls={setUrls}
             processed={processed}
+            onConverted={onConverted}
           />
         ))}
       </div>
@@ -341,6 +360,7 @@ function Thumbnail({
   urls,
   setUrls,
   processed,
+  onConverted,
 }: {
   photo: Photo;
   selected: boolean;
@@ -349,8 +369,13 @@ function Thumbnail({
   urls: Record<string, string | null>;
   setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
   processed?: boolean;
+  onConverted?: () => void;
 }) {
   const url = urls[photo.id];
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
+  const isRaw = /\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i.test(photo.filename);
+
   useEffect(() => {
     if (url !== undefined) return; // already fetched (or null on failure)
     fetch(`/api/photo-url?photo_id=${photo.id}`)
@@ -358,6 +383,26 @@ function Thumbnail({
       .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
   }, [photo.id, url, setUrls]);
+
+  async function convert() {
+    setConverting(true);
+    setConvertError(null);
+    try {
+      const r = await fetch('/api/photos/convert', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ photo_id: photo.id }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setConvertError(data.error || 'convert_failed');
+      } else {
+        onConverted?.();
+      }
+    } finally {
+      setConverting(false);
+    }
+  }
 
   return (
     <div
@@ -406,6 +451,40 @@ function Thumbnail({
         <div className="absolute top-1 right-1 text-emerald-300">
           <CheckCircle2 className="h-4 w-4" />
         </div>
+      )}
+
+      {/* RAW badge + Convert button (only on the raw side) */}
+      {isRaw && !processed && (
+        <>
+          <div className="absolute bottom-1 left-1 text-[10px] font-semibold uppercase tracking-wide bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded">
+            RAW
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              convert();
+            }}
+            disabled={converting}
+            className="absolute bottom-1 right-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-ocean-600/90 text-white hover:bg-ocean-700 disabled:opacity-60 inline-flex items-center gap-1"
+            title="Convert RAW to JPEG via worker"
+          >
+            {converting ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <FileImage className="h-3 w-3" />
+            )}
+            {converting ? 'Converting' : 'Convert'}
+          </button>
+          {convertError && (
+            <div
+              className="absolute top-1 left-1/2 -translate-x-1/2 text-[10px] bg-rose-600 text-white px-1.5 py-0.5 rounded shadow"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {convertError}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
