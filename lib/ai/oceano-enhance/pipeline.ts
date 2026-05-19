@@ -37,9 +37,11 @@ export interface EnhanceOptions {
 
 const DEFAULTS: Required<EnhanceOptions> = {
   targetLongEdge: 3000,
-  shadowLift: 0.35,
-  highlightRecover: 0.4,
-  vibrance: 0.15,
+  // More aggressive defaults so the output looks visibly cleaner than the
+  // raw. Real estate listings need to "pop" — agents reject subtle edits.
+  shadowLift: 0.55,
+  highlightRecover: 0.55,
+  vibrance: 0.3,
   jpegQuality: 92,
 };
 
@@ -92,17 +94,25 @@ async function toneCurve(
   shadowLift: number,
   highlightRecover: number
 ): Promise<Buffer> {
-  // Shadow lift: add a small offset that fades to 0 at white. Implemented as
-  // `linear(a, b)` where a = 1 - 0.15*shadowLift (gain) and b = 0.15*shadowLift*255
-  // (offset). Net effect: shadows brighten more than highlights.
-  const lift = shadowLift * 18; // 0–18 levels at most
-  const liftGain = 1 - shadowLift * 0.08;
+  // Shadow lift: add an offset that fades toward white. We use linear(a, b)
+  // where the offset brightens shadows more than highlights and a small gain
+  // dip prevents the whole image from feeling washed out.
+  const lift = shadowLift * 32; // up to 32 levels (12% of 255)
+  const liftGain = 1 - shadowLift * 0.05;
 
-  const highlightGamma = 1 + highlightRecover * 0.25; // up to 1.25
+  // Highlight recovery via gamma. Higher gamma compresses highlights, pulling
+  // window detail back without crushing the rest.
+  const highlightGamma = 1 + highlightRecover * 0.4; // up to 1.4
+
+  // Mid-tone contrast (parametric S-curve approximation): apply a second
+  // gentle gamma in the opposite direction to boost separation in the middle
+  // of the histogram where most of the photo lives.
+  const midContrast = 1 / (1 + (shadowLift + highlightRecover) * 0.05);
 
   return sharp(buf)
     .linear(liftGain, lift)
     .gamma(highlightGamma)
+    .gamma(midContrast)
     .toBuffer();
 }
 

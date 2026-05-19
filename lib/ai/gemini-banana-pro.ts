@@ -10,10 +10,11 @@ import { buildPrompt } from './prompts';
 const ENDPOINT = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-// Nano Banana Pro (gemini-3-pro-image-preview) is the current Google image
-// model. Native 2K, 4K upscale available. Significantly better detail
-// preservation than gemini-2.5-flash-image-preview.
-const DEFAULT_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-preview';
+// Default to the GA Nano Banana (gemini-2.5-flash-image) — works on free
+// tier. Pro tier (gemini-3-pro-image-preview) requires a paid AI Studio
+// plan; set GEMINI_IMAGE_MODEL=gemini-3-pro-image-preview once you've
+// upgraded and want the higher-fidelity output.
+const DEFAULT_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
 
 export const geminiBananaPro: AiProvider = {
   id: 'gemini-banana-pro',

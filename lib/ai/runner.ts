@@ -153,6 +153,7 @@ export async function runAiJob(jobId: string): Promise<{
         provider: resp.model,
         duration_ms: durationMs,
         cost_cents: resp.costCents,
+        notes: resp.notes ?? null,
       },
     });
 

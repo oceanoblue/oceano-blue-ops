@@ -53,15 +53,14 @@ export const openaiGptImage: AiProvider = {
       })
     );
 
-    // OpenAI's edit endpoint accepts an array of images.
-    // gpt-image-2 supports native 2K — use 2048x1365 (3:2) which is the
-    // standard MLS aspect ratio.
+    // OpenAI's edit endpoint accepts an array of images. Sizes must be
+    // multiples of 16; gpt-image-2 supports up to 1536x1024 landscape.
     const result = await client.images.edit({
       model,
       // @ts-expect-error — OpenAI SDK types accept File | File[] at runtime
       image: imageFiles.length === 1 ? imageFiles[0] : imageFiles,
       prompt,
-      size: '2048x1365',
+      size: '1536x1024',
       n: 1,
     } as never);
 

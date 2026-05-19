@@ -1,6 +1,7 @@
 import type { AiProvider, AiRequest, AiResponse, SourceImage } from '../types';
 import { enhanceSingle, mergeBrackets } from './pipeline';
 import { loadEnhanceSettings } from './settings';
+import { smartEnhance } from './smart-enhance';
 import { geminiBananaPro } from '../gemini-banana-pro';
 import { openaiGptImage } from '../openai-gpt-image';
 
@@ -45,10 +46,13 @@ export const oceanoEnhance: AiProvider = {
   ],
 
   estimatedCostCents(req) {
-    // Deterministic jobs are free (just our compute). Delegated jobs inherit
-    // the underlying provider's cost.
+    // Deterministic jobs are free (just our compute). enhance_single uses
+    // Smart Enhance which runs a $0.0001 vision analysis and may chain one
+    // or two generative edits depending on what the photo needs. Worst case
+    // we budget for one sky replace.
     switch (req.jobType) {
       case 'enhance_single':
+        return 13; // base 0 + analyze 0 + maybe one sky/window edit
       case 'hdr_merge':
       case 'lawn_enhance':
       case 'declutter':
@@ -73,7 +77,30 @@ export const oceanoEnhance: AiProvider = {
     const opts = await loadEnhanceSettings();
 
     switch (req.jobType) {
-      case 'enhance_single':
+      case 'enhance_single': {
+        // The "do everything" mode: deterministic pipeline + vision analysis
+        // + selective generative edits chained together.
+        const src = req.inputs[0];
+        const buf = await bufFromSource(src);
+        const result = await smartEnhance(buf, src.filename, opts);
+        const editLog = result.editsApplied.length
+          ? `applied: ${result.editsApplied.join(' → ')}`
+          : 'deterministic only';
+        return {
+          outputs: [
+            {
+              bytes: result.bytes,
+              mimeType: 'image/jpeg',
+              filename: `enhance_single-${Date.now()}.jpg`,
+            },
+          ],
+          model: 'oceano-enhance/smart-v1',
+          costCents: result.costCents,
+          rawPromptUsed: result.analysis?.notes ?? '(no analyzer)',
+          notes: editLog,
+        };
+      }
+
       case 'lawn_enhance':
       case 'declutter': {
         const src = req.inputs[0];
