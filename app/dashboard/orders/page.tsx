@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { fmtDateTime, fmtAddress, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
+import { STATUS_LABEL } from '@/lib/utils/format';
+import { OrderRow } from '@/components/orders/OrderRow';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,25 +61,7 @@ export default async function OrdersPage({
               <tr><td colSpan={5} className="px-4 py-6 text-rose-600 text-sm">{error.message}</td></tr>
             )}
             {(orders ?? []).map((o: any) => (
-              <tr key={o.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3">
-                  <Link href={`/dashboard/orders/${o.id}`} className="font-medium text-ocean-800 hover:underline">
-                    #{o.order_number}
-                  </Link>
-                  {o.rush && <span className="ml-2 pill bg-rose-100 text-rose-700">RUSH</span>}
-                </td>
-                <td className="px-4 py-3 text-slate-700">
-                  {o.listings ? fmtAddress(o.listings) : '—'}
-                </td>
-                <td className="px-4 py-3 text-slate-700">
-                  <div>{o.clients?.full_name ?? '—'}</div>
-                  <div className="text-xs text-slate-500">{o.clients?.brokerage ?? ''}</div>
-                </td>
-                <td className="px-4 py-3 text-slate-700">{fmtDateTime(o.scheduled_at)}</td>
-                <td className="px-4 py-3">
-                  <span className={`pill ${STATUS_COLOR[o.status]}`}>{STATUS_LABEL[o.status]}</span>
-                </td>
-              </tr>
+              <OrderRow key={o.id} order={o} />
             ))}
             {!error && (orders ?? []).length === 0 && (
               <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">No orders yet.</td></tr>

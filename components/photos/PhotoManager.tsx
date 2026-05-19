@@ -33,7 +33,9 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [jobType, setJobType] = useState<AiJobType>('hdr_merge');
-  const [provider, setProvider] = useState<'auto' | 'openai-gpt-image' | 'gemini-banana-pro'>('auto');
+  const [provider, setProvider] = useState<
+    'auto' | 'oceano-enhance' | 'autoenhance' | 'openai-gpt-image' | 'gemini-banana-pro'
+  >('auto');
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,20 +60,77 @@ export function PhotoManager({ orderId }: { orderId: string }) {
       setUploading(true);
       setError(null);
       setProgress({ done: 0, total: files.length });
-      // Upload in batches of 6 to keep memory sane
-      const batchSize = 6;
-      for (let i = 0; i < files.length; i += batchSize) {
-        const batch = files.slice(i, i + batchSize);
-        const form = new FormData();
-        form.append('order_id', orderId);
-        batch.forEach((f) => form.append('files', f));
-        const r = await fetch('/api/upload', { method: 'POST', body: form });
-        if (!r.ok) {
-          setError(`Upload failed: ${(await r.json()).error}`);
-          break;
+
+      const supabase = createClient();
+      // Upload up to 3 files in parallel — keeps the network busy without
+      // overwhelming the browser on phones / older laptops.
+      const concurrency = 3;
+      const registered: Array<{
+        photo_id: string;
+        filename: string;
+        storage_path: string;
+        mime_type: string;
+        byte_size: number;
+      }> = [];
+
+      let done = 0;
+      let aborted = false;
+
+      async function uploadOne(file: File) {
+        if (aborted) return;
+        const photoId = crypto.randomUUID();
+        // Strip characters that confuse Supabase storage paths
+        const safeName = file.name.replace(/[^\w.\-]+/g, '_');
+        const storagePath = `${orderId}/${photoId}-${safeName}`;
+        const contentType = file.type || 'application/octet-stream';
+
+        const { error } = await supabase.storage
+          .from('raw-photos')
+          .upload(storagePath, file, {
+            contentType,
+            upsert: false,
+            cacheControl: '3600',
+          });
+        if (error) {
+          aborted = true;
+          setError(`Upload failed: ${error.message}`);
+          return;
         }
-        setProgress({ done: Math.min(i + batchSize, files.length), total: files.length });
+        registered.push({
+          photo_id: photoId,
+          filename: file.name,
+          storage_path: storagePath,
+          mime_type: contentType,
+          byte_size: file.size,
+        });
+        done += 1;
+        setProgress({ done, total: files.length });
       }
+
+      // Simple promise pool
+      const queue = files.slice();
+      async function worker() {
+        while (queue.length && !aborted) {
+          const next = queue.shift();
+          if (next) await uploadOne(next);
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(concurrency, files.length) }, () => worker())
+      );
+
+      if (registered.length > 0) {
+        const r = await fetch('/api/photos/register', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ order_id: orderId, photos: registered }),
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          setError(`Register failed: ${j.error || r.statusText}`);
+        }
+      }
+
       setUploading(false);
       setProgress(null);
       refresh();
@@ -168,8 +227,10 @@ export function PhotoManager({ orderId }: { orderId: string }) {
             <label className="label">Provider</label>
             <select className="input" value={provider} onChange={(e) => setProvider(e.target.value as any)}>
               <option value="auto">Auto (recommended)</option>
-              <option value="gemini-banana-pro">Gemini Banana Pro</option>
-              <option value="openai-gpt-image">OpenAI GPT Image</option>
+              <option value="oceano-enhance">Oceano Enhance (no AI)</option>
+              <option value="autoenhance">Autoenhance.ai</option>
+              <option value="gemini-banana-pro">Nano Banana Pro</option>
+              <option value="openai-gpt-image">GPT Image 2</option>
             </select>
           </div>
           <button

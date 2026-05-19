@@ -51,10 +51,16 @@ export default async function SettingsPage() {
           Configure provider keys via environment variables in Vercel:
         </p>
         <ul className="text-sm space-y-1">
-          <li><code className="text-xs bg-slate-100 px-1 rounded">OPENAI_API_KEY</code> — required for GPT Image</li>
-          <li><code className="text-xs bg-slate-100 px-1 rounded">GEMINI_API_KEY</code> — required for Gemini / Banana Pro</li>
-          <li><code className="text-xs bg-slate-100 px-1 rounded">GEMINI_IMAGE_MODEL</code> — optional, defaults to gemini-2.5-flash-image-preview</li>
+          <li><code className="text-xs bg-slate-100 px-1 rounded">OPENAI_API_KEY</code> — required for GPT Image 2</li>
+          <li><code className="text-xs bg-slate-100 px-1 rounded">OPENAI_IMAGE_MODEL</code> — optional, defaults to gpt-image-2</li>
+          <li><code className="text-xs bg-slate-100 px-1 rounded">GEMINI_API_KEY</code> — required for Nano Banana Pro</li>
+          <li><code className="text-xs bg-slate-100 px-1 rounded">GEMINI_IMAGE_MODEL</code> — optional, defaults to gemini-3-pro-image-preview</li>
+          <li><code className="text-xs bg-slate-100 px-1 rounded">AUTOENHANCE_API_KEY</code> — required for Autoenhance.ai</li>
+          <li><code className="text-xs bg-slate-100 px-1 rounded">AUTOENHANCE_DEV_MODE</code> — set to <code>true</code> to test without burning credits</li>
         </ul>
+        <p className="mt-3 text-sm text-slate-600">
+          Oceano Enhance is internal and needs no API key.
+        </p>
       </section>
     </div>
   );

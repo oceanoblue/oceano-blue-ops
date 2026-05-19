@@ -19,7 +19,15 @@ const Body = z.object({
     'twilight_convert',
     'virtual_stage',
   ]),
-  provider: z.enum(['openai-gpt-image', 'gemini-banana-pro', 'auto']).default('auto'),
+  provider: z
+    .enum([
+      'oceano-enhance',
+      'autoenhance',
+      'openai-gpt-image',
+      'gemini-banana-pro',
+      'auto',
+    ])
+    .default('auto'),
   photo_ids: z.array(z.string().uuid()).optional(), // explicit selection
   prompt_extra: z.string().optional(),
   run_inline: z.boolean().default(true),            // run synchronously by default

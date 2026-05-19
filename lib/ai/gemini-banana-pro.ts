@@ -10,7 +10,10 @@ import { buildPrompt } from './prompts';
 const ENDPOINT = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-const DEFAULT_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image-preview';
+// Nano Banana Pro (gemini-3-pro-image-preview) is the current Google image
+// model. Native 2K, 4K upscale available. Significantly better detail
+// preservation than gemini-2.5-flash-image-preview.
+const DEFAULT_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-preview';
 
 export const geminiBananaPro: AiProvider = {
   id: 'gemini-banana-pro',
@@ -27,8 +30,8 @@ export const geminiBananaPro: AiProvider = {
   ],
 
   estimatedCostCents() {
-    // Nano Banana / Banana Pro pricing is per-image; rough estimate ~3-5¢.
-    return 4;
+    // gemini-3-pro-image-preview ≈ $0.134/image at 1K-2K, ~$0.24 at 4K.
+    return 13;
   },
 
   async process(req: AiRequest): Promise<AiResponse> {

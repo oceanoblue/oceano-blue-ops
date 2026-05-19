@@ -25,9 +25,9 @@ export const openaiGptImage: AiProvider = {
   ],
 
   estimatedCostCents(req) {
-    // gpt-image-1 high-quality 1024x1024 ≈ $0.19/image as of 2025.
-    // Bracket merges pass multiple inputs but produce a single output.
-    return 19;
+    // gpt-image-2 native 2K ≈ $0.12/image; 4K upscale ≈ $0.24/image.
+    // We default to 2K — editors can re-run a final select set at 4K.
+    return 12;
   },
 
   async process(req: AiRequest): Promise<AiResponse> {
@@ -36,7 +36,7 @@ export const openaiGptImage: AiProvider = {
 
     const client = new OpenAI({ apiKey });
     const prompt = req.prompt ?? buildPrompt(req.jobType);
-    const model = 'gpt-image-1';
+    const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
 
     if (req.inputs.length === 0) {
       throw new Error('At least one input image is required');
@@ -54,12 +54,14 @@ export const openaiGptImage: AiProvider = {
     );
 
     // OpenAI's edit endpoint accepts an array of images.
+    // gpt-image-2 supports native 2K — use 2048x1365 (3:2) which is the
+    // standard MLS aspect ratio.
     const result = await client.images.edit({
       model,
       // @ts-expect-error — OpenAI SDK types accept File | File[] at runtime
       image: imageFiles.length === 1 ? imageFiles[0] : imageFiles,
       prompt,
-      size: '1536x1024',
+      size: '2048x1365',
       n: 1,
     } as never);
 

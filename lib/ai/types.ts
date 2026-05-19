@@ -1,6 +1,10 @@
 import type { AiJobType } from '@/lib/supabase/database.types';
 
-export type AiProviderId = 'openai-gpt-image' | 'gemini-banana-pro';
+export type AiProviderId =
+  | 'openai-gpt-image'
+  | 'gemini-banana-pro'
+  | 'oceano-enhance'
+  | 'autoenhance';
 
 /** A single source image passed to a provider. */
 export interface SourceImage {

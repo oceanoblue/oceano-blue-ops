@@ -7,6 +7,7 @@ const ITEMS = [
   { href: '/dashboard/settings', label: 'Team' },
   { href: '/dashboard/settings/availability', label: 'Availability' },
   { href: '/dashboard/settings/scheduling', label: 'Scheduling' },
+  { href: '/dashboard/settings/enhance', label: 'Enhance' },
   { href: '/dashboard/settings/integrations', label: 'Integrations' },
 ];
 
