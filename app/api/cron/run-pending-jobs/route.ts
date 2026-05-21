@@ -19,13 +19,17 @@ import { runAiJob } from '@/lib/ai/runner';
  *   - To process faster, increase CONCURRENCY (uses more memory + parallel
  *     API rate limit) or call this route from a separate trigger more often.
  */
-const BATCH = 8;
-const CONCURRENCY = 3;
+// On Vercel Hobby, function maxDuration is capped at 10s and crons run only
+// once a day. So we don't use cron — we kick this endpoint when jobs are
+// enqueued and it self-triggers (fetch+forget) until the queue is empty.
+const BATCH = 2;       // small batch so we fit in Hobby's 10s window
+const CONCURRENCY = 2;
 
 export const dynamic = 'force-dynamic';
+// Pro plan picks this up; Hobby clamps to 10s automatically.
 export const maxDuration = 300;
 
-export async function GET(request: Request) {
+async function handle(request: Request) {
   const expected = process.env.CRON_SECRET;
   const provided = request.headers.get('authorization');
   if (!expected || provided !== `Bearer ${expected}`) {
@@ -75,6 +79,28 @@ export async function GET(request: Request) {
   const failed = results.filter((r) => r.status === 'failed').length;
   const skipped = results.filter((r) => r.status === 'skipped').length;
 
+  // Self-chain: if any jobs were processed this round AND more are pending,
+  // fire-and-forget another invocation to keep the queue draining. This is
+  // how we avoid needing a frequency-bounded cron job on Vercel Hobby.
+  if (results.length > 0) {
+    const { data: stillPending } = await admin
+      .from('ai_jobs')
+      .select('id')
+      .in('status', ['pending', 'queued'])
+      .limit(1);
+    if (stillPending?.length) {
+      const base = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+      const url = base?.startsWith('http') ? base : `https://${base}`;
+      if (url) {
+        // Fire and forget — don't await so this response returns promptly.
+        fetch(`${url}/api/cron/run-pending-jobs`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${expected}` },
+        }).catch(() => {});
+      }
+    }
+  }
+
   return NextResponse.json({
     processed: results.length,
     completed,
@@ -82,3 +108,6 @@ export async function GET(request: Request) {
     skipped,
   });
 }
+
+export const GET = handle;
+export const POST = handle;

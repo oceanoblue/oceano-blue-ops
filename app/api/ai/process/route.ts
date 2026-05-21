@@ -123,6 +123,18 @@ export async function POST(request: Request) {
   await admin.from('orders').update({ status: 'processing' }).eq('id', order_id);
 
   if (!run_inline) {
+    // Vercel Hobby has no per-minute cron, so we kick off the worker
+    // endpoint right after enqueueing. It self-chains until the queue is
+    // empty. Fire-and-forget so this response returns instantly.
+    const base = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+    const secret = process.env.CRON_SECRET;
+    if (base && secret) {
+      const url = base.startsWith('http') ? base : `https://${base}`;
+      fetch(`${url}/api/cron/run-pending-jobs`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${secret}` },
+      }).catch(() => {}); // non-blocking
+    }
     return NextResponse.json({ queued: jobs.map((j) => j.id) });
   }
 
