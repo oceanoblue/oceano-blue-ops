@@ -46,7 +46,34 @@ const app = express();
 app.use(express.json({ limit: '256kb' }));
 
 app.get('/', (_req, res) => res.json({ ok: true, service: 'oceano-arw-worker' }));
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) => res.json({ ok: true, active: activeConverts, waiting: convertQueue.length }));
+
+// In-process concurrency limit. Each ARW decode peaks at ~400-600 MB of RAM,
+// so we let only one convert run at a time on this size machine. Additional
+// requests wait their turn instead of dog-piling the kernel into OOM kills.
+const MAX_CONCURRENT = 1;
+let activeConverts = 0;
+const convertQueue = [];
+
+function acquireConvertSlot() {
+  return new Promise((resolve) => {
+    if (activeConverts < MAX_CONCURRENT) {
+      activeConverts++;
+      resolve();
+    } else {
+      convertQueue.push(resolve);
+    }
+  });
+}
+
+function releaseConvertSlot() {
+  activeConverts--;
+  const next = convertQueue.shift();
+  if (next) {
+    activeConverts++;
+    next();
+  }
+}
 
 app.post('/convert', async (req, res) => {
   // Auth: main app must include the shared secret. This keeps the worker from
@@ -59,6 +86,10 @@ app.post('/convert', async (req, res) => {
   if (typeof photoId !== 'string') {
     return res.status(400).json({ error: 'photo_id required' });
   }
+
+  // Wait for a memory slot before starting the decode. With MAX_CONCURRENT=1
+  // this serializes back-to-back requests so we never blow up the machine.
+  await acquireConvertSlot();
 
   const log = (msg, extra = {}) =>
     console.log(JSON.stringify({ msg, photo_id: photoId, ...extra }));
@@ -176,6 +207,10 @@ app.post('/convert', async (req, res) => {
   } catch (err) {
     console.error('[arw-worker] error', err);
     res.status(500).json({ error: err?.message || String(err) });
+  } finally {
+    // Always release the concurrency slot so the next queued request can run,
+    // even if this one threw before reaching the success path.
+    releaseConvertSlot();
   }
 });
 

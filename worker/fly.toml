@@ -24,7 +24,11 @@ primary_region = "iad"   # change to your nearest Fly region
 [[vm]]
   cpu_kind = "shared"
   cpus = 1
-  memory_mb = 512        # ARW decode wants a little headroom
+  # A 24 MP ARW (50–60 MB compressed) expands to a 16-bit linear TIFF of
+  # 250–400 MB during decode, plus Sharp working buffers + Node.js overhead.
+  # 512 MB OOM-kills the process; 2 GB has comfortable headroom for one
+  # concurrent convert.
+  memory_mb = 2048
 
 [deploy]
   release_command = "node -v"
