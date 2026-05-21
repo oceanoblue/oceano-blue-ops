@@ -1,22 +1,27 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Wand2, RefreshCw, CheckCircle2, AlertCircle, Loader2, FileImage, Camera } from 'lucide-react';
+import {
+  Upload,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  FileImage,
+  Camera,
+  ThumbsUp,
+  ThumbsDown,
+  RotateCw,
+} from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
 import { PhotoViewer } from './PhotoViewer';
+import { ProcessSidebar, type EditKind, type ProviderId } from './ProcessSidebar';
+import { BracketCard } from './BracketCard';
 import { tusUpload, RESUMABLE_THRESHOLD_BYTES } from '@/lib/storage/tus-upload';
-
-const JOB_TYPES: Array<{ id: AiJobType; label: string; helper: string }> = [
-  { id: 'hdr_merge', label: 'HDR merge (brackets)', helper: 'Detects 3/5/7-shot brackets and merges each set' },
-  { id: 'enhance_single', label: 'Enhance non-HDR', helper: 'Single-shot retouch: WB, shadows, highlights, noise' },
-  { id: 'sky_replace', label: 'Sky replace', helper: 'Clean daytime sky on exteriors' },
-  { id: 'window_pull', label: 'Window pull', helper: 'Recover blown windows' },
-  { id: 'lawn_enhance', label: 'Lawn enhance', helper: 'Even out green grass' },
-  { id: 'declutter', label: 'Light declutter', helper: 'Remove small personal items' },
-  { id: 'twilight_convert', label: 'Twilight convert', helper: 'Daytime → twilight exterior' },
-];
+import { groupPhotosIntoBrackets, isRawFilename } from '@/lib/photos/bracket-grouping';
+import type { BracketGroup } from '@/lib/photos/bracket-grouping';
 
 interface JobView {
   id: string;
@@ -32,19 +37,23 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [jobType, setJobType] = useState<AiJobType>('hdr_merge');
-  const [provider, setProvider] = useState<
-    'auto' | 'oceano-enhance' | 'autoenhance' | 'openai-gpt-image' | 'gemini-banana-pro'
-  >('auto');
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // URL cache keyed by photo_id — share between thumbnails and the viewer so
-  // we don't fetch the signed URL twice.
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string | null>>({});
-  // Viewer state: which photo list + index is open. null = closed.
   const [viewer, setViewer] = useState<{ list: 'raw' | 'processed'; index: number } | null>(null);
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+
+  // Selection — separate sets for brackets (group ids) and singles (photo ids)
+  // so we can show the right counts in the sidebar and run the right job type
+  // per selection.
+  const [selectedBrackets, setSelectedBrackets] = useState<Set<string>>(new Set());
+  const [selectedSingles, setSelectedSingles] = useState<Set<string>>(new Set());
+
+  // Sidebar config
+  const [edits, setEdits] = useState<Set<EditKind>>(
+    new Set(['hdr_merge', 'enhance_single'])
+  );
+  const [provider, setProvider] = useState<ProviderId>('auto');
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -59,32 +68,34 @@ export function PhotoManager({ orderId }: { orderId: string }) {
     setJobs(j.jobs ?? []);
   }, [orderId]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-  // Poll for job status updates while anything is still working. We stop the
-  // moment everything is in a terminal state — saves browser CPU and database
-  // round-trips when the user leaves the page open.
+  // Poll while anything is running so the user sees progress without manual refresh.
   useEffect(() => {
     const hasInFlight = jobs.some(
       (j) => j.status === 'pending' || j.status === 'queued' || j.status === 'running'
     );
     if (!hasInFlight) return;
-    const id = setInterval(() => {
-      refresh();
-    }, 4000);
+    const id = setInterval(refresh, 4000);
     return () => clearInterval(id);
   }, [jobs, refresh]);
 
+  // Split photos into raw / processed and group raw into brackets/singles
+  const rawPhotos = useMemo(() => photos.filter((p) => p.kind === 'raw'), [photos]);
+  const processedPhotos = useMemo(() => photos.filter((p) => p.kind === 'processed'), [photos]);
+  const { brackets, singles } = useMemo(() => groupPhotosIntoBrackets(rawPhotos), [rawPhotos]);
+
+  // ─── Upload ──────────────────────────────────────────────────────────────
   const onDrop = useCallback(
     async (files: File[]) => {
       if (!files.length) return;
       setUploading(true);
-      setError(null);
-      setProgress({ done: 0, total: files.length });
+      setRunError(null);
+      setUploadProgress({ done: 0, total: files.length });
 
       const supabase = createClient();
-      // Upload up to 3 files in parallel — keeps the network busy without
-      // overwhelming the browser on phones / older laptops.
       const concurrency = 3;
       const registered: Array<{
         photo_id: string;
@@ -100,35 +111,22 @@ export function PhotoManager({ orderId }: { orderId: string }) {
       async function uploadOne(file: File) {
         if (aborted) return;
         const photoId = crypto.randomUUID();
-        // Strip characters that confuse Supabase storage paths
         const safeName = file.name.replace(/[^\w.\-]+/g, '_');
         const storagePath = `${orderId}/${photoId}-${safeName}`;
         const contentType = file.type || 'application/octet-stream';
 
         try {
           if (file.size >= RESUMABLE_THRESHOLD_BYTES) {
-            // Large files (ARW etc.) use chunked resumable uploads. Survives
-            // network blips and any plan size cap that single-PUT would hit.
-            await tusUpload({
-              file,
-              bucket: 'raw-photos',
-              objectName: storagePath,
-              contentType,
-            });
+            await tusUpload({ file, bucket: 'raw-photos', objectName: storagePath, contentType });
           } else {
-            // Small files: a single PUT is faster (no chunk negotiation).
             const { error } = await supabase.storage
               .from('raw-photos')
-              .upload(storagePath, file, {
-                contentType,
-                upsert: false,
-                cacheControl: '3600',
-              });
+              .upload(storagePath, file, { contentType, upsert: false, cacheControl: '3600' });
             if (error) throw error;
           }
         } catch (err: any) {
           aborted = true;
-          setError(`Upload failed: ${err?.message || err}`);
+          setRunError(`Upload failed: ${err?.message || err}`);
           return;
         }
         registered.push({
@@ -139,10 +137,9 @@ export function PhotoManager({ orderId }: { orderId: string }) {
           byte_size: file.size,
         });
         done += 1;
-        setProgress({ done, total: files.length });
+        setUploadProgress({ done, total: files.length });
       }
 
-      // Simple promise pool
       const queue = files.slice();
       async function worker() {
         while (queue.length && !aborted) {
@@ -162,12 +159,12 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         });
         if (!r.ok) {
           const j = await r.json().catch(() => ({}));
-          setError(`Register failed: ${j.error || r.statusText}`);
+          setRunError(`Register failed: ${j.error || r.statusText}`);
         }
       }
 
       setUploading(false);
-      setProgress(null);
+      setUploadProgress(null);
       refresh();
     },
     [orderId, refresh]
@@ -175,8 +172,6 @@ export function PhotoManager({ orderId }: { orderId: string }) {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    // Accept common JPEG/PNG plus RAW extensions even when the browser reports
-    // no specific mime type (most browsers don't have a MIME for ARW/CR2/etc.)
     accept: {
       'image/*': ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.webp'],
       'application/octet-stream': ['.arw', '.cr2', '.cr3', '.nef', '.dng', '.raf', '.rw2', '.orf'],
@@ -184,132 +179,247 @@ export function PhotoManager({ orderId }: { orderId: string }) {
     disabled: uploading,
   });
 
-  function toggle(id: string) {
-    setSelected((prev) => {
+  // ─── Selection helpers ───────────────────────────────────────────────────
+  function toggleBracket(id: string) {
+    setSelectedBrackets((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
-
-  const [queueMessage, setQueueMessage] = useState<string | null>(null);
-
-  async function runJob() {
-    setRunning(true);
-    setError(null);
-    setQueueMessage(null);
-    const body = {
-      order_id: orderId,
-      job_type: jobType,
-      provider,
-      photo_ids: selected.size ? Array.from(selected) : undefined,
-    };
-    const r = await fetch('/api/ai/process', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+  function toggleSingle(id: string) {
+    setSelectedSingles((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
-    const data = await r.json();
-    if (!r.ok) {
-      setError(data.error || 'failed');
-    } else if (Array.isArray(data.queued)) {
-      // New default: jobs run in the background, picked up by the cron.
-      const n = data.queued.length;
-      setQueueMessage(
-        `Queued ${n} job${n === 1 ? '' : 's'}. Processing in the background — refreshing as they complete.`
-      );
-    }
-    setRunning(false);
-    setSelected(new Set());
-    refresh();
+  }
+  function selectAll() {
+    setSelectedBrackets(new Set(brackets.map((b) => b.id)));
+    setSelectedSingles(new Set(singles.map((p) => p.id)));
+  }
+  function clearSelection() {
+    setSelectedBrackets(new Set());
+    setSelectedSingles(new Set());
   }
 
-  const rawPhotos = photos.filter((p) => p.kind === 'raw');
-  const processedPhotos = photos.filter((p) => p.kind === 'processed');
+  // ─── Run the configured edits on the current selection ───────────────────
+  async function runProcess() {
+    setRunning(true);
+    setRunError(null);
 
+    // Build per-edit job payloads. HDR merge only applies to brackets;
+    // single-shot edits apply to selected singles. Other edits (sky etc)
+    // apply to whatever's selected.
+    const selectedBracketGroups = brackets.filter((b) => selectedBrackets.has(b.id));
+    const selectedSinglePhotos = singles.filter((p) => selectedSingles.has(p.id));
+
+    type Submission = { job_type: AiJobType; photo_ids: string[] };
+    const submissions: Submission[] = [];
+
+    if (edits.has('hdr_merge')) {
+      for (const b of selectedBracketGroups) {
+        submissions.push({ job_type: 'hdr_merge', photo_ids: b.photos.map((p) => p.id) });
+      }
+    }
+    if (edits.has('enhance_single')) {
+      for (const p of selectedSinglePhotos) {
+        submissions.push({ job_type: 'enhance_single', photo_ids: [p.id] });
+      }
+    }
+    // Additional generative edits — apply to both brackets (using first frame as proxy)
+    // and singles. The runner already handles bracket inputs gracefully.
+    const everySelected = [
+      ...selectedBracketGroups.map((b) => b.photos[0].id),
+      ...selectedSinglePhotos.map((p) => p.id),
+    ];
+    const additionalEdits: AiJobType[] = ['sky_replace', 'window_pull', 'lawn_enhance', 'twilight_convert', 'declutter'];
+    for (const e of additionalEdits) {
+      if (!edits.has(e)) continue;
+      for (const id of everySelected) {
+        submissions.push({ job_type: e, photo_ids: [id] });
+      }
+    }
+
+    try {
+      for (const sub of submissions) {
+        const r = await fetch('/api/ai/process', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            order_id: orderId,
+            job_type: sub.job_type,
+            provider,
+            photo_ids: sub.photo_ids,
+          }),
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j.error || `enqueue_failed_${r.status}`);
+        }
+      }
+      clearSelection();
+      refresh();
+    } catch (err: any) {
+      setRunError(err?.message || 'failed');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  // Live job progress for the sidebar
+  const jobProgress = useMemo(() => {
+    const active = jobs.filter((j) =>
+      ['pending', 'queued', 'running', 'complete', 'failed'].includes(j.status)
+    );
+    if (active.length === 0) return null;
+    const done = active.filter((j) => j.status === 'complete' || j.status === 'failed').length;
+    const total = active.length;
+    return done < total ? { done, total } : null;
+  }, [jobs]);
+
+  // ─── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      <div
-        {...getRootProps()}
-        className={`rounded-lg border-2 border-dashed p-8 text-center transition cursor-pointer ${
-          isDragActive ? 'border-ocean-500 bg-ocean-50' : 'border-slate-300 hover:bg-slate-50'
-        }`}
-      >
-        <input {...getInputProps()} />
-        <Upload className="mx-auto h-6 w-6 text-slate-400" />
-        <p className="mt-2 text-sm text-slate-700">
-          {uploading
-            ? `Uploading ${progress?.done ?? 0}/${progress?.total ?? 0}…`
-            : 'Drop photos here, or click to choose files'}
-        </p>
-        <p className="text-xs text-slate-500">
-          JPEG / PNG / TIFF / WebP runs through AI directly. ARW / CR2 / NEF / DNG auto-convert to JPEG via the worker.
-        </p>
-      </div>
-
-      <div className="card p-4 bg-slate-50">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[180px]">
-            <label className="label">AI job</label>
-            <select className="input" value={jobType} onChange={(e) => setJobType(e.target.value as AiJobType)}>
-              {JOB_TYPES.map((j) => (
-                <option key={j.id} value={j.id}>{j.label}</option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-slate-500">
-              {JOB_TYPES.find((j) => j.id === jobType)?.helper}
-            </p>
-          </div>
-          <div>
-            <label className="label">Provider</label>
-            <select className="input" value={provider} onChange={(e) => setProvider(e.target.value as any)}>
-              <option value="auto">Auto (recommended)</option>
-              <option value="oceano-enhance">Oceano Enhance (no AI)</option>
-              <option value="autoenhance">Autoenhance.ai</option>
-              <option value="gemini-banana-pro">Nano Banana Pro</option>
-              <option value="openai-gpt-image">GPT Image 2</option>
-            </select>
-          </div>
-          <button
-            className="btn-primary"
-            disabled={running || rawPhotos.length === 0}
-            onClick={runJob}
-          >
-            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-            {selected.size > 0
-              ? `Run on ${selected.size} selected`
-              : jobType === 'hdr_merge' ? 'Auto-detect brackets & run' : 'Run on all raw'}
-          </button>
-          <button className="btn-ghost" onClick={refresh} disabled={running}>
-            <RefreshCw className="h-4 w-4" /> Refresh
-          </button>
+    <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      {/* Main column */}
+      <div className="space-y-6 min-w-0">
+        {/* Drop zone */}
+        <div
+          {...getRootProps()}
+          className={`rounded-lg border-2 border-dashed p-8 text-center transition cursor-pointer ${
+            isDragActive ? 'border-ocean-500 bg-ocean-50' : 'border-slate-300 hover:bg-slate-50'
+          }`}
+        >
+          <input {...getInputProps()} />
+          <Upload className="mx-auto h-6 w-6 text-slate-400" />
+          <p className="mt-2 text-sm text-slate-700">
+            {uploading
+              ? `Uploading ${uploadProgress?.done ?? 0}/${uploadProgress?.total ?? 0}…`
+              : 'Drop photos here, or click to choose files'}
+          </p>
+          <p className="text-xs text-slate-500">
+            JPEG / PNG / TIFF / WebP run through AI directly. ARW / CR2 / NEF / DNG auto-convert via the worker.
+          </p>
         </div>
-        {error && <p className="mt-2 text-sm text-rose-700">{error}</p>}
-        {queueMessage && <p className="mt-2 text-sm text-ocean-700">{queueMessage}</p>}
+
+        {/* Selection-control bar */}
+        {(brackets.length > 0 || singles.length > 0) && (
+          <div className="flex items-center justify-between text-sm">
+            <div className="text-slate-600">
+              {brackets.length} bracket{brackets.length === 1 ? '' : 's'}
+              {brackets.length > 0 && singles.length > 0 && ' · '}
+              {singles.length > 0 && `${singles.length} single${singles.length === 1 ? '' : 's'}`}
+              {' '}detected
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={selectAll} className="text-xs text-ocean-700 hover:text-ocean-900">
+                Select all
+              </button>
+              <span className="text-slate-300">·</span>
+              <button onClick={clearSelection} className="text-xs text-slate-500 hover:text-slate-700">
+                Clear
+              </button>
+              <span className="text-slate-300">·</span>
+              <button onClick={refresh} className="text-xs text-slate-500 hover:text-slate-700 inline-flex items-center gap-1">
+                <RefreshCw className="h-3 w-3" /> Refresh
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Bracket sets */}
+        {brackets.length > 0 && (
+          <section>
+            <h3 className="text-sm font-semibold text-slate-700 mb-2">
+              Bracket sets ({brackets.length})
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+              {brackets.map((b) => (
+                <BracketCard
+                  key={b.id}
+                  bracket={b}
+                  selected={selectedBrackets.has(b.id)}
+                  onToggle={() => toggleBracket(b.id)}
+                  urls={photoUrls}
+                  setUrls={setPhotoUrls}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Singles */}
+        {singles.length > 0 && (
+          <section>
+            <h3 className="text-sm font-semibold text-slate-700 mb-2">
+              Singles ({singles.length})
+            </h3>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+              {singles.map((p, i) => (
+                <SingleThumb
+                  key={p.id}
+                  photo={p}
+                  selected={selectedSingles.has(p.id)}
+                  onToggle={() => toggleSingle(p.id)}
+                  onOpen={() => {
+                    const idx = rawPhotos.findIndex((rp) => rp.id === p.id);
+                    setViewer({ list: 'raw', index: Math.max(0, idx) });
+                  }}
+                  urls={photoUrls}
+                  setUrls={setPhotoUrls}
+                  onConverted={refresh}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Processed */}
+        {processedPhotos.length > 0 && (
+          <section>
+            <h3 className="text-sm font-semibold text-slate-700 mb-2">
+              Processed ({processedPhotos.length})
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {processedPhotos.map((p, i) => (
+                <ProcessedCard
+                  key={p.id}
+                  photo={p}
+                  onOpen={() => setViewer({ list: 'processed', index: i })}
+                  urls={photoUrls}
+                  setUrls={setPhotoUrls}
+                  onChange={refresh}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Empty state */}
+        {brackets.length === 0 && singles.length === 0 && processedPhotos.length === 0 && (
+          <div className="card p-8 text-center text-sm text-slate-500">
+            No photos yet. Drop your shoot above to begin.
+          </div>
+        )}
       </div>
 
-      <PhotoGrid
-        title={`Raw uploads (${rawPhotos.length})`}
-        photos={rawPhotos}
-        selected={selected}
-        onToggle={toggle}
-        onOpen={(i) => setViewer({ list: 'raw', index: i })}
-        urls={photoUrls}
-        setUrls={setPhotoUrls}
-        onConverted={refresh}
+      {/* Right sidebar */}
+      <ProcessSidebar
+        bracketCount={brackets.length}
+        singleCount={singles.length}
+        selectedBracketCount={selectedBrackets.size}
+        selectedSingleCount={selectedSingles.size}
+        edits={edits}
+        onEditsChange={setEdits}
+        provider={provider}
+        onProviderChange={setProvider}
+        running={running}
+        onRun={runProcess}
+        progress={jobProgress}
+        error={runError}
       />
-      <PhotoGrid
-        title={`Processed (${processedPhotos.length})`}
-        photos={processedPhotos}
-        selected={selected}
-        onToggle={toggle}
-        onOpen={(i) => setViewer({ list: 'processed', index: i })}
-        urls={photoUrls}
-        setUrls={setPhotoUrls}
-        processed
-      />
-
-      {jobs.length > 0 && <JobsTable jobs={jobs} />}
 
       {viewer && (
         <PhotoViewer
@@ -325,85 +435,39 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   );
 }
 
-function PhotoGrid({
-  title,
-  photos,
-  selected,
-  onToggle,
-  onOpen,
-  urls,
-  setUrls,
-  processed,
-  onConverted,
-}: {
-  title: string;
-  photos: Photo[];
-  selected: Set<string>;
-  onToggle: (id: string) => void;
-  onOpen: (index: number) => void;
-  urls: Record<string, string | null>;
-  setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
-  processed?: boolean;
-  onConverted?: () => void;
-}) {
-  if (photos.length === 0) return null;
-  return (
-    <div>
-      <h3 className="text-sm font-medium text-slate-700 mb-2">{title}</h3>
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-        {photos.map((p, i) => (
-          <Thumbnail
-            key={p.id}
-            photo={p}
-            selected={selected.has(p.id)}
-            onToggle={onToggle}
-            onOpen={() => onOpen(i)}
-            urls={urls}
-            setUrls={setUrls}
-            processed={processed}
-            onConverted={onConverted}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Thumbnail({
+// ─── Single thumbnail card ──────────────────────────────────────────────────
+function SingleThumb({
   photo,
   selected,
   onToggle,
   onOpen,
   urls,
   setUrls,
-  processed,
   onConverted,
 }: {
   photo: Photo;
   selected: boolean;
-  onToggle: (id: string) => void;
+  onToggle: () => void;
   onOpen: () => void;
   urls: Record<string, string | null>;
   setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
-  processed?: boolean;
-  onConverted?: () => void;
+  onConverted: () => void;
 }) {
   const url = urls[photo.id];
+  const raw = isRawFilename(photo.filename);
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
-  const isRaw = /\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i.test(photo.filename);
-  const rawExt = (photo.filename.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toUpperCase();
+  const ext = (photo.filename.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toUpperCase();
+  const sizeMB = photo.byte_size ? (photo.byte_size / 1024 / 1024).toFixed(1) : null;
 
   useEffect(() => {
-    // No point fetching a signed URL for a RAW file — the browser can't
-    // render ARW/CR2/NEF anyway. We show a stylized placeholder instead.
-    if (isRaw) return;
+    if (raw) return;
     if (url !== undefined) return;
     fetch(`/api/photo-url?photo_id=${photo.id}`)
       .then((r) => r.json())
       .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
-  }, [photo.id, url, setUrls, isRaw]);
+  }, [photo.id, url, setUrls, raw]);
 
   async function convert() {
     setConverting(true);
@@ -415,11 +479,8 @@ function Thumbnail({
         body: JSON.stringify({ photo_id: photo.id }),
       });
       const data = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        setConvertError(data.error || `error_${r.status}`);
-      } else {
-        onConverted?.();
-      }
+      if (!r.ok) setConvertError(data.error || `error_${r.status}`);
+      else onConverted();
     } catch (err: any) {
       setConvertError(err?.message || 'network_error');
     } finally {
@@ -427,29 +488,21 @@ function Thumbnail({
     }
   }
 
-  const sizeMB = photo.byte_size ? (photo.byte_size / 1024 / 1024).toFixed(1) : null;
-
   return (
     <div
-      className={`group relative aspect-square overflow-hidden rounded-md ring-2 transition cursor-zoom-in ${
-        selected ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'
-      }`}
-      onClick={isRaw ? undefined : onOpen}
+      onClick={raw ? undefined : onOpen}
+      className={`group relative aspect-square overflow-hidden rounded-md ring-2 transition ${
+        raw ? '' : 'cursor-zoom-in'
+      } ${selected ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'}`}
     >
-      {isRaw ? (
-        // Clean RAW placeholder card — camera icon, extension chip, filename,
-        // file size. No broken-image icons.
-        <div className="h-full w-full bg-gradient-to-br from-slate-700 to-slate-900 text-slate-100 flex flex-col items-center justify-center p-3 text-center">
-          <Camera className="h-8 w-8 mb-1 text-slate-300" strokeWidth={1.5} />
+      {raw ? (
+        <div className="h-full w-full bg-gradient-to-br from-slate-700 to-slate-900 text-slate-100 flex flex-col items-center justify-center p-2 text-center">
+          <Camera className="h-7 w-7 mb-1 text-slate-300" strokeWidth={1.5} />
           <div className="text-[10px] font-mono tracking-wider px-2 py-0.5 rounded bg-amber-500 text-amber-950 font-semibold">
-            {rawExt}
+            {ext}
           </div>
-          <div className="mt-2 text-[10px] text-slate-300 truncate max-w-full">
-            {photo.filename}
-          </div>
-          {sizeMB && (
-            <div className="text-[10px] text-slate-400">{sizeMB} MB</div>
-          )}
+          <div className="mt-1 text-[10px] text-slate-300 truncate max-w-full">{photo.filename}</div>
+          {sizeMB && <div className="text-[10px] text-slate-400">{sizeMB} MB</div>}
         </div>
       ) : url ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -460,41 +513,23 @@ function Thumbnail({
         </div>
       )}
 
-      {/* Selection checkbox — stop click so it doesn't open the viewer */}
+      {/* Selection checkbox — always visible */}
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          onToggle(photo.id);
+          onToggle();
         }}
-        className={`absolute top-1 left-1 h-5 w-5 grid place-items-center rounded border text-[10px] transition z-10 ${
+        className={`absolute top-1.5 left-1.5 h-5 w-5 grid place-items-center rounded border-2 text-[11px] transition z-10 ${
           selected
-            ? 'bg-ocean-600 border-ocean-600 text-white opacity-100'
-            : 'bg-white/85 border-slate-300 text-slate-500 opacity-0 group-hover:opacity-100'
+            ? 'bg-ocean-600 border-ocean-600 text-white'
+            : 'bg-white/90 border-white/90 text-slate-400'
         }`}
-        title={selected ? 'Deselect' : 'Select for batch'}
       >
         {selected ? '✓' : ''}
       </button>
 
-      {photo.processing_status === 'running' && (
-        <div className="absolute inset-0 bg-black/50 grid place-items-center text-white">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-      )}
-      {photo.processing_status === 'failed' && (
-        <div className="absolute top-1 right-1 text-rose-200">
-          <AlertCircle className="h-4 w-4" />
-        </div>
-      )}
-      {processed && photo.is_selected && (
-        <div className="absolute top-1 right-1 text-emerald-300">
-          <CheckCircle2 className="h-4 w-4" />
-        </div>
-      )}
-
-      {/* Convert button — full-width pill at the bottom of RAW thumbnails */}
-      {isRaw && !processed && (
+      {raw && (
         <>
           <button
             type="button"
@@ -503,8 +538,7 @@ function Thumbnail({
               convert();
             }}
             disabled={converting}
-            className="absolute inset-x-2 bottom-2 text-[11px] font-medium px-2 py-1.5 rounded-md bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-60 inline-flex items-center justify-center gap-1.5 shadow-lg z-10"
-            title="Convert RAW to JPEG via worker"
+            className="absolute inset-x-2 bottom-2 text-[11px] font-medium px-2 py-1.5 rounded-md bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-60 inline-flex items-center justify-center gap-1 shadow z-10"
           >
             {converting ? (
               <>
@@ -519,45 +553,150 @@ function Thumbnail({
             )}
           </button>
           {convertError && (
-            <div
-              className="absolute top-7 left-1 right-1 text-[10px] bg-rose-600 text-white px-1.5 py-1 rounded shadow truncate z-10"
-              onClick={(e) => e.stopPropagation()}
-              title={convertError}
-            >
+            <div className="absolute top-7 left-1 right-1 text-[10px] bg-rose-600 text-white px-1.5 py-1 rounded shadow truncate z-10" title={convertError}>
               {convertError}
             </div>
           )}
         </>
       )}
+
+      {photo.processing_status === 'running' && (
+        <div className="absolute inset-0 bg-black/50 grid place-items-center text-white">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      )}
+      {photo.processing_status === 'failed' && (
+        <div className="absolute top-1 right-1 text-rose-200">
+          <AlertCircle className="h-4 w-4" />
+        </div>
+      )}
     </div>
   );
 }
 
-function JobsTable({ jobs }: { jobs: JobView[] }) {
+// ─── Processed photo card with Approve / Reject / Re-run ────────────────────
+function ProcessedCard({
+  photo,
+  onOpen,
+  urls,
+  setUrls,
+  onChange,
+}: {
+  photo: Photo;
+  onOpen: () => void;
+  urls: Record<string, string | null>;
+  setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
+  onChange: () => void;
+}) {
+  const url = urls[photo.id];
+  const [busy, setBusy] = useState<null | 'approve' | 'reject' | 'rerun'>(null);
+
+  useEffect(() => {
+    if (url !== undefined) return;
+    fetch(`/api/photo-url?photo_id=${photo.id}`)
+      .then((r) => r.json())
+      .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
+      .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
+  }, [photo.id, url, setUrls]);
+
+  async function decide(decision: 'approve' | 'reject' | 'reset') {
+    setBusy(decision === 'reset' ? null : decision);
+    try {
+      await fetch('/api/photos/decide', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ photo_id: photo.id, decision }),
+      });
+      onChange();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function rerun() {
+    setBusy('rerun');
+    try {
+      const targetId = photo.parent_photo_id ?? photo.id;
+      await fetch('/api/ai/process', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          order_id: photo.order_id,
+          job_type: 'enhance_single',
+          provider: 'oceano-enhance',
+          photo_ids: [targetId],
+        }),
+      });
+      onChange();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const isApproved = photo.is_selected === true;
+  const isRejected = photo.is_selected === false;
+
   return (
-    <div className="card overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50">
-          <tr className="text-left">
-            <th className="table-head px-4 py-2">Job</th>
-            <th className="table-head px-4 py-2">Provider</th>
-            <th className="table-head px-4 py-2">Status</th>
-            <th className="table-head px-4 py-2">Cost</th>
-            <th className="table-head px-4 py-2">Duration</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {jobs.map((j) => (
-            <tr key={j.id}>
-              <td className="px-4 py-2">{j.job_type}</td>
-              <td className="px-4 py-2 text-slate-600">{j.provider}</td>
-              <td className="px-4 py-2">{j.status}</td>
-              <td className="px-4 py-2">${((j.cost_cents ?? 0) / 100).toFixed(2)}</td>
-              <td className="px-4 py-2">{j.duration_ms ? `${(j.duration_ms / 1000).toFixed(1)}s` : '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div
+      className={`group relative aspect-[3/2] overflow-hidden rounded-md ring-2 transition cursor-zoom-in ${
+        isApproved
+          ? 'ring-emerald-500'
+          : isRejected
+          ? 'ring-rose-300 opacity-60'
+          : 'ring-transparent hover:ring-slate-300'
+      }`}
+      onClick={onOpen}
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={photo.filename} className="h-full w-full object-cover" />
+      ) : (
+        <div className="h-full w-full bg-slate-100 grid place-items-center text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      )}
+
+      {/* Status badge */}
+      {isApproved && (
+        <div className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-600 text-white px-1.5 py-0.5 rounded shadow">
+          <CheckCircle2 className="h-3 w-3" /> Approved
+        </div>
+      )}
+
+      {/* Action chip strip — always visible at bottom */}
+      <div
+        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent p-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={() => decide(isApproved ? 'reset' : 'approve')}
+          disabled={busy !== null}
+          title={isApproved ? 'Un-approve' : 'Approve for delivery'}
+          className={`p-1.5 rounded-md text-white text-xs transition ${
+            isApproved ? 'bg-emerald-600' : 'bg-white/15 hover:bg-emerald-600'
+          }`}
+        >
+          {busy === 'approve' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          onClick={() => decide(isRejected ? 'reset' : 'reject')}
+          disabled={busy !== null}
+          title={isRejected ? 'Un-reject' : 'Reject'}
+          className={`p-1.5 rounded-md text-white text-xs transition ${
+            isRejected ? 'bg-rose-600' : 'bg-white/15 hover:bg-rose-600'
+          }`}
+        >
+          {busy === 'reject' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsDown className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          onClick={rerun}
+          disabled={busy !== null}
+          title="Re-run enhance on the source"
+          className="p-1.5 rounded-md bg-white/15 text-white text-xs hover:bg-ocean-600 transition"
+        >
+          {busy === 'rerun' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+        </button>
+      </div>
     </div>
   );
 }
