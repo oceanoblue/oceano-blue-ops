@@ -21,10 +21,20 @@ const Body = z.object({
   photo_id: z.string().uuid(),
   options: z.object({
     targetLongEdge: z.number().int().min(800).max(6000).optional(),
+    jpegQuality: z.number().int().min(60).max(100).optional(),
+    exposure: z.number().min(-2).max(2).optional(),
+    contrast: z.number().min(-1).max(1).optional(),
+    temp: z.number().min(-1).max(1).optional(),
+    tint: z.number().min(-1).max(1).optional(),
+    saturation: z.number().min(-1).max(1).optional(),
+    highlights: z.number().min(-1).max(1).optional(),
+    shadows: z.number().min(-1).max(1).optional(),
+    whites: z.number().min(-1).max(1).optional(),
+    blacks: z.number().min(-1).max(1).optional(),
+    sharpening: z.number().min(0).max(1).optional(),
     shadowLift: z.number().min(0).max(1).optional(),
     highlightRecover: z.number().min(0).max(1).optional(),
     vibrance: z.number().min(0).max(1).optional(),
-    jpegQuality: z.number().int().min(60).max(100).optional(),
   }),
 });
 

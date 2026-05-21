@@ -25,25 +25,86 @@ import type { Sharp } from 'sharp';
 export interface EnhanceOptions {
   /** Long-edge in pixels. MLS standard is 3000–4000; we default to 3000. */
   targetLongEdge?: number;
-  /** 0..1, how aggressively to lift shadows. */
-  shadowLift?: number;
-  /** 0..1, how aggressively to recover highlights. */
-  highlightRecover?: number;
-  /** 0..1, vibrance amount. */
-  vibrance?: number;
   /** JPEG quality 1..100. */
   jpegQuality?: number;
+
+  // ─── BASIC ────────────────────────────────────────────────────────────
+  /** Global exposure adjustment in stops. Range -2..+2, default 0. */
+  exposure?: number;
+  /** Global contrast adjustment. Range -1..+1, default 0. */
+  contrast?: number;
+
+  // ─── COLOR ────────────────────────────────────────────────────────────
+  /** White balance temperature shift. -1..+1 (cool→warm), default 0. */
+  temp?: number;
+  /** White balance tint shift. -1..+1 (green→magenta), default 0. */
+  tint?: number;
+  /** Saturation multiplier. -1..+1, default 0. */
+  saturation?: number;
+
+  // ─── TONE ─────────────────────────────────────────────────────────────
+  /** Highlights recovery, -1..+1, default 0 (positive = darken bright areas). */
+  highlights?: number;
+  /** Shadows lift, -1..+1, default 0 (positive = brighten dark areas). */
+  shadows?: number;
+  /** Whites — top of the curve. -1..+1, default 0. */
+  whites?: number;
+  /** Blacks — bottom of the curve. -1..+1, default 0. */
+  blacks?: number;
+
+  // ─── DETAIL ───────────────────────────────────────────────────────────
+  /** Sharpening amount, 0..1, default 0.25. */
+  sharpening?: number;
+
+  // ─── Legacy (kept for backwards compat with Settings page) ────────────
+  /** Legacy: maps to a combination of shadows + tone curve. */
+  shadowLift?: number;
+  /** Legacy: maps to highlights recovery. */
+  highlightRecover?: number;
+  /** Legacy: maps to saturation. */
+  vibrance?: number;
 }
 
 const DEFAULTS: Required<EnhanceOptions> = {
   targetLongEdge: 3000,
-  // More aggressive defaults so the output looks visibly cleaner than the
-  // raw. Real estate listings need to "pop" — agents reject subtle edits.
-  shadowLift: 0.55,
-  highlightRecover: 0.55,
-  vibrance: 0.3,
   jpegQuality: 92,
+  exposure: 0,
+  contrast: 0,
+  temp: 0,
+  tint: 0,
+  saturation: 0,
+  highlights: 0,
+  shadows: 0,
+  whites: 0,
+  blacks: 0,
+  sharpening: 0.25,
+  // Legacy fallbacks — only used when the new fields are all zero AND a
+  // legacy value is provided. Lets old settings keep working until they're
+  // updated to the new schema.
+  shadowLift: 0,
+  highlightRecover: 0,
+  vibrance: 0,
 };
+
+/**
+ * Translate legacy options (shadowLift / highlightRecover / vibrance) onto
+ * the new field set so the pipeline doesn't need two code paths.
+ */
+function normalizeOptions(opts: EnhanceOptions): Required<EnhanceOptions> {
+  const merged: Required<EnhanceOptions> = { ...DEFAULTS, ...opts };
+  // If the caller is on the old API, map the legacy values onto the new ones
+  // only when the new fields are still at default 0.
+  if (opts.shadowLift != null && opts.shadows == null) {
+    merged.shadows = (opts.shadowLift - 0) * 1.1; // 0..1 → 0..+1.1 stops of shadow lift
+  }
+  if (opts.highlightRecover != null && opts.highlights == null) {
+    merged.highlights = opts.highlightRecover * 1.1; // 0..1 → 0..+1.1 recovery
+  }
+  if (opts.vibrance != null && opts.saturation == null) {
+    merged.saturation = opts.vibrance * 0.6; // 0..1 → 0..+0.6 saturation
+  }
+  return merged;
+}
 
 /** Resize to long-edge target, preserving aspect, no upscaling. */
 async function resize(img: Sharp, opts: Required<EnhanceOptions>): Promise<Sharp> {
@@ -139,31 +200,166 @@ async function denoiseSharpen(buf: Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
+// ─── Lightroom-style controls implemented on Sharp ─────────────────────────
+
+/**
+ * Exposure in stops: multiply pixel values by 2^stops. Sharp's `.linear()`
+ * accepts a gain and clamps automatically.
+ */
+async function applyExposure(buf: Buffer, stops: number): Promise<Buffer> {
+  if (Math.abs(stops) < 0.01) return buf;
+  const gain = Math.pow(2, stops);
+  return sharp(buf).linear(gain, 0).toBuffer();
+}
+
+/**
+ * Contrast adjustment via `.linear(gain, bias)` pivoting around mid-grey (128).
+ */
+async function applyContrast(buf: Buffer, amount: number): Promise<Buffer> {
+  if (Math.abs(amount) < 0.01) return buf;
+  const gain = 1 + amount * 0.5; // ±50% gain range
+  const bias = -(gain - 1) * 128;
+  return sharp(buf).linear(gain, bias).toBuffer();
+}
+
+/**
+ * Temperature (warm/cool) shift implemented as per-channel gain:
+ * positive = warm (boost R, dim B), negative = cool (dim R, boost B).
+ */
+async function applyTemp(buf: Buffer, amount: number): Promise<Buffer> {
+  if (Math.abs(amount) < 0.01) return buf;
+  const k = amount * 0.25; // up to ±25% channel shift
+  return sharp(buf)
+    .linear([1 + k, 1, 1 - k], [0, 0, 0])
+    .toBuffer();
+}
+
+/**
+ * Tint (green/magenta) shift: positive = magenta (boost R+B, dim G),
+ * negative = green (dim R+B, boost G).
+ */
+async function applyTint(buf: Buffer, amount: number): Promise<Buffer> {
+  if (Math.abs(amount) < 0.01) return buf;
+  const k = amount * 0.2;
+  return sharp(buf)
+    .linear([1 + k, 1 - k, 1 + k], [0, 0, 0])
+    .toBuffer();
+}
+
+/**
+ * Saturation via Sharp's `.modulate()`.
+ */
+async function applySaturation(buf: Buffer, amount: number): Promise<Buffer> {
+  if (Math.abs(amount) < 0.01) return buf;
+  const saturation = Math.max(0, 1 + amount * 0.7);
+  return sharp(buf).modulate({ saturation }).toBuffer();
+}
+
+/**
+ * Highlights: positive amount darkens highlights (recovery).
+ * We use gamma to compress the top of the curve.
+ */
+async function applyHighlights(buf: Buffer, amount: number): Promise<Buffer> {
+  if (Math.abs(amount) < 0.01) return buf;
+  // Positive = pull highlights back: gamma > 1.0
+  // Negative = brighten highlights: not supported directly by sharp.gamma (which needs >= 1.0)
+  if (amount > 0) {
+    const gamma = Math.min(3.0, 1 + amount * 0.6);
+    return sharp(buf).gamma(gamma).toBuffer();
+  }
+  // For negative highlights (boost), use linear gain biased to bright values
+  const gain = 1 + Math.abs(amount) * 0.15;
+  const bias = -(gain - 1) * 128;
+  return sharp(buf).linear(gain, bias).toBuffer();
+}
+
+/**
+ * Shadows: positive amount lifts shadows. linear(gain, bias) with mild gain
+ * and small positive bias keeps highlights stable while pulling shadows up.
+ */
+async function applyShadows(buf: Buffer, amount: number): Promise<Buffer> {
+  if (Math.abs(amount) < 0.01) return buf;
+  // Bias-dominant: brighten dark pixels more than highlights
+  const bias = amount * 28;
+  const gain = 1 - amount * 0.04;
+  return sharp(buf).linear(gain, bias).toBuffer();
+}
+
+/**
+ * Whites: tops out the curve. Positive amount pushes near-whites up
+ * (more clipping risk), negative pulls them down.
+ */
+async function applyWhites(buf: Buffer, amount: number): Promise<Buffer> {
+  if (Math.abs(amount) < 0.01) return buf;
+  const gain = 1 + amount * 0.1;
+  return sharp(buf).linear(gain, 0).toBuffer();
+}
+
+/**
+ * Blacks: bottom of the curve. Positive amount crushes blacks (deeper);
+ * negative lifts them.
+ */
+async function applyBlacks(buf: Buffer, amount: number): Promise<Buffer> {
+  if (Math.abs(amount) < 0.01) return buf;
+  // Negative bias deepens blacks (positive amount), positive bias lifts.
+  const bias = -amount * 16;
+  return sharp(buf).linear(1, bias).toBuffer();
+}
+
+/**
+ * Sharpening. The `amount` is 0..1 mapped onto Sharp's sigma + m1 + m2.
+ */
+async function applySharpening(buf: Buffer, amount: number): Promise<Buffer> {
+  if (amount <= 0.01) return buf;
+  return sharp(buf)
+    .sharpen({
+      sigma: 0.6 + amount * 0.8,
+      m1: 0.4 + amount * 0.8,
+      m2: 1.0 + amount * 1.5,
+    })
+    .toBuffer();
+}
+
 /** Run the full single-image pipeline. */
 export async function enhanceSingle(
   inputBuf: Buffer,
   options?: EnhanceOptions
 ): Promise<{ bytes: Buffer; width: number; height: number }> {
-  const opts: Required<EnhanceOptions> = { ...DEFAULTS, ...options };
+  const opts = normalizeOptions(options ?? {});
 
   // 1. Decode + orient + resize
   let img = sharp(inputBuf, { failOn: 'none' }).rotate().toColorspace('srgb');
   img = await resize(img, opts);
   let buf = await img.toBuffer();
 
-  // 2. White balance
+  // 2. Auto white balance (grey world) — always run as a baseline so the
+  // photo starts neutral. Subsequent temp/tint sliders shift from there.
   buf = await whiteBalance(buf);
 
-  // 3. Tone curve
-  buf = await toneCurve(buf, opts.shadowLift, opts.highlightRecover);
+  // 3. Exposure (global brightness in stops)
+  buf = await applyExposure(buf, opts.exposure);
 
-  // 4. Vibrance
-  buf = await vibrance(buf, opts.vibrance);
+  // 4. Color: temp, tint, saturation
+  buf = await applyTemp(buf, opts.temp);
+  buf = await applyTint(buf, opts.tint);
 
-  // 5. Denoise + sharpen
-  buf = await denoiseSharpen(buf);
+  // 5. Tone curve in Lightroom order: highlights → shadows → whites → blacks
+  buf = await applyHighlights(buf, opts.highlights);
+  buf = await applyShadows(buf, opts.shadows);
+  buf = await applyWhites(buf, opts.whites);
+  buf = await applyBlacks(buf, opts.blacks);
 
-  // 6. Final JPEG encode
+  // 6. Contrast (after tone curve so it scales the whole histogram)
+  buf = await applyContrast(buf, opts.contrast);
+
+  // 7. Saturation
+  buf = await applySaturation(buf, opts.saturation);
+
+  // 8. Mild denoise + sharpening
+  buf = await sharp(buf).median(1).toBuffer();
+  buf = await applySharpening(buf, opts.sharpening);
+
+  // 9. Final JPEG encode
   const final = await sharp(buf)
     .jpeg({ quality: opts.jpegQuality, mozjpeg: true, progressive: true })
     .toBuffer();
@@ -175,6 +371,56 @@ export async function enhanceSingle(
     height: meta.height ?? 0,
   };
 }
+
+// ─── Preset profiles ────────────────────────────────────────────────────────
+// Quick named looks the user can apply with one click. Each preset is just a
+// partial EnhanceOptions; the editor merges them onto the current slider
+// state. Photographers can later save their own under "MY PROFILES".
+
+export const ENHANCE_PRESETS: Record<string, Partial<EnhanceOptions>> = {
+  signature: {
+    exposure: 0.1,
+    contrast: 0.15,
+    temp: 0,
+    saturation: 0.1,
+    highlights: 0.4,
+    shadows: 0.55,
+    whites: 0.05,
+    blacks: -0.05,
+    sharpening: 0.3,
+  },
+  natural: {
+    exposure: 0,
+    contrast: 0,
+    temp: 0,
+    saturation: 0,
+    highlights: 0.25,
+    shadows: 0.25,
+    sharpening: 0.2,
+  },
+  airy: {
+    exposure: 0.3,
+    contrast: -0.1,
+    temp: -0.1,
+    saturation: 0.05,
+    highlights: 0.55,
+    shadows: 0.7,
+    whites: 0.1,
+    blacks: -0.1,
+    sharpening: 0.25,
+  },
+  crisp: {
+    exposure: 0,
+    contrast: 0.4,
+    temp: 0.05,
+    saturation: -0.05,
+    highlights: 0.5,
+    shadows: 0.45,
+    whites: 0.05,
+    blacks: 0.1,
+    sharpening: 0.55,
+  },
+};
 
 /**
  * Exposure-fusion HDR merge from a 3/5/7 bracketed set. This is the Mertens

@@ -1,42 +1,77 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   X,
   ChevronLeft,
   ChevronRight,
   Download,
   RotateCw,
-  Wand2,
   GitCompareArrows,
-  ZoomIn,
-  ZoomOut,
   Loader2,
-  Sliders,
   Save,
+  Trash2,
+  Camera,
+  Send,
 } from 'lucide-react';
 import type { Photo } from '@/lib/supabase/database.types';
 
-type Mode = 'fit' | 'zoom';
+// Pipeline option shape — kept narrow so the viewer doesn't import server code.
+interface AdjustOptions {
+  exposure: number;
+  contrast: number;
+  temp: number;
+  tint: number;
+  saturation: number;
+  highlights: number;
+  shadows: number;
+  whites: number;
+  blacks: number;
+  sharpening: number;
+}
+
+// Named presets matching ENHANCE_PRESETS in the server pipeline. Keeping them
+// duplicated client-side avoids a fetch on viewer open.
+const PRESETS: Record<string, Partial<AdjustOptions>> = {
+  signature: {
+    exposure: 0.1, contrast: 0.15, temp: 0, saturation: 0.1,
+    highlights: 0.4, shadows: 0.55, whites: 0.05, blacks: -0.05, sharpening: 0.3,
+  },
+  natural: {
+    exposure: 0, contrast: 0, temp: 0, saturation: 0,
+    highlights: 0.25, shadows: 0.25, whites: 0, blacks: 0, sharpening: 0.2,
+  },
+  airy: {
+    exposure: 0.3, contrast: -0.1, temp: -0.1, saturation: 0.05,
+    highlights: 0.55, shadows: 0.7, whites: 0.1, blacks: -0.1, sharpening: 0.25,
+  },
+  crisp: {
+    exposure: 0, contrast: 0.4, temp: 0.05, saturation: -0.05,
+    highlights: 0.5, shadows: 0.45, whites: 0.05, blacks: 0.1, sharpening: 0.55,
+  },
+};
+
+const ZERO: AdjustOptions = {
+  exposure: 0, contrast: 0, temp: 0, tint: 0, saturation: 0,
+  highlights: 0, shadows: 0, whites: 0, blacks: 0, sharpening: 0.25,
+};
 
 interface PhotoViewerProps {
   photos: Photo[];
   index: number;
   onClose: () => void;
   onIndexChange: (i: number) => void;
-  /** Map of photo_id → signed URL (already fetched by the parent). */
   urls: Record<string, string | null>;
-  /** Called after a successful rotate / re-run so the parent can refresh. */
   onPhotosChanged: () => void;
 }
 
 /**
- * Fullscreen photo viewer with prev/next, zoom toggle, before/after compare,
- * rotate, download, and a quick re-enhance button. Keyboard:
- *   - Esc      close
- *   - ← / →    prev / next
- *   - Space    toggle compare
- *   - +/-      zoom in/out
+ * Fotello-style fullscreen editor: large preview area with prev/next, a
+ * permanent right sidebar with sectioned sliders + preset profiles + aspect
+ * ratio, a bottom filmstrip for quick navigation, and an AI revision input
+ * along the bottom of the preview area.
+ *
+ * Keyboard: Esc / ← → / Space (before-after) / +/− (zoom).
  */
 export function PhotoViewer({
   photos,
@@ -47,31 +82,32 @@ export function PhotoViewer({
   onPhotosChanged,
 }: PhotoViewerProps) {
   const photo = photos[index];
-  const [mode, setMode] = useState<Mode>('fit');
+  const [mode, setMode] = useState<'fit' | 'zoom'>('fit');
   const [showBefore, setShowBefore] = useState(false);
   const [parentUrl, setParentUrl] = useState<string | null>(null);
   const [parentFetching, setParentFetching] = useState(false);
-  const [busy, setBusy] = useState<null | 'rotate' | 'rerun' | 'save'>(null);
+  const [busy, setBusy] = useState<null | 'rotate' | 'save' | 'ai'>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Adjustment panel state ────────────────────────────────────────────────
-  // When the user opens the sliders, we keep a "pending" set of options and
-  // debounce-fire /api/enhance/preview for live feedback. Saving applies them
-  // via /api/photos/adjust which creates a new processed photo.
-  const [adjustOpen, setAdjustOpen] = useState(false);
-  const [shadowLift, setShadowLift] = useState(0.55);
-  const [highlightRecover, setHighlightRecover] = useState(0.55);
-  const [vibrance, setVibrance] = useState(0.3);
+  // Adjustment state — all 10 sliders + sharpening
+  const [adjust, setAdjust] = useState<AdjustOptions>(ZERO);
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+
+  // Live-preview output bytes from /api/enhance/preview
   const [previewB64, setPreviewB64] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
 
+  // AI revision prompt
+  const [aiPrompt, setAiPrompt] = useState('');
+
   const hasParent = Boolean(photo?.parent_photo_id);
 
-  // Fetch the raw "before" URL when looking at a processed photo
+  // Fetch the raw "before" URL for the compare toggle
   useEffect(() => {
     setShowBefore(false);
     setParentUrl(null);
     setError(null);
+    setPreviewB64(null);
     if (!photo?.parent_photo_id) return;
     setParentFetching(true);
     fetch(`/api/photo-url?photo_id=${photo.parent_photo_id}`)
@@ -84,81 +120,19 @@ export function PhotoViewer({
       .finally(() => setParentFetching(false));
   }, [photo?.id, photo?.parent_photo_id]);
 
+  // Reset slider state when navigating
+  useEffect(() => {
+    setAdjust(ZERO);
+    setActivePreset(null);
+    setPreviewB64(null);
+  }, [photo?.id]);
+
   const url = photo ? urls[photo.id] : null;
-  // Priority: live preview from the slider panel > before-toggle > the actual
-  // signed URL. The live preview is a base64 string so it doesn't need any
-  // network fetch to display.
   const displayUrl = previewB64
     ? `data:image/jpeg;base64,${previewB64}`
     : showBefore && parentUrl
     ? parentUrl
     : url;
-
-  // Reset preview when navigating to a different photo
-  useEffect(() => {
-    setPreviewB64(null);
-  }, [photo?.id]);
-
-  // Debounced preview: 450ms after the last slider change, hit the preview API
-  // and update the displayed image. We always re-render from the source so
-  // successive slider movements don't compound.
-  useEffect(() => {
-    if (!adjustOpen || !photo) return;
-    const t = setTimeout(async () => {
-      setPreviewing(true);
-      try {
-        const r = await fetch('/api/enhance/preview', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            photo_id: photo.id,
-            options: { shadowLift, highlightRecover, vibrance },
-          }),
-        });
-        if (r.ok) {
-          const data = await r.json();
-          setPreviewB64(data.preview_b64);
-        }
-      } catch {
-        // ignore — preview is best-effort, sliders still move
-      } finally {
-        setPreviewing(false);
-      }
-    }, 450);
-    return () => clearTimeout(t);
-  }, [adjustOpen, photo, shadowLift, highlightRecover, vibrance]);
-
-  async function saveAdjustment() {
-    if (!photo) return;
-    setBusy('save');
-    setError(null);
-    try {
-      const r = await fetch('/api/photos/adjust', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          photo_id: photo.id,
-          options: { shadowLift, highlightRecover, vibrance },
-        }),
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        setError(j.error || 'save_failed');
-        return;
-      }
-      setAdjustOpen(false);
-      setPreviewB64(null);
-      onPhotosChanged();
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  function resetAdjustments() {
-    setShadowLift(0.55);
-    setHighlightRecover(0.55);
-    setVibrance(0.3);
-  }
 
   const next = useCallback(() => {
     if (index < photos.length - 1) onIndexChange(index + 1);
@@ -169,6 +143,10 @@ export function PhotoViewer({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // Don't hijack keys while user is typing in the AI prompt field
+      const target = e.target as HTMLElement;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
+
       if (e.key === 'Escape') onClose();
       else if (e.key === 'ArrowRight') next();
       else if (e.key === 'ArrowLeft') prev();
@@ -181,6 +159,83 @@ export function PhotoViewer({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, next, prev, hasParent]);
+
+  // ── Debounced live preview ────────────────────────────────────────────────
+  // Whenever the slider state changes (and isn't all zeros), fire the preview
+  // 450ms after the last edit. Empty/zero state shows the original.
+  const adjustKey = useMemo(() => JSON.stringify(adjust), [adjust]);
+  const debouncedRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!photo) return;
+    if (debouncedRef.current) clearTimeout(debouncedRef.current);
+
+    const hasAny = Object.values(adjust).some((v) => Math.abs(v) > 0.005);
+    if (!hasAny) {
+      setPreviewB64(null);
+      return;
+    }
+
+    debouncedRef.current = setTimeout(async () => {
+      setPreviewing(true);
+      try {
+        const r = await fetch('/api/enhance/preview', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ photo_id: photo.id, options: adjust }),
+        });
+        if (r.ok) {
+          const data = await r.json();
+          setPreviewB64(data.preview_b64);
+        }
+      } catch {
+        // best-effort
+      } finally {
+        setPreviewing(false);
+      }
+    }, 450);
+    return () => {
+      if (debouncedRef.current) clearTimeout(debouncedRef.current);
+    };
+  }, [photo, adjustKey]);
+
+  function setSlider<K extends keyof AdjustOptions>(key: K, value: AdjustOptions[K]) {
+    setAdjust((prev) => ({ ...prev, [key]: value }));
+    setActivePreset(null);
+  }
+
+  function applyPreset(name: string) {
+    const preset = PRESETS[name];
+    if (!preset) return;
+    setAdjust({ ...ZERO, ...preset });
+    setActivePreset(name);
+  }
+
+  function resetAll() {
+    setAdjust(ZERO);
+    setActivePreset(null);
+    setPreviewB64(null);
+  }
+
+  async function save() {
+    if (!photo) return;
+    setBusy('save');
+    setError(null);
+    try {
+      const r = await fetch('/api/photos/adjust', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ photo_id: photo.id, options: adjust }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setError(j.error || 'save_failed');
+        return;
+      }
+      onPhotosChanged();
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function rotate(degrees: 90 | -90 | 180) {
     if (!photo) return;
@@ -195,37 +250,9 @@ export function PhotoViewer({
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
         setError(j.error || 'rotate_failed');
-        return;
+      } else {
+        onPhotosChanged();
       }
-      onPhotosChanged();
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function rerun() {
-    if (!photo) return;
-    setBusy('rerun');
-    setError(null);
-    try {
-      // Re-enhance using the raw parent (or this photo if it's already raw).
-      const targetId = photo.parent_photo_id ?? photo.id;
-      const r = await fetch('/api/ai/process', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          order_id: photo.order_id,
-          job_type: 'enhance_single',
-          provider: 'oceano-enhance',
-          photo_ids: [targetId],
-        }),
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        setError(j.error || 'rerun_failed');
-        return;
-      }
-      onPhotosChanged();
     } finally {
       setBusy(null);
     }
@@ -233,9 +260,36 @@ export function PhotoViewer({
 
   function download() {
     if (!url) return;
-    // Open in a new tab — the signed URL will trigger the browser save dialog
-    // because we set content-disposition on upload (storage default).
     window.open(url, '_blank');
+  }
+
+  async function sendAiPrompt() {
+    if (!photo || !aiPrompt.trim()) return;
+    setBusy('ai');
+    setError(null);
+    try {
+      // Re-run the enhance pipeline with the user's prompt appended.
+      const r = await fetch('/api/ai/process', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          order_id: photo.order_id,
+          job_type: 'enhance_single',
+          provider: 'openai-gpt-image',
+          photo_ids: [photo.parent_photo_id ?? photo.id],
+          prompt_extra: aiPrompt.trim(),
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setError(j.error || 'ai_failed');
+      } else {
+        setAiPrompt('');
+        onPhotosChanged();
+      }
+    } finally {
+      setBusy(null);
+    }
   }
 
   const sizeLabel = useMemo(() => {
@@ -247,278 +301,333 @@ export function PhotoViewer({
   if (!photo) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/95 text-white flex flex-col"
-      onClick={(e) => {
-        // Click on the dim backdrop closes; clicks on toolbar / image don't.
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      {/* Top toolbar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-        <div className="min-w-0">
-          <div className="text-sm font-medium truncate">{photo.filename}</div>
-          <div className="text-xs text-white/60">
-            {photo.kind === 'processed' ? 'Processed' : 'Raw'} ·{' '}
-            {photo.ai_provider ?? 'no AI'} · {sizeLabel}
-            {photo.ai_prompt && ` · ${photo.ai_prompt.slice(0, 60)}`}
+    <div className="fixed inset-0 z-50 bg-slate-50 text-slate-900 flex flex-col">
+      {/* ─── Top bar ───────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 bg-white">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded hover:bg-slate-100 text-slate-600"
+            title="Close (Esc)"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <div className="min-w-0">
+            <div className="text-sm font-medium truncate">{photo.filename}</div>
+            <div className="text-[11px] text-slate-500 truncate">
+              {photo.kind === 'processed' ? 'Processed' : 'Raw'} · {photo.ai_provider ?? 'no AI'} · {sizeLabel}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <ToolbarBtn
-            onClick={() => setMode((m) => (m === 'fit' ? 'zoom' : 'fit'))}
-            tip={mode === 'fit' ? 'Zoom in (+)' : 'Fit (–)'}
-          >
-            {mode === 'fit' ? <ZoomIn className="h-4 w-4" /> : <ZoomOut className="h-4 w-4" />}
-          </ToolbarBtn>
           {hasParent && (
-            <ToolbarBtn
+            <button
               onClick={() => setShowBefore((s) => !s)}
-              tip={
-                parentFetching
-                  ? 'Loading original…'
-                  : parentUrl
-                  ? 'Toggle before / after (Space)'
-                  : 'Original unavailable'
-              }
-              active={showBefore}
               disabled={!parentUrl}
+              title={parentFetching ? 'Loading original…' : 'Toggle before / after (Space)'}
+              className={`p-1.5 rounded text-sm transition ${
+                showBefore ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 text-slate-700'
+              } disabled:opacity-40`}
             >
-              {parentFetching ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <GitCompareArrows className="h-4 w-4" />
-              )}
-            </ToolbarBtn>
+              {parentFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitCompareArrows className="h-4 w-4" />}
+            </button>
           )}
-          <ToolbarBtn onClick={() => rotate(-90)} tip="Rotate left" disabled={busy === 'rotate'}>
-            <RotateCw className="h-4 w-4 -scale-x-100" />
-          </ToolbarBtn>
-          <ToolbarBtn onClick={() => rotate(90)} tip="Rotate right" disabled={busy === 'rotate'}>
-            <RotateCw className="h-4 w-4" />
-          </ToolbarBtn>
-          <ToolbarBtn
-            onClick={() => setAdjustOpen((o) => !o)}
-            tip={adjustOpen ? 'Close adjustments' : 'Open adjustments'}
-            active={adjustOpen}
+          <button
+            onClick={() => rotate(-90)}
+            disabled={busy === 'rotate'}
+            title="Rotate left"
+            className="p-1.5 rounded hover:bg-slate-100 text-slate-700 disabled:opacity-40"
           >
-            <Sliders className="h-4 w-4" />
-          </ToolbarBtn>
-          <ToolbarBtn onClick={rerun} tip="Re-run Oceano Enhance" disabled={busy === 'rerun'}>
-            {busy === 'rerun' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-          </ToolbarBtn>
-          <ToolbarBtn onClick={download} tip="Open in new tab">
+            <RotateCw className="h-4 w-4 -scale-x-100" />
+          </button>
+          <button
+            onClick={() => rotate(90)}
+            disabled={busy === 'rotate'}
+            title="Rotate right"
+            className="p-1.5 rounded hover:bg-slate-100 text-slate-700 disabled:opacity-40"
+          >
+            <RotateCw className="h-4 w-4" />
+          </button>
+          <button
+            onClick={download}
+            title="Open in new tab"
+            className="p-1.5 rounded hover:bg-slate-100 text-slate-700"
+          >
             <Download className="h-4 w-4" />
-          </ToolbarBtn>
-          <ToolbarBtn onClick={onClose} tip="Close (Esc)">
-            <X className="h-4 w-4" />
-          </ToolbarBtn>
+          </button>
+          <button
+            onClick={save}
+            disabled={busy === 'save' || !previewB64}
+            title={previewB64 ? 'Save as new version' : 'Adjust sliders to enable Save'}
+            className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-ocean-600 text-white text-sm font-medium hover:bg-ocean-500 disabled:opacity-40"
+          >
+            {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save
+          </button>
         </div>
       </div>
 
-      {/* Image area. min-h-0 lets the flex child actually shrink to the
-          remaining viewport instead of growing to its natural content size. */}
-      <div
-        className={`flex-1 min-h-0 relative ${
-          mode === 'zoom' ? 'overflow-auto' : 'overflow-hidden'
-        }`}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
-      >
-        {/* Prev / next */}
-        {index > 0 && (
-          <button
-            onClick={prev}
-            className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 p-2 z-10"
-            aria-label="Previous"
-          >
-            <ChevronLeft className="h-6 w-6" />
-          </button>
-        )}
-        {index < photos.length - 1 && (
-          <button
-            onClick={next}
-            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 p-2 z-10"
-            aria-label="Next"
-          >
-            <ChevronRight className="h-6 w-6" />
-          </button>
-        )}
-
-        {displayUrl ? (
-          mode === 'fit' ? (
-            // Fit mode: full-bleed flex centering so the image is constrained
-            // to viewport regardless of its natural pixel size.
-            <div
-              className="absolute inset-0 flex items-center justify-center p-4"
-              onClick={(e) => {
-                if (e.target === e.currentTarget) onClose();
-              }}
+      {/* ─── Main area: image + sidebar ────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 flex">
+        {/* Image canvas */}
+        <div className="flex-1 min-w-0 relative bg-slate-100 grid place-items-center overflow-hidden">
+          {/* Prev / next */}
+          {index > 0 && (
+            <button
+              onClick={prev}
+              className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 hover:bg-white p-2 shadow z-10"
+              aria-label="Previous"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={displayUrl}
-                alt={photo.filename}
-                className="max-h-full max-w-full object-contain cursor-zoom-in select-none"
-                onClick={() => setMode('zoom')}
-                draggable={false}
-              />
-            </div>
+              <ChevronLeft className="h-5 w-5 text-slate-700" />
+            </button>
+          )}
+          {index < photos.length - 1 && (
+            <button
+              onClick={next}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 hover:bg-white p-2 shadow z-10"
+              aria-label="Next"
+            >
+              <ChevronRight className="h-5 w-5 text-slate-700" />
+            </button>
+          )}
+
+          {/* The photo itself */}
+          {displayUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={displayUrl}
+              alt={photo.filename}
+              className="max-h-full max-w-full object-contain select-none"
+              draggable={false}
+            />
           ) : (
-            // Zoom mode: render at natural size; parent has overflow-auto so
-            // the user can scroll around. Padding keeps the image clear of
-            // the prev/next buttons.
-            <div className="min-h-full min-w-full flex items-start justify-start p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={displayUrl}
-                alt={photo.filename}
-                className="block max-w-none cursor-zoom-out select-none"
-                onClick={() => setMode('fit')}
-                draggable={false}
-              />
-            </div>
-          )
-        ) : (
-          <div className="absolute inset-0 grid place-items-center text-white/60">Loading…</div>
-        )}
+            <div className="text-slate-400">Loading…</div>
+          )}
 
-        {showBefore && parentUrl && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-xs px-2 py-1 rounded shadow z-10">
-            BEFORE
+          {showBefore && parentUrl && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-xs px-2 py-0.5 rounded shadow z-10 font-medium">
+              BEFORE
+            </div>
+          )}
+
+          {previewing && (
+            <div className="absolute top-3 right-3 bg-slate-900/80 text-white text-[11px] px-2 py-1 rounded-full inline-flex items-center gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" /> Rendering preview
+            </div>
+          )}
+
+          {/* AI revision prompt — Fotello-style anchored bottom */}
+          <div className="absolute inset-x-6 bottom-4 flex items-center gap-2 bg-white rounded-full shadow-lg px-3 py-1.5 z-10">
+            <button
+              onClick={() => setAiPrompt('')}
+              className="text-slate-400 hover:text-slate-600 px-1"
+              title="Clear"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+            <input
+              type="text"
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') sendAiPrompt();
+              }}
+              placeholder="Describe changes for AI revision…"
+              className="flex-1 bg-transparent outline-none text-sm placeholder:text-slate-400"
+            />
+            <button
+              onClick={sendAiPrompt}
+              disabled={busy === 'ai' || !aiPrompt.trim()}
+              className="h-7 w-7 grid place-items-center rounded-full bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-40"
+            >
+              {busy === 'ai' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            </button>
           </div>
-        )}
+        </div>
 
-        {/* Adjustments side panel — slides in from the right when toggled.
-            Sits inside the image area so it overlays without resizing the photo. */}
-        {adjustOpen && (
-          <div
-            className="absolute top-0 right-0 bottom-0 w-72 bg-slate-900/95 border-l border-white/10 p-5 overflow-y-auto z-20"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-baseline justify-between mb-4">
-              <h3 className="text-sm font-semibold text-white">Adjustments</h3>
-              {previewing && <Loader2 className="h-3 w-3 animate-spin text-white/60" />}
-            </div>
-
-            <AdjustSlider
-              label="Shadow lift"
-              hint="Brighten dark areas"
-              value={shadowLift}
-              onChange={setShadowLift}
-            />
-            <AdjustSlider
-              label="Highlight recovery"
-              hint="Pull blown windows back"
-              value={highlightRecover}
-              onChange={setHighlightRecover}
-            />
-            <AdjustSlider
-              label="Vibrance"
-              hint="Saturate muted colors"
-              value={vibrance}
-              onChange={setVibrance}
-            />
-
-            <div className="mt-5 flex flex-col gap-2">
+        {/* ─── Right sidebar ─────────────────────────────────────────────── */}
+        <aside className="w-80 shrink-0 border-l border-slate-200 bg-white overflow-y-auto">
+          <div className="p-4 space-y-5">
+            {/* Presets */}
+            <SidebarSection title="Profiles">
+              <div className="grid grid-cols-4 gap-2">
+                {(['signature', 'natural', 'airy', 'crisp'] as const).map((name) => (
+                  <button
+                    key={name}
+                    onClick={() => applyPreset(name)}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-md text-[11px] transition ${
+                      activePreset === name
+                        ? 'bg-ocean-50 ring-1 ring-ocean-500 text-ocean-900'
+                        : 'hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <Camera className="h-5 w-5" strokeWidth={1.5} />
+                    <span className="capitalize">{name}</span>
+                  </button>
+                ))}
+              </div>
               <button
-                onClick={saveAdjustment}
-                disabled={busy === 'save'}
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-ocean-600 text-white text-sm font-medium hover:bg-ocean-500 disabled:opacity-60"
+                onClick={resetAll}
+                className="mt-2 w-full text-[11px] text-slate-500 hover:text-slate-700 inline-flex items-center justify-center gap-1 py-1"
               >
-                {busy === 'save' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Save as new version
+                <Trash2 className="h-3 w-3" /> Reset all
               </button>
-              <button
-                onClick={resetAdjustments}
-                className="w-full px-3 py-1.5 rounded-md bg-white/10 text-white/80 text-xs hover:bg-white/20"
-              >
-                Reset to defaults
-              </button>
-            </div>
+            </SidebarSection>
 
-            <p className="mt-4 text-[11px] text-white/40 leading-tight">
-              Live preview re-renders 450 ms after you stop dragging. Saving
-              re-runs the deterministic pipeline against the raw source and
-              creates a new processed photo — your originals stay untouched.
-            </p>
+            <SidebarSection title="Basic">
+              <Slider label="Exposure" value={adjust.exposure} min={-2} max={2} step={0.05} onChange={(v) => setSlider('exposure', v)} />
+              <Slider label="Contrast" value={adjust.contrast} min={-1} max={1} step={0.02} onChange={(v) => setSlider('contrast', v)} />
+            </SidebarSection>
+
+            <SidebarSection title="Color">
+              <Slider label="Temp" value={adjust.temp} min={-1} max={1} step={0.02} onChange={(v) => setSlider('temp', v)} />
+              <Slider label="Tint" value={adjust.tint} min={-1} max={1} step={0.02} onChange={(v) => setSlider('tint', v)} />
+              <Slider label="Saturation" value={adjust.saturation} min={-1} max={1} step={0.02} onChange={(v) => setSlider('saturation', v)} />
+            </SidebarSection>
+
+            <SidebarSection title="Tone">
+              <Slider label="Highlights" value={adjust.highlights} min={-1} max={1} step={0.02} onChange={(v) => setSlider('highlights', v)} />
+              <Slider label="Shadows" value={adjust.shadows} min={-1} max={1} step={0.02} onChange={(v) => setSlider('shadows', v)} />
+              <Slider label="Whites" value={adjust.whites} min={-1} max={1} step={0.02} onChange={(v) => setSlider('whites', v)} />
+              <Slider label="Blacks" value={adjust.blacks} min={-1} max={1} step={0.02} onChange={(v) => setSlider('blacks', v)} />
+            </SidebarSection>
+
+            <SidebarSection title="Detail">
+              <Slider label="Sharpening" value={adjust.sharpening} min={0} max={1} step={0.02} onChange={(v) => setSlider('sharpening', v)} />
+            </SidebarSection>
+
+            {error && (
+              <div className="text-xs text-rose-700 bg-rose-50 rounded px-2 py-1.5">{error}</div>
+            )}
           </div>
-        )}
+        </aside>
       </div>
 
-      {/* Bottom strip */}
-      <div className="px-4 py-2 text-xs text-white/60 flex items-center justify-between border-t border-white/10">
-        <span>
-          {index + 1} / {photos.length}
-        </span>
-        <span>
-          ←/→ navigate · Space compare · +/− zoom · Esc close
-        </span>
-        {error && <span className="text-rose-300">{error}</span>}
-      </div>
+      {/* ─── Bottom filmstrip ──────────────────────────────────────────────── */}
+      <Filmstrip
+        photos={photos}
+        index={index}
+        urls={urls}
+        onSelect={onIndexChange}
+      />
     </div>
   );
 }
 
-function AdjustSlider({
+// ─── Sidebar pieces ────────────────────────────────────────────────────────
+function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">{title}</div>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function Slider({
   label,
-  hint,
   value,
+  min,
+  max,
+  step,
   onChange,
 }: {
   label: string;
-  hint: string;
   value: number;
+  min: number;
+  max: number;
+  step: number;
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="mb-4">
+    <div>
       <div className="flex items-baseline justify-between">
-        <label className="text-xs font-medium text-white/90">{label}</label>
-        <span className="text-[11px] font-mono text-white/60">{value.toFixed(2)}</span>
+        <span className="text-xs text-slate-700">{label}</span>
+        <span className="text-[11px] font-mono text-slate-500">
+          {value > 0 ? '+' : ''}
+          {value.toFixed(2)}
+        </span>
       </div>
       <input
         type="range"
-        min={0}
-        max={1}
-        step={0.01}
+        min={min}
+        max={max}
+        step={step}
         value={value}
         onChange={(e) => onChange(+e.target.value)}
-        className="w-full mt-1 accent-ocean-500"
+        className="w-full mt-1 accent-ocean-600"
       />
-      <p className="text-[10px] text-white/40 mt-0.5">{hint}</p>
     </div>
   );
 }
 
-function ToolbarBtn({
-  children,
-  onClick,
-  tip,
-  disabled,
-  active,
+// ─── Filmstrip ─────────────────────────────────────────────────────────────
+function Filmstrip({
+  photos,
+  index,
+  urls,
+  onSelect,
 }: {
-  children: React.ReactNode;
-  onClick: () => void;
-  tip: string;
-  disabled?: boolean;
-  active?: boolean;
+  photos: Photo[];
+  index: number;
+  urls: Record<string, string | null>;
+  onSelect: (i: number) => void;
 }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  // Scroll the active thumbnail into view when the index changes
+  useEffect(() => {
+    const node = ref.current?.querySelector(`[data-filmstrip-index="${index}"]`);
+    if (node && 'scrollIntoView' in node) {
+      (node as HTMLElement).scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, [index]);
+
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={tip}
-      className={`p-2 rounded hover:bg-white/10 disabled:opacity-40 ${
-        active ? 'bg-white/20' : ''
-      }`}
-    >
-      {children}
-    </button>
+    <div className="border-t border-slate-200 bg-white px-3 py-2 flex items-center gap-2">
+      <button
+        onClick={() => onSelect(Math.max(0, index - 1))}
+        disabled={index === 0}
+        className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-30"
+      >
+        <ChevronLeft className="h-4 w-4 text-slate-600" />
+      </button>
+      <div
+        ref={ref}
+        className="flex-1 flex gap-1.5 overflow-x-auto py-1"
+        style={{ scrollbarWidth: 'thin' }}
+      >
+        {photos.map((p, i) => {
+          const u = urls[p.id];
+          const active = i === index;
+          return (
+            <button
+              key={p.id}
+              data-filmstrip-index={i}
+              onClick={() => onSelect(i)}
+              className={`shrink-0 h-14 aspect-square overflow-hidden rounded ring-2 transition ${
+                active ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'
+              }`}
+            >
+              {u ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={u} alt={p.filename} className="h-full w-full object-cover" />
+              ) : (
+                <div className="h-full w-full bg-slate-200 grid place-items-center text-slate-400">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <button
+        onClick={() => onSelect(Math.min(photos.length - 1, index + 1))}
+        disabled={index === photos.length - 1}
+        className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-30"
+      >
+        <ChevronRight className="h-4 w-4 text-slate-600" />
+      </button>
+    </div>
   );
 }
