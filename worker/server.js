@@ -85,31 +85,51 @@ app.post('/convert', async (req, res) => {
 
     const rawBuf = Buffer.from(await file.arrayBuffer());
 
-    // 3. Run dcraw_emu against a temp file. We use `-w` (use camera WB),
-    // `-T` (output 16-bit TIFF), `-q 3` (AHD interpolation, highest quality),
-    // `-o 1` (output sRGB color space), `-c` (write to stdout).
+    // 3. Run dcraw_emu against a temp file. The current Debian libraw-bin
+    // build of dcraw_emu rejects the classic `-c` (stdout) + numeric-arg
+    // combination with "Non-numeric argument". Switching to file-based
+    // output via -Z is more compatible and avoids stdout-buffer issues
+    // on large 16-bit TIFFs anyway.
+    //
+    // Flags:
+    //   -w   use camera white balance
+    //   -T   write TIFF (16-bit) instead of PPM
+    //   -q3  AHD interpolation, highest quality (no space — some
+    //        dcraw_emu builds need flag+value concatenated)
+    //   -o1  sRGB output color space
+    //   -Z   explicit output file path (rather than stdout)
     const tmp = join(tmpdir(), `${randomUUID()}-${src.filename}`);
+    const tiffOut = `${tmp}.tiff`;
     await fs.writeFile(tmp, rawBuf);
     log('decoding', { bytes: rawBuf.byteLength });
 
-    const tiff = await new Promise((resolve, reject) => {
-      const proc = spawn('dcraw_emu', ['-w', '-T', '-q', '3', '-o', '1', '-c', tmp]);
-      const chunks = [];
+    await new Promise((resolve, reject) => {
+      const proc = spawn('dcraw_emu', [
+        '-w',
+        '-T',
+        '-q', '3',
+        '-o', '1',
+        '-Z', tiffOut,
+        tmp,
+      ]);
       const errChunks = [];
-      proc.stdout.on('data', (c) => chunks.push(c));
       proc.stderr.on('data', (c) => errChunks.push(c));
       proc.on('error', reject);
       proc.on('close', (code) => {
         if (code !== 0) {
-          reject(new Error(`dcraw_emu exited ${code}: ${Buffer.concat(errChunks).toString()}`));
+          reject(new Error(`dcraw_emu exited ${code}: ${Buffer.concat(errChunks).toString().slice(0, 500)}`));
         } else {
-          resolve(Buffer.concat(chunks));
+          resolve();
         }
       });
     });
 
-    // Best-effort cleanup of the temp file
+    // Read decoded TIFF from disk
+    const tiff = await fs.readFile(tiffOut);
+
+    // Best-effort cleanup of temp files
     fs.unlink(tmp).catch(() => {});
+    fs.unlink(tiffOut).catch(() => {});
 
     // 4. TIFF → JPEG via Sharp (sRGB, 3000px long edge, q92)
     log('encoding_jpeg', { tiff_bytes: tiff.byteLength });
