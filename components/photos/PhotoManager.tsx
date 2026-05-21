@@ -20,7 +20,13 @@ import { PhotoViewer } from './PhotoViewer';
 import { ProcessSidebar, type EditKind, type ProviderId } from './ProcessSidebar';
 import { BracketCard } from './BracketCard';
 import { tusUpload, RESUMABLE_THRESHOLD_BYTES } from '@/lib/storage/tus-upload';
-import { groupPhotosIntoBrackets, isRawFilename } from '@/lib/photos/bracket-grouping';
+import {
+  groupPhotosIntoBrackets,
+  isRawFilename,
+  readExifFromUrl,
+  applyExifGrouping,
+  type ExifSnapshot,
+} from '@/lib/photos/bracket-grouping';
 import type { BracketGroup } from '@/lib/photos/bracket-grouping';
 
 interface JobView {
@@ -85,7 +91,44 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   // Split photos into raw / processed and group raw into brackets/singles
   const rawPhotos = useMemo(() => photos.filter((p) => p.kind === 'raw'), [photos]);
   const processedPhotos = useMemo(() => photos.filter((p) => p.kind === 'processed'), [photos]);
-  const { brackets, singles } = useMemo(() => groupPhotosIntoBrackets(rawPhotos), [rawPhotos]);
+
+  // EXIF cache for the secondary bracket-detection pass. Populated in the
+  // background — initial render uses filename-only grouping, then we widen
+  // the bracket set as EXIF reads complete.
+  const [exifByPhoto, setExifByPhoto] = useState<Record<string, ExifSnapshot>>({});
+
+  const { brackets, singles } = useMemo(() => {
+    const base = groupPhotosIntoBrackets(rawPhotos);
+    return applyExifGrouping(base, exifByPhoto);
+  }, [rawPhotos, exifByPhoto]);
+
+  // Kick off EXIF reads for any single JPEG we don't yet have a snapshot for.
+  // This is browser-side and uses the signed URL already in `photoUrls` so we
+  // don't double-fetch. RAW files are skipped (exifr can't parse ARW).
+  useEffect(() => {
+    const baseGroup = groupPhotosIntoBrackets(rawPhotos);
+    const candidates = baseGroup.singles.filter(
+      (p) => !isRawFilename(p.filename) && exifByPhoto[p.id] === undefined && photoUrls[p.id]
+    );
+    if (candidates.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      for (const p of candidates) {
+        const url = photoUrls[p.id];
+        if (!url) continue;
+        const snap = await readExifFromUrl(url, p.filename);
+        if (cancelled) return;
+        setExifByPhoto((prev) => ({
+          ...prev,
+          [p.id]: snap ?? { takenAt: null, exposureBias: null },
+        }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rawPhotos, photoUrls, exifByPhoto]);
 
   // ─── Upload ──────────────────────────────────────────────────────────────
   const onDrop = useCallback(

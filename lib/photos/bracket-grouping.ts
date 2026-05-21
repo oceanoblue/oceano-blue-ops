@@ -100,3 +100,106 @@ export function groupPhotosIntoBrackets(photos: Photo[]): GroupingResult {
 export function isRawFilename(filename: string): boolean {
   return RAW_EXT.test(filename);
 }
+
+// ─── EXIF-based fallback grouping ─────────────────────────────────────────
+// When filename sequencing misses a bracket (e.g. files renamed in batches,
+// or shot with two cameras whose serials interleave), we can still recover
+// the set by reading EXIF tags client-side. Brackets share the same capture
+// timestamp window and have distinct ExposureBiasValue tags (typically
+// -2, 0, +2 or similar).
+//
+// We use this as a *secondary* pass: it only considers photos that the
+// filename pass left in `singles`. That way we never destroy a high-confidence
+// filename match in favor of a fuzzy EXIF guess.
+
+export interface ExifSnapshot {
+  /** Capture time in ms since epoch, from DateTimeOriginal. */
+  takenAt: number | null;
+  /** EV bias from ExposureBiasValue (e.g. -2, 0, +2). */
+  exposureBias: number | null;
+}
+
+const EXIF_TIME_WINDOW_MS = 4000; // brackets are shot back-to-back, usually <2s apart
+
+/**
+ * Browser-side: pull DateTimeOriginal and ExposureBiasValue from a signed URL
+ * to a JPEG. Returns null on RAW or any parse error. Imports `exifr` lazily
+ * so the main bundle stays small.
+ */
+export async function readExifFromUrl(url: string, filename: string): Promise<ExifSnapshot | null> {
+  if (isRawFilename(filename)) return null;
+  try {
+    const exifr = (await import('exifr')).default;
+    const tags = await exifr.parse(url, {
+      pick: ['DateTimeOriginal', 'ExposureBiasValue'],
+    });
+    if (!tags) return null;
+    const takenAt = tags.DateTimeOriginal instanceof Date ? tags.DateTimeOriginal.getTime() : null;
+    const exposureBias =
+      typeof tags.ExposureBiasValue === 'number' ? tags.ExposureBiasValue : null;
+    return { takenAt, exposureBias };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Promote singles to brackets when their EXIF metadata says they belong
+ * together: same takenAt window AND at least 3 of them have distinct
+ * exposureBias values. Mutates the result in place and returns it.
+ */
+export function applyExifGrouping(
+  result: GroupingResult,
+  exif: Record<string, ExifSnapshot>
+): GroupingResult {
+  if (result.singles.length < 3) return result;
+
+  // Bucket singles by their takenAt rounded to the time window so candidates
+  // for the same bracket land in the same bucket.
+  const buckets = new Map<number, Photo[]>();
+  const orphans: Photo[] = [];
+  for (const p of result.singles) {
+    const snap = exif[p.id];
+    if (!snap?.takenAt) {
+      orphans.push(p);
+      continue;
+    }
+    const bucket = Math.floor(snap.takenAt / EXIF_TIME_WINDOW_MS);
+    const arr = buckets.get(bucket) ?? [];
+    arr.push(p);
+    buckets.set(bucket, arr);
+  }
+
+  const newBrackets: BracketGroup[] = [];
+  const newSingles: Photo[] = [...orphans];
+
+  for (const [, group] of buckets) {
+    // Distinct exposure biases is the bracket signature.
+    const biases = new Set(
+      group
+        .map((p) => exif[p.id]?.exposureBias)
+        .filter((b): b is number => typeof b === 'number')
+    );
+    const isBracket =
+      BRACKET_SIZES.includes(group.length as 3 | 5 | 7) &&
+      biases.size >= Math.min(3, group.length);
+    if (isBracket) {
+      // Sort by exposure bias ascending — darkest first, matches our convention.
+      group.sort(
+        (a, b) => (exif[a.id]?.exposureBias ?? 0) - (exif[b.id]?.exposureBias ?? 0)
+      );
+      newBrackets.push({
+        id: `bracket-exif-${group[0].id}`,
+        photos: group,
+        detectedSize: group.length as 3 | 5 | 7,
+      });
+    } else {
+      newSingles.push(...group);
+    }
+  }
+
+  return {
+    brackets: [...result.brackets, ...newBrackets],
+    singles: newSingles,
+  };
+}
