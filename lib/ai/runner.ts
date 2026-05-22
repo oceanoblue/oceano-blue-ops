@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getProvider } from './index';
+import { analyzePhoto, planEdits } from './vision-analyze';
 import type { AiJob, Photo } from '@/lib/supabase/database.types';
 import type { SourceImage } from './types';
 
@@ -157,6 +158,43 @@ export async function runAiJob(jobId: string): Promise<{
         notes: resp.notes ?? null,
       },
     });
+
+    // Auto-chain follow-up fixes if requested. Used by Stage 2 of the
+    // photographer UI: after the master prompt runs, look at the output and
+    // decide if sky / window / lawn / declutter would meaningfully improve
+    // it. Each follow-up is a fresh ai_jobs row that gets picked up by the
+    // cron processor — keeps each invocation fast and recoverable.
+    const wantsAutoChain = (job.params as any)?.auto_chain_fixes === true;
+    const isEnhanceJob = job.job_type === 'enhance_single' || job.job_type === 'hdr_merge';
+    if (wantsAutoChain && isEnhanceJob && outputPhotoIds.length > 0) {
+      try {
+        const finalOutput = resp.outputs[0];
+        if (finalOutput) {
+          const analysis = await analyzePhoto(finalOutput.bytes);
+          if (analysis) {
+            const planned = planEdits(analysis);
+            if (planned.length > 0) {
+              const outputId = outputPhotoIds[0];
+              await supabase.from('ai_jobs').insert(
+                planned.map((edit) => ({
+                  order_id: job.order_id,
+                  job_type: edit,
+                  provider: 'auto',
+                  input_photo_ids: [outputId],
+                  prompt: null,
+                  status: 'pending' as const,
+                  created_by: job.created_by,
+                  params: { auto_chained_from: jobId, analysis_notes: analysis.notes },
+                }))
+              );
+            }
+          }
+        }
+      } catch (chainErr) {
+        // Don't fail the parent job over an auto-chain hiccup.
+        console.error('[runner] auto-chain failed:', chainErr);
+      }
+    }
 
     return { jobId, status: 'complete', outputPhotoIds };
   } catch (err) {

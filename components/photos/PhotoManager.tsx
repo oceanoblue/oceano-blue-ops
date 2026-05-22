@@ -13,11 +13,20 @@ import {
   ThumbsUp,
   ThumbsDown,
   RotateCw,
+  Wand2,
+  Sparkles,
+  Sun,
+  Square,
+  Trees,
+  MoonStar,
+  Trash2,
+  Sofa,
+  Eraser,
+  ChevronRight,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
 import { PhotoViewer } from './PhotoViewer';
-import { ProcessSidebar, type EditKind, type ProviderId } from './ProcessSidebar';
 import { BracketCard } from './BracketCard';
 import { tusUpload, RESUMABLE_THRESHOLD_BYTES } from '@/lib/storage/tus-upload';
 import {
@@ -27,7 +36,6 @@ import {
   applyExifGrouping,
   type ExifSnapshot,
 } from '@/lib/photos/bracket-grouping';
-import type { BracketGroup } from '@/lib/photos/bracket-grouping';
 
 interface JobView {
   id: string;
@@ -39,6 +47,15 @@ interface JobView {
   error_message: string | null;
 }
 
+type Stage = 1 | 2 | 3;
+type AiProvider = 'openai-gpt-image' | 'gemini-banana-pro' | 'oceano-enhance' | 'auto';
+
+const STAGE_TITLES: Record<Stage, string> = {
+  1: 'Sort & Merge',
+  2: 'AI Enhance',
+  3: 'Review & Edit',
+};
+
 export function PhotoManager({ orderId }: { orderId: string }) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
@@ -49,18 +66,18 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
 
-  // Selection — separate sets for brackets (group ids) and singles (photo ids)
-  // so we can show the right counts in the sidebar and run the right job type
-  // per selection.
+  const [stage, setStage] = useState<Stage>(1);
+
+  // Stage 1 selection
   const [selectedBrackets, setSelectedBrackets] = useState<Set<string>>(new Set());
   const [selectedSingles, setSelectedSingles] = useState<Set<string>>(new Set());
 
-  // Sidebar config
-  const [edits, setEdits] = useState<Set<EditKind>>(
-    new Set(['hdr_merge', 'enhance_single'])
-  );
-  const [provider, setProvider] = useState<ProviderId>('auto');
+  // Stage 2 config
+  const [aiProvider, setAiProvider] = useState<AiProvider>('openai-gpt-image');
+  const [autoDetect, setAutoDetect] = useState(true);
+  const [stage2Selection, setStage2Selection] = useState<Set<string>>(new Set());
 
+  // Stage 3 — open lightbox
   const refresh = useCallback(async () => {
     const supabase = createClient();
     const { data: ps } = await supabase
@@ -78,7 +95,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
     refresh();
   }, [refresh]);
 
-  // Poll while anything is running so the user sees progress without manual refresh.
+  // Poll while anything is running.
   useEffect(() => {
     const hasInFlight = jobs.some(
       (j) => j.status === 'pending' || j.status === 'queued' || j.status === 'running'
@@ -88,13 +105,36 @@ export function PhotoManager({ orderId }: { orderId: string }) {
     return () => clearInterval(id);
   }, [jobs, refresh]);
 
-  // Split photos into raw / processed and group raw into brackets/singles
+  // Categorize photos
   const rawPhotos = useMemo(() => photos.filter((p) => p.kind === 'raw'), [photos]);
   const processedPhotos = useMemo(() => photos.filter((p) => p.kind === 'processed'), [photos]);
 
-  // EXIF cache for the secondary bracket-detection pass. Populated in the
-  // background — initial render uses filename-only grouping, then we widen
-  // the bracket set as EXIF reads complete.
+  // Build parent → children index so we can tell which merged JPEGs have
+  // already been AI-enhanced (children exist) vs still awaiting Stage 2.
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, Photo[]>();
+    for (const p of processedPhotos) {
+      if (p.parent_photo_id) {
+        const arr = map.get(p.parent_photo_id) ?? [];
+        arr.push(p);
+        map.set(p.parent_photo_id, arr);
+      }
+    }
+    return map;
+  }, [processedPhotos]);
+
+  function hasEnhanceChild(photoId: string): boolean {
+    const kids = childrenByParent.get(photoId) ?? [];
+    return kids.some((k) => !isMerePassthrough(k));
+  }
+
+  // A "passthrough" processed photo is one that's just a bracket merge or a
+  // RAW→JPEG conversion — no AI applied yet, so it should appear in Stage 2.
+  function isMerePassthrough(p: Photo): boolean {
+    return p.is_hdr === true && p.ai_provider === 'oceano-enhance';
+  }
+
+  // EXIF cache for filename-only bracket detection fallback.
   const [exifByPhoto, setExifByPhoto] = useState<Record<string, ExifSnapshot>>({});
 
   const { brackets, singles } = useMemo(() => {
@@ -102,9 +142,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
     return applyExifGrouping(base, exifByPhoto);
   }, [rawPhotos, exifByPhoto]);
 
-  // Kick off EXIF reads for any single JPEG we don't yet have a snapshot for.
-  // This is browser-side and uses the signed URL already in `photoUrls` so we
-  // don't double-fetch. RAW files are skipped (exifr can't parse ARW).
+  // Lazy EXIF reads for the secondary bracket pass.
   useEffect(() => {
     const baseGroup = groupPhotosIntoBrackets(rawPhotos);
     const candidates = baseGroup.singles.filter(
@@ -129,6 +167,34 @@ export function PhotoManager({ orderId }: { orderId: string }) {
       cancelled = true;
     };
   }, [rawPhotos, photoUrls, exifByPhoto]);
+
+  // Stage 2 inputs: merged JPEGs (bracket merges) + singles that have been
+  // JPEG-converted already, EXCLUDING anything that's already been AI-enhanced.
+  const stage2Inputs = useMemo(() => {
+    const mergedJpegs = processedPhotos.filter(
+      (p) => isMerePassthrough(p) && !hasEnhanceChild(p.id)
+    );
+    const jpegSingles = singles.filter(
+      (s) => !isRawFilename(s.filename) && !hasEnhanceChild(s.id)
+    );
+    return [...mergedJpegs, ...jpegSingles];
+  }, [processedPhotos, singles, childrenByParent]);
+
+  // Stage 3 photos: AI-enhanced outputs (not pure bracket merges).
+  const stage3Photos = useMemo(
+    () => processedPhotos.filter((p) => !isMerePassthrough(p)),
+    [processedPhotos]
+  );
+
+  // Auto-advance stage on first load (or after a refresh that surfaces new work).
+  useEffect(() => {
+    if (stage3Photos.length > 0 && stage === 1 && brackets.length === 0 && singles.length === 0) {
+      setStage(3);
+    } else if (stage2Inputs.length > 0 && stage === 1 && brackets.length === 0) {
+      setStage(2);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage2Inputs.length, stage3Photos.length, brackets.length, singles.length]);
 
   // ─── Upload ──────────────────────────────────────────────────────────────
   const onDrop = useCallback(
@@ -222,7 +288,75 @@ export function PhotoManager({ orderId }: { orderId: string }) {
     disabled: uploading,
   });
 
-  // ─── Selection helpers ───────────────────────────────────────────────────
+  // ─── Stage 1: Approve & Merge ────────────────────────────────────────────
+  async function runStage1ApproveMerge() {
+    setRunning(true);
+    setRunError(null);
+    try {
+      const approvedBrackets = brackets.filter((b) => selectedBrackets.has(b.id));
+      for (const b of approvedBrackets) {
+        const r = await fetch('/api/ai/process', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            order_id: orderId,
+            job_type: 'hdr_merge',
+            provider: 'oceano-enhance', // deterministic merge, no AI
+            photo_ids: b.photos.map((p) => p.id),
+          }),
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j.error || `merge_failed_${r.status}`);
+        }
+      }
+      setSelectedBrackets(new Set());
+      setStage(2);
+      refresh();
+    } catch (err: any) {
+      setRunError(err?.message || 'failed');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  // ─── Stage 2: Run AI ─────────────────────────────────────────────────────
+  async function runStage2Enhance() {
+    setRunning(true);
+    setRunError(null);
+    const targets =
+      stage2Selection.size > 0
+        ? stage2Inputs.filter((p) => stage2Selection.has(p.id))
+        : stage2Inputs;
+    try {
+      for (const p of targets) {
+        const r = await fetch('/api/ai/process', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            order_id: orderId,
+            job_type: 'enhance_single',
+            provider: aiProvider,
+            photo_ids: [p.id],
+            auto_chain_fixes: autoDetect,
+          }),
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j.error || `enhance_failed_${r.status}`);
+        }
+      }
+      setStage2Selection(new Set());
+      setStage(3);
+      refresh();
+    } catch (err: any) {
+      setRunError(err?.message || 'failed');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  // Stage 1 selection helpers
   function toggleBracket(id: string) {
     setSelectedBrackets((prev) => {
       const next = new Set(prev);
@@ -239,234 +373,146 @@ export function PhotoManager({ orderId }: { orderId: string }) {
       return next;
     });
   }
-  function selectAll() {
+  function selectAllBrackets() {
     setSelectedBrackets(new Set(brackets.map((b) => b.id)));
-    setSelectedSingles(new Set(singles.map((p) => p.id)));
   }
-  function clearSelection() {
+  function clearBrackets() {
     setSelectedBrackets(new Set());
-    setSelectedSingles(new Set());
   }
 
-  // ─── Run the configured edits on the current selection ───────────────────
-  async function runProcess() {
-    setRunning(true);
-    setRunError(null);
-
-    // Build per-edit job payloads. HDR merge only applies to brackets;
-    // single-shot edits apply to selected singles. Other edits (sky etc)
-    // apply to whatever's selected.
-    const selectedBracketGroups = brackets.filter((b) => selectedBrackets.has(b.id));
-    const selectedSinglePhotos = singles.filter((p) => selectedSingles.has(p.id));
-
-    type Submission = { job_type: AiJobType; photo_ids: string[] };
-    const submissions: Submission[] = [];
-
-    if (edits.has('hdr_merge')) {
-      for (const b of selectedBracketGroups) {
-        submissions.push({ job_type: 'hdr_merge', photo_ids: b.photos.map((p) => p.id) });
-      }
-    }
-    if (edits.has('enhance_single')) {
-      for (const p of selectedSinglePhotos) {
-        submissions.push({ job_type: 'enhance_single', photo_ids: [p.id] });
-      }
-    }
-    // Additional generative edits — apply to both brackets (using first frame as proxy)
-    // and singles. The runner already handles bracket inputs gracefully.
-    const everySelected = [
-      ...selectedBracketGroups.map((b) => b.photos[0].id),
-      ...selectedSinglePhotos.map((p) => p.id),
-    ];
-    const additionalEdits: AiJobType[] = ['sky_replace', 'window_pull', 'lawn_enhance', 'twilight_convert', 'declutter'];
-    for (const e of additionalEdits) {
-      if (!edits.has(e)) continue;
-      for (const id of everySelected) {
-        submissions.push({ job_type: e, photo_ids: [id] });
-      }
-    }
-
-    try {
-      for (const sub of submissions) {
-        const r = await fetch('/api/ai/process', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            order_id: orderId,
-            job_type: sub.job_type,
-            provider,
-            photo_ids: sub.photo_ids,
-          }),
-        });
-        if (!r.ok) {
-          const j = await r.json().catch(() => ({}));
-          throw new Error(j.error || `enqueue_failed_${r.status}`);
-        }
-      }
-      clearSelection();
-      refresh();
-    } catch (err: any) {
-      setRunError(err?.message || 'failed');
-    } finally {
-      setRunning(false);
-    }
+  function toggleStage2(id: string) {
+    setStage2Selection((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
-  // Live job progress for the sidebar
-  const jobProgress = useMemo(() => {
-    const active = jobs.filter((j) =>
-      ['pending', 'queued', 'running', 'complete', 'failed'].includes(j.status)
-    );
-    if (active.length === 0) return null;
-    const done = active.filter((j) => j.status === 'complete' || j.status === 'failed').length;
-    const total = active.length;
-    return done < total ? { done, total } : null;
-  }, [jobs]);
+  // Live job progress
+  const inFlightJobs = useMemo(
+    () => jobs.filter((j) => ['pending', 'queued', 'running'].includes(j.status)),
+    [jobs]
+  );
 
-  // ─── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-      {/* Main column */}
-      <div className="space-y-6 min-w-0">
-        {/* Drop zone */}
-        <div
-          {...getRootProps()}
-          className={`rounded-lg border-2 border-dashed p-8 text-center transition cursor-pointer ${
-            isDragActive ? 'border-ocean-500 bg-ocean-50' : 'border-slate-300 hover:bg-slate-50'
-          }`}
-        >
-          <input {...getInputProps()} />
-          <Upload className="mx-auto h-6 w-6 text-slate-400" />
-          <p className="mt-2 text-sm text-slate-700">
-            {uploading
-              ? `Uploading ${uploadProgress?.done ?? 0}/${uploadProgress?.total ?? 0}…`
-              : 'Drop photos here, or click to choose files'}
-          </p>
-          <p className="text-xs text-slate-500">
-            JPEG / PNG / TIFF / WebP run through AI directly. ARW / CR2 / NEF / DNG auto-convert via the worker.
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* Upload zone */}
+      <div
+        {...getRootProps()}
+        className={`rounded-lg border-2 border-dashed p-6 text-center transition cursor-pointer ${
+          isDragActive ? 'border-ocean-500 bg-ocean-50' : 'border-slate-300 hover:bg-slate-50'
+        }`}
+      >
+        <input {...getInputProps()} />
+        <Upload className="mx-auto h-6 w-6 text-slate-400" />
+        <p className="mt-2 text-sm text-slate-700">
+          {uploading
+            ? `Uploading ${uploadProgress?.done ?? 0}/${uploadProgress?.total ?? 0}…`
+            : 'Drop photos here, or click to choose files'}
+        </p>
+        <p className="text-xs text-slate-500">
+          JPEG / PNG / TIFF / WebP run through AI directly. ARW / CR2 / NEF auto-convert via the worker.
+        </p>
+      </div>
 
-        {/* Selection-control bar */}
-        {(brackets.length > 0 || singles.length > 0) && (
-          <div className="flex items-center justify-between text-sm">
-            <div className="text-slate-600">
-              {brackets.length} bracket{brackets.length === 1 ? '' : 's'}
-              {brackets.length > 0 && singles.length > 0 && ' · '}
-              {singles.length > 0 && `${singles.length} single${singles.length === 1 ? '' : 's'}`}
-              {' '}detected
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={selectAll} className="text-xs text-ocean-700 hover:text-ocean-900">
-                Select all
-              </button>
-              <span className="text-slate-300">·</span>
-              <button onClick={clearSelection} className="text-xs text-slate-500 hover:text-slate-700">
-                Clear
-              </button>
-              <span className="text-slate-300">·</span>
-              <button onClick={refresh} className="text-xs text-slate-500 hover:text-slate-700 inline-flex items-center gap-1">
-                <RefreshCw className="h-3 w-3" /> Refresh
-              </button>
-            </div>
+      {/* Stepper */}
+      <Stepper
+        current={stage}
+        onChange={setStage}
+        counts={{
+          1: brackets.length + singles.length,
+          2: stage2Inputs.length,
+          3: stage3Photos.length,
+        }}
+      />
+
+      {/* In-flight progress */}
+      {inFlightJobs.length > 0 && (
+        <div className="card p-3 flex items-center justify-between text-sm">
+          <div className="flex items-center gap-2 text-slate-700">
+            <Loader2 className="h-4 w-4 animate-spin text-ocean-600" />
+            {inFlightJobs.length} job{inFlightJobs.length === 1 ? '' : 's'} processing in the background.
           </div>
-        )}
+          <button
+            onClick={refresh}
+            className="text-xs text-slate-500 hover:text-slate-700 inline-flex items-center gap-1"
+          >
+            <RefreshCw className="h-3 w-3" /> Refresh
+          </button>
+        </div>
+      )}
 
-        {/* Bracket sets */}
-        {brackets.length > 0 && (
-          <section>
-            <h3 className="text-sm font-semibold text-slate-700 mb-2">
-              Bracket sets ({brackets.length})
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-              {brackets.map((b) => (
-                <BracketCard
-                  key={b.id}
-                  bracket={b}
-                  selected={selectedBrackets.has(b.id)}
-                  onToggle={() => toggleBracket(b.id)}
-                  urls={photoUrls}
-                  setUrls={setPhotoUrls}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+      {/* Stage content */}
+      {stage === 1 && (
+        <Stage1
+          brackets={brackets}
+          singles={singles}
+          selectedBrackets={selectedBrackets}
+          selectedSingles={selectedSingles}
+          onToggleBracket={toggleBracket}
+          onToggleSingle={toggleSingle}
+          onSelectAll={selectAllBrackets}
+          onClear={clearBrackets}
+          photoUrls={photoUrls}
+          setPhotoUrls={setPhotoUrls}
+          rawPhotos={rawPhotos}
+          openViewer={(idx) => setViewer({ list: 'raw', index: idx })}
+          onConverted={refresh}
+          running={running}
+          onApproveMerge={runStage1ApproveMerge}
+          canSkipToStage2={stage2Inputs.length > 0}
+          onSkip={() => setStage(2)}
+        />
+      )}
 
-        {/* Singles */}
-        {singles.length > 0 && (
-          <section>
-            <h3 className="text-sm font-semibold text-slate-700 mb-2">
-              Singles ({singles.length})
-            </h3>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-              {singles.map((p, i) => (
-                <SingleThumb
-                  key={p.id}
-                  photo={p}
-                  selected={selectedSingles.has(p.id)}
-                  onToggle={() => toggleSingle(p.id)}
-                  onOpen={() => {
-                    const idx = rawPhotos.findIndex((rp) => rp.id === p.id);
-                    setViewer({ list: 'raw', index: Math.max(0, idx) });
-                  }}
-                  urls={photoUrls}
-                  setUrls={setPhotoUrls}
-                  onConverted={refresh}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+      {stage === 2 && (
+        <Stage2
+          inputs={stage2Inputs}
+          selection={stage2Selection}
+          onToggle={toggleStage2}
+          provider={aiProvider}
+          onProviderChange={setAiProvider}
+          autoDetect={autoDetect}
+          onAutoDetectChange={setAutoDetect}
+          running={running}
+          onRun={runStage2Enhance}
+          onBack={() => setStage(1)}
+          photoUrls={photoUrls}
+          setPhotoUrls={setPhotoUrls}
+        />
+      )}
 
-        {/* Processed */}
-        {processedPhotos.length > 0 && (
-          <section>
-            <h3 className="text-sm font-semibold text-slate-700 mb-2">
-              Processed ({processedPhotos.length})
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {processedPhotos.map((p, i) => (
-                <ProcessedCard
-                  key={p.id}
-                  photo={p}
-                  onOpen={() => setViewer({ list: 'processed', index: i })}
-                  urls={photoUrls}
-                  setUrls={setPhotoUrls}
-                  onChange={refresh}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+      {stage === 3 && (
+        <Stage3
+          photos={stage3Photos}
+          photoUrls={photoUrls}
+          setPhotoUrls={setPhotoUrls}
+          openViewer={(idx) => setViewer({ list: 'processed', index: idx })}
+          onChange={refresh}
+          onBack={() => setStage(2)}
+        />
+      )}
 
-        {/* Empty state */}
-        {brackets.length === 0 && singles.length === 0 && processedPhotos.length === 0 && (
+      {runError && (
+        <div className="card p-3 text-sm text-rose-700 bg-rose-50 border-rose-200">
+          {runError}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {brackets.length === 0 &&
+        singles.length === 0 &&
+        stage2Inputs.length === 0 &&
+        stage3Photos.length === 0 && (
           <div className="card p-8 text-center text-sm text-slate-500">
             No photos yet. Drop your shoot above to begin.
           </div>
         )}
-      </div>
-
-      {/* Right sidebar */}
-      <ProcessSidebar
-        bracketCount={brackets.length}
-        singleCount={singles.length}
-        selectedBracketCount={selectedBrackets.size}
-        selectedSingleCount={selectedSingles.size}
-        edits={edits}
-        onEditsChange={setEdits}
-        provider={provider}
-        onProviderChange={setProvider}
-        running={running}
-        onRun={runProcess}
-        progress={jobProgress}
-        error={runError}
-      />
 
       {viewer && (
         <PhotoViewer
-          photos={viewer.list === 'raw' ? rawPhotos : processedPhotos}
+          photos={viewer.list === 'raw' ? rawPhotos : stage3Photos}
           index={viewer.index}
           urls={photoUrls}
           onClose={() => setViewer(null)}
@@ -478,7 +524,424 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   );
 }
 
-// ─── Single thumbnail card ──────────────────────────────────────────────────
+// ─── Stepper ─────────────────────────────────────────────────────────────────
+function Stepper({
+  current,
+  onChange,
+  counts,
+}: {
+  current: Stage;
+  onChange: (s: Stage) => void;
+  counts: Record<Stage, number>;
+}) {
+  return (
+    <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+      {([1, 2, 3] as Stage[]).map((s, i) => {
+        const active = s === current;
+        return (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onChange(s)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition ${
+              active
+                ? 'bg-ocean-600 text-white'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <span
+              className={`h-5 w-5 rounded-full grid place-items-center text-xs font-bold ${
+                active ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {s}
+            </span>
+            <span>{STAGE_TITLES[s]}</span>
+            {counts[s] > 0 && (
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                  active ? 'bg-white/20' : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {counts[s]}
+              </span>
+            )}
+            {i < 2 && <ChevronRight className="h-4 w-4 text-slate-400 ml-1" />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Stage 1: Sort & Merge ───────────────────────────────────────────────────
+function Stage1({
+  brackets,
+  singles,
+  selectedBrackets,
+  selectedSingles,
+  onToggleBracket,
+  onToggleSingle,
+  onSelectAll,
+  onClear,
+  photoUrls,
+  setPhotoUrls,
+  rawPhotos,
+  openViewer,
+  onConverted,
+  running,
+  onApproveMerge,
+  canSkipToStage2,
+  onSkip,
+}: {
+  brackets: ReturnType<typeof groupPhotosIntoBrackets>['brackets'];
+  singles: Photo[];
+  selectedBrackets: Set<string>;
+  selectedSingles: Set<string>;
+  onToggleBracket: (id: string) => void;
+  onToggleSingle: (id: string) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+  photoUrls: Record<string, string | null>;
+  setPhotoUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
+  rawPhotos: Photo[];
+  openViewer: (idx: number) => void;
+  onConverted: () => void;
+  running: boolean;
+  onApproveMerge: () => void;
+  canSkipToStage2: boolean;
+  onSkip: () => void;
+}) {
+  const hasContent = brackets.length > 0 || singles.length > 0;
+  return (
+    <div className="space-y-6">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-ocean-900">Sort & Merge</h2>
+          <p className="text-sm text-slate-500">
+            Pick which bracket sets to approve. We&apos;ll merge them into clean JPEGs ready for AI.
+            Singles get carried over automatically.
+          </p>
+        </div>
+        {hasContent && (
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <button onClick={onSelectAll} className="text-ocean-700 hover:text-ocean-900 font-medium">
+              Select all brackets
+            </button>
+            <span>·</span>
+            <button onClick={onClear} className="hover:text-slate-700">
+              Clear
+            </button>
+          </div>
+        )}
+      </header>
+
+      {brackets.length > 0 && (
+        <section>
+          <h3 className="text-sm font-semibold text-slate-700 mb-2">
+            Bracket sets ({brackets.length})
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {brackets.map((b) => (
+              <BracketCard
+                key={b.id}
+                bracket={b}
+                selected={selectedBrackets.has(b.id)}
+                onToggle={() => onToggleBracket(b.id)}
+                urls={photoUrls}
+                setUrls={setPhotoUrls}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {singles.length > 0 && (
+        <section>
+          <h3 className="text-sm font-semibold text-slate-700 mb-2">
+            Singles ({singles.length}) — carried into Stage 2 automatically
+          </h3>
+          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2">
+            {singles.map((p) => (
+              <SingleThumb
+                key={p.id}
+                photo={p}
+                selected={selectedSingles.has(p.id)}
+                onToggle={() => onToggleSingle(p.id)}
+                onOpen={() => {
+                  const idx = rawPhotos.findIndex((rp) => rp.id === p.id);
+                  openViewer(Math.max(0, idx));
+                }}
+                urls={photoUrls}
+                setUrls={setPhotoUrls}
+                onConverted={onConverted}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {hasContent && (
+        <footer className="flex items-center justify-between border-t border-slate-200 pt-4">
+          <div className="text-sm text-slate-600">
+            {selectedBrackets.size > 0
+              ? `${selectedBrackets.size} bracket${selectedBrackets.size === 1 ? '' : 's'} ready to merge`
+              : 'Select bracket sets you want to merge'}
+          </div>
+          <div className="flex items-center gap-2">
+            {canSkipToStage2 && (
+              <button onClick={onSkip} className="btn-secondary text-sm">
+                Skip to Stage 2
+              </button>
+            )}
+            <button
+              onClick={onApproveMerge}
+              disabled={running || selectedBrackets.size === 0}
+              className="btn-primary"
+            >
+              {running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Approve &amp; Merge {selectedBrackets.size > 0 ? selectedBrackets.size : ''}
+            </button>
+          </div>
+        </footer>
+      )}
+    </div>
+  );
+}
+
+// ─── Stage 2: AI Enhance ─────────────────────────────────────────────────────
+function Stage2({
+  inputs,
+  selection,
+  onToggle,
+  provider,
+  onProviderChange,
+  autoDetect,
+  onAutoDetectChange,
+  running,
+  onRun,
+  onBack,
+  photoUrls,
+  setPhotoUrls,
+}: {
+  inputs: Photo[];
+  selection: Set<string>;
+  onToggle: (id: string) => void;
+  provider: AiProvider;
+  onProviderChange: (p: AiProvider) => void;
+  autoDetect: boolean;
+  onAutoDetectChange: (b: boolean) => void;
+  running: boolean;
+  onRun: () => void;
+  onBack: () => void;
+  photoUrls: Record<string, string | null>;
+  setPhotoUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
+}) {
+  const targetCount = selection.size > 0 ? selection.size : inputs.length;
+  return (
+    <div className="space-y-6">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-ocean-900">AI Enhance</h2>
+          <p className="text-sm text-slate-500">
+            Run the luxury real estate prompt on your merged photos. Auto-detect chains
+            sky and window fixes when needed.
+          </p>
+        </div>
+        <button onClick={onBack} className="text-xs text-slate-500 hover:text-slate-700">
+          ← Back to Sort
+        </button>
+      </header>
+
+      {inputs.length === 0 ? (
+        <div className="card p-8 text-center text-sm text-slate-500">
+          Nothing ready to enhance yet. Approve some brackets in Stage 1 first.
+        </div>
+      ) : (
+        <>
+          <section>
+            <h3 className="text-sm font-semibold text-slate-700 mb-2">
+              Ready to enhance ({inputs.length})
+            </h3>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+              {inputs.map((p) => (
+                <Stage2Thumb
+                  key={p.id}
+                  photo={p}
+                  selected={selection.has(p.id)}
+                  onToggle={() => onToggle(p.id)}
+                  urls={photoUrls}
+                  setUrls={setPhotoUrls}
+                />
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Click a photo to limit the run to a subset. Leave all unselected to run on every photo.
+            </p>
+          </section>
+
+          <section className="card p-4 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                AI Provider
+              </label>
+              <select
+                className="input mt-1"
+                value={provider}
+                onChange={(e) => onProviderChange(e.target.value as AiProvider)}
+              >
+                <option value="openai-gpt-image">GPT Image 2 (recommended)</option>
+                <option value="gemini-banana-pro">Nano Banana Pro (Gemini)</option>
+                <option value="oceano-enhance">Oceano Smart Enhance</option>
+                <option value="auto">Auto pick</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Auto-detect fixes
+              </label>
+              <label className="mt-1 flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoDetect}
+                  onChange={(e) => onAutoDetectChange(e.target.checked)}
+                  className="h-4 w-4 rounded accent-ocean-600"
+                />
+                <span className="text-sm text-slate-700">
+                  Auto-apply sky / window fixes when detected
+                </span>
+              </label>
+            </div>
+            <button
+              onClick={onRun}
+              disabled={running || inputs.length === 0}
+              className="btn-primary"
+            >
+              {running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
+              Run AI on {targetCount} {targetCount === 1 ? 'photo' : 'photos'}
+            </button>
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Stage2Thumb({
+  photo,
+  selected,
+  onToggle,
+  urls,
+  setUrls,
+}: {
+  photo: Photo;
+  selected: boolean;
+  onToggle: () => void;
+  urls: Record<string, string | null>;
+  setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
+}) {
+  const url = urls[photo.id];
+  useEffect(() => {
+    if (url !== undefined) return;
+    fetch(`/api/photo-url?photo_id=${photo.id}`)
+      .then((r) => r.json())
+      .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
+      .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
+  }, [photo.id, url, setUrls]);
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`relative aspect-[3/2] overflow-hidden rounded-md ring-2 transition ${
+        selected ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'
+      }`}
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={photo.filename} className="h-full w-full object-cover" />
+      ) : (
+        <div className="h-full w-full bg-slate-100 grid place-items-center text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      )}
+      <div
+        className={`absolute top-1.5 left-1.5 h-5 w-5 grid place-items-center rounded border-2 text-[11px] ${
+          selected ? 'bg-ocean-600 border-ocean-600 text-white' : 'bg-white/90 border-white/90 text-transparent'
+        }`}
+      >
+        ✓
+      </div>
+      {photo.is_hdr && (
+        <div className="absolute top-1.5 right-1.5 text-[10px] font-semibold bg-amber-500/90 text-amber-950 px-1.5 py-0.5 rounded">
+          Merged
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ─── Stage 3: Review & Edit ──────────────────────────────────────────────────
+function Stage3({
+  photos,
+  photoUrls,
+  setPhotoUrls,
+  openViewer,
+  onChange,
+  onBack,
+}: {
+  photos: Photo[];
+  photoUrls: Record<string, string | null>;
+  setPhotoUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
+  openViewer: (idx: number) => void;
+  onChange: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-ocean-900">Review & Edit</h2>
+          <p className="text-sm text-slate-500">
+            Approve your final picks. Hover any photo for extra edits like sky, window,
+            twilight, virtual furniture, or object removal.
+          </p>
+        </div>
+        <button onClick={onBack} className="text-xs text-slate-500 hover:text-slate-700">
+          ← Back to AI Enhance
+        </button>
+      </header>
+
+      {photos.length === 0 ? (
+        <div className="card p-8 text-center text-sm text-slate-500">
+          Nothing AI-processed yet. Run Stage 2 first.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {photos.map((p, i) => (
+            <ProcessedCard
+              key={p.id}
+              photo={p}
+              onOpen={() => openViewer(i)}
+              urls={photoUrls}
+              setUrls={setPhotoUrls}
+              onChange={onChange}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Single thumbnail card (Stage 1) ────────────────────────────────────────
 function SingleThumb({
   photo,
   selected,
@@ -556,7 +1019,6 @@ function SingleThumb({
         </div>
       )}
 
-      {/* Selection checkbox — always visible */}
       <button
         type="button"
         onClick={(e) => {
@@ -602,22 +1064,11 @@ function SingleThumb({
           )}
         </>
       )}
-
-      {photo.processing_status === 'running' && (
-        <div className="absolute inset-0 bg-black/50 grid place-items-center text-white">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-      )}
-      {photo.processing_status === 'failed' && (
-        <div className="absolute top-1 right-1 text-rose-200">
-          <AlertCircle className="h-4 w-4" />
-        </div>
-      )}
     </div>
   );
 }
 
-// ─── Processed photo card with Approve / Reject / Re-run ────────────────────
+// ─── Processed photo card (Stage 3) with full chip strip ────────────────────
 function ProcessedCard({
   photo,
   onOpen,
@@ -632,7 +1083,7 @@ function ProcessedCard({
   onChange: () => void;
 }) {
   const url = urls[photo.id];
-  const [busy, setBusy] = useState<null | 'approve' | 'reject' | 'rerun'>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     if (url !== undefined) return;
@@ -643,7 +1094,7 @@ function ProcessedCard({
   }, [photo.id, url, setUrls]);
 
   async function decide(decision: 'approve' | 'reject' | 'reset') {
-    setBusy(decision === 'reset' ? null : decision);
+    setBusy(decision);
     try {
       await fetch('/api/photos/decide', {
         method: 'POST',
@@ -656,18 +1107,17 @@ function ProcessedCard({
     }
   }
 
-  async function rerun() {
-    setBusy('rerun');
+  async function applyExtra(jobType: AiJobType) {
+    setBusy(jobType);
     try {
-      const targetId = photo.parent_photo_id ?? photo.id;
       await fetch('/api/ai/process', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           order_id: photo.order_id,
-          job_type: 'enhance_single',
-          provider: 'oceano-enhance',
-          photo_ids: [targetId],
+          job_type: jobType,
+          provider: 'auto',
+          photo_ids: [photo.id],
         }),
       });
       onChange();
@@ -678,6 +1128,16 @@ function ProcessedCard({
 
   const isApproved = photo.is_selected === true;
   const isRejected = photo.is_selected === false;
+
+  // Compact chip strip for additional edits (Stage 3 power tools).
+  const extraEdits: Array<{ id: AiJobType; label: string; icon: any }> = [
+    { id: 'sky_replace', label: 'Sky', icon: Sun },
+    { id: 'window_pull', label: 'Window', icon: Square },
+    { id: 'twilight_convert', label: 'Twilight', icon: MoonStar },
+    { id: 'lawn_enhance', label: 'Lawn', icon: Trees },
+    { id: 'virtual_stage', label: 'Furniture', icon: Sofa },
+    { id: 'declutter', label: 'Declutter', icon: Eraser },
+  ];
 
   return (
     <div
@@ -699,46 +1159,82 @@ function ProcessedCard({
         </div>
       )}
 
-      {/* Status badge */}
       {isApproved && (
         <div className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-600 text-white px-1.5 py-0.5 rounded shadow">
           <CheckCircle2 className="h-3 w-3" /> Approved
         </div>
       )}
 
-      {/* Action chip strip — always visible at bottom */}
+      {/* Bottom action area: approve/reject + chips */}
       <div
-        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent p-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition"
+        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-2 opacity-0 group-hover:opacity-100 transition"
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          onClick={() => decide(isApproved ? 'reset' : 'approve')}
-          disabled={busy !== null}
-          title={isApproved ? 'Un-approve' : 'Approve for delivery'}
-          className={`p-1.5 rounded-md text-white text-xs transition ${
-            isApproved ? 'bg-emerald-600' : 'bg-white/15 hover:bg-emerald-600'
-          }`}
-        >
-          {busy === 'approve' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          onClick={() => decide(isRejected ? 'reset' : 'reject')}
-          disabled={busy !== null}
-          title={isRejected ? 'Un-reject' : 'Reject'}
-          className={`p-1.5 rounded-md text-white text-xs transition ${
-            isRejected ? 'bg-rose-600' : 'bg-white/15 hover:bg-rose-600'
-          }`}
-        >
-          {busy === 'reject' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsDown className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          onClick={rerun}
-          disabled={busy !== null}
-          title="Re-run enhance on the source"
-          className="p-1.5 rounded-md bg-white/15 text-white text-xs hover:bg-ocean-600 transition"
-        >
-          {busy === 'rerun' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
-        </button>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex gap-1">
+            <button
+              onClick={() => decide(isApproved ? 'reset' : 'approve')}
+              disabled={busy !== null}
+              title={isApproved ? 'Un-approve' : 'Approve'}
+              className={`p-1.5 rounded-md text-white text-xs transition ${
+                isApproved ? 'bg-emerald-600' : 'bg-white/15 hover:bg-emerald-600'
+              }`}
+            >
+              {busy === 'approve' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ThumbsUp className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <button
+              onClick={() => decide(isRejected ? 'reset' : 'reject')}
+              disabled={busy !== null}
+              title={isRejected ? 'Un-reject' : 'Reject'}
+              className={`p-1.5 rounded-md text-white text-xs transition ${
+                isRejected ? 'bg-rose-600' : 'bg-white/15 hover:bg-rose-600'
+              }`}
+            >
+              {busy === 'reject' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ThumbsDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
+          <button
+            onClick={() => applyExtra('enhance_single')}
+            disabled={busy !== null}
+            title="Re-run enhance"
+            className="p-1.5 rounded-md bg-white/15 text-white text-xs hover:bg-ocean-600 transition"
+          >
+            {busy === 'enhance_single' ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RotateCw className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {extraEdits.map((e) => {
+            const Icon = e.icon;
+            return (
+              <button
+                key={e.id}
+                onClick={() => applyExtra(e.id)}
+                disabled={busy !== null}
+                title={e.label}
+                className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-medium bg-white/15 text-white hover:bg-white/25 transition"
+              >
+                {busy === e.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Icon className="h-3 w-3" />
+                )}
+                {e.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

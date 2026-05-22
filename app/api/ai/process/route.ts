@@ -30,6 +30,10 @@ const Body = z.object({
     .default('auto'),
   photo_ids: z.array(z.string().uuid()).optional(), // explicit selection
   prompt_extra: z.string().optional(),
+  // When true, after the main job completes the runner inspects the output
+  // and enqueues follow-up sky_replace / window_pull / lawn / declutter
+  // jobs if vision analysis flags them. Used by Stage 2's "Run AI" button.
+  auto_chain_fixes: z.boolean().optional(),
   // Default false: enqueue jobs and let the background cron run them. The
   // synchronous path is kept for small batches and dev tests, but for any
   // real session you want this off so 75-120 photos don't timeout the
@@ -42,7 +46,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'validation_failed', issues: parsed.error.issues }, { status: 400 });
   }
-  const { order_id, job_type, provider, photo_ids, prompt_extra, run_inline } = parsed.data;
+  const { order_id, job_type, provider, photo_ids, prompt_extra, run_inline, auto_chain_fixes } = parsed.data;
 
   const supabase = createClient();
   const {
@@ -112,6 +116,7 @@ export async function POST(request: Request) {
         prompt: promptText,
         status: 'pending' as const,
         created_by: user.id,
+        params: auto_chain_fixes ? { auto_chain_fixes: true } : null,
       }))
     )
     .select('id');
