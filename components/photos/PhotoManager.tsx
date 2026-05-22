@@ -105,8 +105,21 @@ export function PhotoManager({ orderId }: { orderId: string }) {
     return () => clearInterval(id);
   }, [jobs, refresh]);
 
-  // Categorize photos
-  const rawPhotos = useMemo(() => photos.filter((p) => p.kind === 'raw'), [photos]);
+  // Categorize photos. For RAW files: if a JPEG sibling exists (a photo whose
+  // parent_photo_id points back at the ARW and whose filename ends .jpg),
+  // hide the ARW from view — the worker has already converted it and we want
+  // the UI to show the converted JPEG instead of the unrenderable ARW.
+  const rawPhotos = useMemo(() => {
+    const all = photos.filter((p) => p.kind === 'raw');
+    const replacedArwIds = new Set<string>();
+    for (const p of all) {
+      if (p.parent_photo_id && !isRawFilename(p.filename)) {
+        // This JPEG was converted from p.parent_photo_id — hide the ARW.
+        replacedArwIds.add(p.parent_photo_id);
+      }
+    }
+    return all.filter((p) => !replacedArwIds.has(p.id));
+  }, [photos]);
   const processedPhotos = useMemo(() => photos.filter((p) => p.kind === 'processed'), [photos]);
 
   // Build parent → children index so we can tell which merged JPEGs have
@@ -289,12 +302,38 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   });
 
   // ─── Stage 1: Approve & Merge ────────────────────────────────────────────
+  // Two-phase: (1) for any RAW frame in a selected bracket, fire the ARW
+  // worker to demosaic it to JPEG. The worker returns the new photo_id of the
+  // sibling JPEG. (2) Once all frames are JPEG, fire the hdr_merge job using
+  // those JPEG ids. This is done sequentially per bracket so the UI status
+  // reads naturally and so we don't dog-pile the single-concurrency worker.
   async function runStage1ApproveMerge() {
     setRunning(true);
     setRunError(null);
     try {
       const approvedBrackets = brackets.filter((b) => selectedBrackets.has(b.id));
       for (const b of approvedBrackets) {
+        // Phase 1 — ensure every frame is JPEG. Convert RAW frames in
+        // parallel; the worker serializes internally with concurrency=1, but
+        // firing in parallel lets us await one Promise.all.
+        const jpegIds = await Promise.all(
+          b.photos.map(async (p) => {
+            if (!isRawFilename(p.filename)) return p.id;
+            const r = await fetch('/api/photos/convert', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ photo_id: p.id }),
+            });
+            if (!r.ok) {
+              const j = await r.json().catch(() => ({}));
+              throw new Error(j.error || `convert_failed_${r.status}`);
+            }
+            const data = await r.json();
+            return data.photo_id as string;
+          })
+        );
+
+        // Phase 2 — merge those JPEGs.
         const r = await fetch('/api/ai/process', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -302,7 +341,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
             order_id: orderId,
             job_type: 'hdr_merge',
             provider: 'oceano-enhance', // deterministic merge, no AI
-            photo_ids: b.photos.map((p) => p.id),
+            photo_ids: jpegIds,
           }),
         });
         if (!r.ok) {

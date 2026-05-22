@@ -214,6 +214,105 @@ app.post('/convert', async (req, res) => {
   }
 });
 
+/**
+ * Fast embedded-JPEG preview extraction. Every camera writes a small JPEG
+ * preview (typically 1600-2400px) inside the ARW/CR3/etc for instant review
+ * on the camera back. We extract that JPEG with `dcraw_emu -e` and stream it
+ * back — no demosaicing, no encoding, much faster than the full /convert.
+ *
+ * Used by the bracket-card UI so the photographer can see what they're about
+ * to approve without waiting for the full conversion pipeline.
+ *
+ * POST /preview { photo_id }  →  image/jpeg bytes
+ */
+app.post('/preview', async (req, res) => {
+  if (req.headers['x-worker-secret'] !== WORKER_SECRET) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  const photoId = req.body?.photo_id;
+  if (typeof photoId !== 'string') {
+    return res.status(400).json({ error: 'photo_id required' });
+  }
+
+  await acquireConvertSlot();
+  const log = (msg, extra = {}) =>
+    console.log(JSON.stringify({ msg, photo_id: photoId, ...extra }));
+
+  try {
+    const { data: src, error: srcErr } = await supabase
+      .from('photos')
+      .select('*')
+      .eq('id', photoId)
+      .single();
+    if (srcErr || !src) throw new Error(`source_not_found: ${srcErr?.message ?? 'no row'}`);
+    if (!/\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i.test(src.filename)) {
+      return res.status(400).json({ error: 'not_a_raw_file', filename: src.filename });
+    }
+
+    const { data: file, error: dlErr } = await supabase.storage
+      .from(src.bucket)
+      .download(src.storage_path);
+    if (dlErr || !file) throw new Error(`download_failed: ${dlErr?.message}`);
+    const rawBuf = Buffer.from(await file.arrayBuffer());
+
+    const tmp = join(tmpdir(), `${randomUUID()}-${src.filename}`);
+    await fs.writeFile(tmp, rawBuf);
+    log('extracting_preview', { bytes: rawBuf.byteLength });
+
+    // dcraw_emu -e writes the embedded JPEG next to the input as
+    // <input>.thumb.jpg (or .ppm if there's no JPEG preview, but every
+    // modern camera produces JPEG previews).
+    await new Promise((resolve, reject) => {
+      const proc = spawn('dcraw_emu', ['-e', tmp]);
+      const errChunks = [];
+      proc.stderr.on('data', (c) => errChunks.push(c));
+      proc.on('error', reject);
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`dcraw_emu -e exited ${code}: ${Buffer.concat(errChunks).toString().slice(0, 500)}`));
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    // Try common output paths produced by dcraw_emu -e.
+    const candidates = [`${tmp}.thumb.jpg`, `${tmp}.jpg`, `${tmp}.thumb.tiff`, `${tmp}.thumb.ppm`];
+    let thumbBytes = null;
+    let pickedPath = null;
+    for (const p of candidates) {
+      try {
+        thumbBytes = await fs.readFile(p);
+        pickedPath = p;
+        break;
+      } catch {
+        // try next candidate
+      }
+    }
+    if (!thumbBytes) throw new Error('no_preview_extracted');
+
+    // Resize to a sane preview size for the UI.
+    const jpeg = await sharp(thumbBytes)
+      .rotate()
+      .resize({ width: 800, withoutEnlargement: true })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+
+    // Cleanup
+    fs.unlink(tmp).catch(() => {});
+    if (pickedPath) fs.unlink(pickedPath).catch(() => {});
+
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(jpeg);
+  } catch (err) {
+    console.error('[arw-worker] preview error', err);
+    res.status(500).json({ error: err?.message || String(err) });
+  } finally {
+    releaseConvertSlot();
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`[arw-worker] listening on :${PORT}`);
 });
