@@ -142,6 +142,48 @@ export const CLIENT_TYPES = [
   'Barefoot Technologies',
 ];
 
+/** Real client testimonials (from oceanoblue.net). */
+export const TESTIMONIALS = [
+  {
+    quote:
+      "Gustavo and his team captured our brand story in a way we never could have imagined. The final video became our most-shared piece of content ever.",
+    name: "Liz Crumrine",
+    org: "Dugas Realtors",
+  },
+  {
+    quote:
+      "Our marketing firm utilizes Oceano Blue for video and photography for small and large client projects. Outstanding video work and beautiful photography. Exceptional.",
+    name: "Lisa Carroll",
+    org: "Moonstar",
+  },
+  {
+    quote:
+      "Oceano Blue is a five-star team to work with for photography, and his social graces and demeanor are excellent. I have worked with him for years!",
+    name: "Leslie Richardson",
+    org: "Richardson Group",
+  },
+];
+
+/** Real FAQs (from oceanoblue.net). */
+export const FAQS = [
+  {
+    q: "What type of clients do you usually work with?",
+    a: "We primarily work with businesses across the Lowcountry and beyond — healthcare systems, law firms, real estate developers, private clubs, restaurants, and retail brands. If you need professional video production, photography, or content that drives real results for your business, we're a great fit.",
+  },
+  {
+    q: "How long does a typical project take?",
+    a: "It depends on the scope, but most projects take 2–4 weeks from kickoff to final delivery. Larger campaigns or retainer work follow a monthly cadence. We'll give you a clear timeline during the proposal phase so there are no surprises.",
+  },
+  {
+    q: "Do you offer ongoing support after a project ends?",
+    a: "Absolutely. Many of our clients start with a single project and transition to a monthly retainer for ongoing content. We also offer follow-up edits, additional cuts for social media, and updated photography as your business evolves.",
+  },
+  {
+    q: "How do I get started or request a proposal?",
+    a: "Just reach out through our contact section or email us at info@oceanoblue.net. We'll schedule a free consultation to learn about your project, discuss your goals, and put together a custom proposal with a clear scope and timeline. No pressure, no obligation.",
+  },
+];
+
 /** Real client logos (from the Oceano Blue Webflow asset library). */
 const WFA = 'https://cdn.prod.website-files.com/69444682984a6f0201f004c9';
 export const CLIENT_LOGOS = [

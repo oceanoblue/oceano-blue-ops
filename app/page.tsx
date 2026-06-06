@@ -18,6 +18,8 @@ import { Showreel } from '@/components/home/Showreel';
 import { Stats } from '@/components/home/Stats';
 import { Process } from '@/components/home/Process';
 import { Capabilities } from '@/components/home/Capabilities';
+import { Testimonials } from '@/components/home/Testimonials';
+import { Faq } from '@/components/home/Faq';
 import { Contact } from '@/components/home/Contact';
 
 export default function HomePage() {
@@ -43,6 +45,8 @@ export default function HomePage() {
         <Stats />
         <Process />
         <Capabilities />
+        <Testimonials />
+        <Faq />
         <Contact />
       </main>
       <Footer />
