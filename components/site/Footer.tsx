@@ -77,7 +77,7 @@ export function Footer() {
 
       {/* Oversized wordmark */}
       <div aria-hidden className="select-none px-2 pb-2">
-        <div className="whitespace-nowrap text-center font-display font-light leading-none tracking-tight text-paper/10 [font-size:23vw]">
+        <div className="whitespace-nowrap text-center font-display font-light leading-none tracking-tight text-paper/10 [font-size:14vw]">
           Oceano Blue
         </div>
       </div>

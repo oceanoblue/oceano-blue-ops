@@ -20,15 +20,15 @@ export function ScrollScrubStudio() {
 
   useEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const desktop = window.matchMedia('(min-width: 768px)').matches;
-    if (reduce || !desktop) return;
+    if (reduce) return;
     setEnabled(true);
   }, []);
 
   useEffect(() => {
     if (!enabled || !section.current) return;
     const v = video.current;
-    v?.pause();
+    // Prime the decoder (esp. iOS) so currentTime scrubbing is responsive on touch.
+    v?.play().then(() => v?.pause()).catch(() => {});
 
     const ctx = gsap.context(() => {
       const caps = gsap.utils.toArray<HTMLElement>('.scrub-cap');
