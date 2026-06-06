@@ -3,33 +3,120 @@
 @tailwind utilities;
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0b1d33;
+  --paper: #f3efe6;
+  --ink: #0b0b0e;
 }
 
-html, body { height: 100%; }
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-feature-settings: "cv02","cv03","cv04","cv11";
+* {
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-grotesk), system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: #1452f0;
+  color: #fff;
 }
 
 @layer components {
+  /* Editorial section labels (kicker) */
+  .kicker {
+    @apply font-mono text-[0.7rem] uppercase tracking-kicker;
+  }
+
+  /* Horizontal page padding that respects big screens */
+  .px-edge {
+    @apply px-5 sm:px-8 lg:px-12;
+  }
+  .container-edge {
+    @apply mx-auto w-full max-w-edge px-5 sm:px-8 lg:px-12;
+  }
+
+  /* Buttons */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-medium uppercase tracking-wide transition-all duration-300 ease-editorial;
   }
-  .btn-primary { @apply btn bg-ocean-700 text-white hover:bg-ocean-800; }
-  .btn-secondary { @apply btn bg-white text-ocean-900 ring-1 ring-slate-200 hover:bg-slate-50; }
-  .btn-ghost { @apply btn text-slate-700 hover:bg-slate-100; }
-  .btn-danger { @apply btn bg-rose-600 text-white hover:bg-rose-700; }
-  .input {
-    @apply block w-full rounded-md border-slate-300 bg-white text-sm shadow-sm focus:border-ocean-500 focus:ring-ocean-500;
+  .btn-solid {
+    @apply btn bg-ink text-paper hover:bg-ocean hover:text-white;
   }
-  .label { @apply block text-sm font-medium text-slate-700 mb-1; }
-  .card {
-    @apply rounded-lg bg-white shadow-sm ring-1 ring-slate-200;
+  .btn-blue {
+    @apply btn bg-ocean text-white hover:bg-ocean-deep;
   }
-  .table-head { @apply text-xs uppercase tracking-wide text-slate-500 font-medium; }
-  .pill { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium; }
+  .btn-outline {
+    /* Color (border + text + hover) is set at each call site. */
+    @apply btn border;
+  }
+
+  /* Animated underline link */
+  .link-underline {
+    @apply relative inline-block;
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0% 1px;
+    background-repeat: no-repeat;
+    background-position: left bottom;
+    transition: background-size 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .link-underline:hover {
+    background-size: 100% 1px;
+  }
+}
+
+@layer utilities {
+  /* Outlined / stroke display text */
+  .text-stroke {
+    -webkit-text-stroke: 1.5px currentColor;
+    color: transparent;
+  }
+  @media (min-width: 1024px) {
+    .text-stroke {
+      -webkit-text-stroke: 2px currentColor;
+    }
+  }
+
+  /* Film grain overlay */
+  .grain-overlay::after {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    pointer-events: none;
+    opacity: 0.06;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation: grain 8s steps(6) infinite;
+  }
+}
+
+/* Scroll-reveal base state (progressively enhanced via JS) */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+[data-reveal].is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
 }
