@@ -64,7 +64,7 @@ export function Nav() {
           <a href={SITE.phoneHref} className="font-mono text-xs tracking-wide opacity-70 hover:opacity-100">
             {SITE.phone}
           </a>
-          <a href="#contact" className="btn-blue text-xs">
+          <a href="#contact" data-magnetic className="btn-blue text-xs">
             Start a project <ArrowUpRight className="h-4 w-4" />
           </a>
         </div>

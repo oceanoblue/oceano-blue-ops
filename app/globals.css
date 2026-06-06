@@ -316,3 +316,9 @@ html.loaded .hero-fade {
   opacity: 0;
   animation: pl-fade 0.8s ease forwards;
 }
+
+/* ---------- Magnetic CTAs ---------- */
+[data-magnetic] {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}

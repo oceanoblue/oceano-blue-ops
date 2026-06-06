@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Play, X } from 'lucide-react';
-import { IMAGES } from '@/lib/images';
 import { SITE } from '@/lib/content';
+
+const POSTER = '/studio/studio-poster.jpg';
 
 const BG_SRC = `https://player.vimeo.com/video/${SITE.reelVimeoId}?background=1&autoplay=1&loop=1&muted=1&autopause=0`;
 const PLAY_SRC = `https://player.vimeo.com/video/${SITE.reelVimeoId}?autoplay=1&title=0&byline=0&portrait=0&dnt=1`;
@@ -25,7 +26,7 @@ export function Showreel() {
   return (
     <section id="reel" className="relative h-[100svh] min-h-[520px] w-full overflow-hidden bg-ink text-paper">
       {/* Poster fallback behind the player */}
-      <Image src={IMAGES.studio} alt="" fill sizes="100vw" className="object-cover" aria-hidden />
+      <Image src={POSTER} alt="" fill sizes="100vw" className="object-cover" aria-hidden />
 
       {/* Ambient reel background (cover) */}
       <div className="absolute inset-0 overflow-hidden">

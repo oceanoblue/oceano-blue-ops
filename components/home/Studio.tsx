@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { IMAGES } from '@/lib/images';
+import { IMAGES, PHOTOS } from '@/lib/images';
 import { SITE } from '@/lib/content';
 
 export function Studio() {
@@ -7,22 +7,19 @@ export function Studio() {
     <section id="studio" className="bg-paper py-20 sm:py-28">
       <div className="container-edge">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
-          {/* Real studio footage */}
+          {/* The people behind it */}
           <div className="relative" data-reveal>
-            <div className="relative mx-auto aspect-[9/16] w-full max-w-[420px] overflow-hidden rounded-sm bg-ink shadow-2xl">
-              <video
-                className="h-full w-full object-cover"
-                autoPlay
-                muted
-                loop
-                playsInline
-                poster="/studio/studio-poster.jpg"
-              >
-                <source src="/studio/studio-loop.mp4" type="video/mp4" />
-              </video>
+            <div className="relative mx-auto aspect-[4/5] w-full max-w-[460px] overflow-hidden rounded-sm bg-ink shadow-2xl">
+              <Image
+                src={PHOTOS.gustavo}
+                alt="Gustavo Rattia, co-owner of Oceano Blue Media"
+                fill
+                sizes="(max-width: 1024px) 100vw, 45vw"
+                className="object-cover"
+              />
               <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/10" />
               <span className="absolute bottom-4 left-4 rounded-full bg-ink/60 px-3 py-1 font-mono text-[0.6rem] uppercase tracking-kicker text-paper backdrop-blur-sm">
-                ● Our studio · Bluffton
+                ● Gustavo · Co-owner
               </span>
             </div>
             {/* Lowcountry inset */}

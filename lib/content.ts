@@ -1,7 +1,12 @@
-import { IMAGES } from './images';
+import { IMAGES, PHOTOS } from './images';
 
 /** Real project imagery pulled from the Oceano Blue Webflow CMS (public CDN). */
 const WF = 'https://cdn.prod.website-files.com/69444684984a6f0201f00572';
+/** Extra real case photos (distinct from the homepage covers) for the bento. */
+export const SHOWCASE = {
+  aerial: `${WF}/69f4fcdef4d48923e83174ad_9938ca783fe9b8aeed3dd94a524c38d3-xlarge.jpeg`,
+  event: `${WF}/69f4e51df0dc9af6c10022a3_05688b7ef8bc23f09afc1e1ea2825a7b-xlarge.jpeg`,
+};
 export const WORKS = {
   stee: `${WF}/6984f42193788f5a0914211f_Stee1.jpeg`,
   mike: `${WF}/69f8c581283142b4bfa11eba_Mike.jpeg`,
@@ -41,7 +46,7 @@ export const SERVICES = [
     blurb:
       'From concept to final cut, we craft video content that captures the essence of your brand and commands attention.',
     tags: ['Commercial', 'Brand Film', 'Social Content', 'Advertising', 'Documentary'],
-    image: WORKS.mike,
+    image: PHOTOS.interview,
   },
   {
     no: '02',
@@ -49,7 +54,7 @@ export const SERVICES = [
     blurb:
       'Still images that speak volumes. Every shot is composed with purpose, lit with care, and crafted to represent your brand at its absolute best.',
     tags: ['Brand', 'Lifestyle', 'Corporate', 'Events', 'Editorial'],
-    image: WORKS.stee,
+    image: PHOTOS.team,
   },
   {
     no: '03',
@@ -57,7 +62,7 @@ export const SERVICES = [
     blurb:
       'Confident, character-rich portraits for teams and founders — studio-lit, expertly directed, and retouched with a natural hand.',
     tags: ['Teams', 'Founders', 'Studio', 'On-location'],
-    image: IMAGES.headshot,
+    image: PHOTOS.gustavo,
   },
   {
     no: '04',
@@ -65,7 +70,7 @@ export const SERVICES = [
     blurb:
       'Ground-level architectural photography and aerial drone imaging that showcase craftsmanship from foundation to finish.',
     tags: ['HDR', 'Twilight', 'Drone', 'Walkthroughs'],
-    image: WORKS.southernCoastal,
+    image: PHOTOS.twilight,
   },
   {
     no: '05',

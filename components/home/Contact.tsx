@@ -122,7 +122,7 @@ export function Contact() {
               />
             </div>
 
-            <button type="submit" className="btn-blue mt-2 self-start">
+            <button type="submit" data-magnetic className="btn-blue mt-2 self-start">
               Send inquiry <ArrowUpRight className="h-4 w-4" />
             </button>
             <p className="font-mono text-[0.65rem] leading-relaxed text-paper/40">

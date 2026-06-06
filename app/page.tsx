@@ -6,12 +6,13 @@ import { Cursor } from '@/components/site/Cursor';
 import { Preloader } from '@/components/site/Preloader';
 import { ScrollProgress } from '@/components/site/ScrollProgress';
 import { Parallax } from '@/components/site/Parallax';
+import { Magnetic } from '@/components/site/Magnetic';
 import { Hero } from '@/components/home/Hero';
 import { ClientStrip } from '@/components/home/ClientStrip';
 import { ScrollManifesto } from '@/components/home/ScrollManifesto';
 import { Services } from '@/components/home/Services';
 import { FeaturedWork } from '@/components/home/FeaturedWork';
-import { ScrollScenes } from '@/components/home/ScrollScenes';
+import { ScrollScrubStudio } from '@/components/home/ScrollScrubStudio';
 import { Studio } from '@/components/home/Studio';
 import { Showreel } from '@/components/home/Showreel';
 import { Stats } from '@/components/home/Stats';
@@ -28,6 +29,7 @@ export default function HomePage() {
       <ScrollProgress />
       <RevealProvider />
       <Parallax />
+      <Magnetic />
       <Nav />
       <main>
         <Hero />
@@ -35,7 +37,7 @@ export default function HomePage() {
         <ScrollManifesto />
         <Services />
         <FeaturedWork />
-        <ScrollScenes />
+        <ScrollScrubStudio />
         <Studio />
         <Showreel />
         <Stats />

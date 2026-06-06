@@ -22,6 +22,16 @@ export const IMAGES = {
 
 export type ImageKey = keyof typeof IMAGES;
 
+/** Real Oceano Blue photography pulled from the Webflow site asset library. */
+const WFS = 'https://cdn.prod.website-files.com/69444682984a6f0201f004c9';
+export const PHOTOS = {
+  interview: `${WFS}/69e6cd3dbf084527c4c0381f_Screenshot%202026-04-20%20at%209.04.39%E2%80%AFPM.png`, // on-camera interview (video)
+  team: `${WFS}/69e6cc24ad7209b2dc72a5a4_OBM02627.jpg`, // team group outdoors (photography)
+  twilight: `${WFS}/69e6cde56b7b89e2267d10e4_OBM07703%23twilight.jpeg`, // twilight real estate
+  gustavo: `${WFS}/69f90d2d466fe5ec2e776dac_Gustavo%201x1.png`, // Gustavo portrait
+} as const;
+
+
 /**
  * Cinematic background clips (AI-generated, MP4). Empty string falls back to a
  * still poster image in the component. Filled once the renders complete.

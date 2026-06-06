@@ -21,6 +21,7 @@ export function SpinBadge({
     <a
       href={href}
       data-cursor
+      data-magnetic
       className={`group relative inline-grid aspect-square place-items-center ${color} ${className}`}
       aria-label="Start a project"
     >

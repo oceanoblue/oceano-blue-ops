@@ -1,6 +1,5 @@
 import Image from 'next/image';
-import { IMAGES } from '@/lib/images';
-import { WORKS, WHY } from '@/lib/content';
+import { SHOWCASE, WHY } from '@/lib/content';
 
 function TextCell({ kbd, title, body }: { kbd: string; title: string; body?: string }) {
   return (
@@ -49,7 +48,7 @@ export function Capabilities() {
         </div>
 
         <div className="mt-12 grid auto-rows-[minmax(150px,1fr)] grid-cols-2 gap-4 sm:gap-5 md:grid-cols-4">
-          <ImageCell src={WORKS.southernCoastal} label="Architectural & aerial" className="col-span-2 row-span-2" />
+          <ImageCell src={SHOWCASE.aerial} label="Architectural & aerial" className="col-span-2 row-span-2" />
           <TextCell kbd="01" title={WHY[0].title} body={WHY[0].body} />
           <div className="flex flex-col justify-between gap-6 rounded-sm bg-ocean p-6 text-white" data-reveal>
             <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-white/70">Trusted by</span>
@@ -60,7 +59,7 @@ export function Capabilities() {
           </div>
           <TextCell kbd="02" title={WHY[1].title} body={WHY[1].body} />
           <TextCell kbd="03" title={WHY[2].title} body={WHY[2].body} />
-          <ImageCell src={WORKS.newport} label="Events & corporate" className="col-span-2" />
+          <ImageCell src={SHOWCASE.event} label="Events & corporate" className="col-span-2" />
           <TextCell kbd="Air" title="Aerial & drone" body="Ground and sky, one team." />
           <TextCell kbd="Finish" title="Color & sound" body="Graded and mixed in-house." />
         </div>

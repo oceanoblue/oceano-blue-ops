@@ -68,13 +68,13 @@ export function Hero() {
             watching.
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            <a href="#work" data-cursor className="btn-solid bg-paper text-ink hover:bg-ocean hover:text-white">
+            <a href="#work" data-cursor data-magnetic className="btn-solid bg-paper text-ink hover:bg-ocean hover:text-white">
               See the work
             </a>
-            <a href="#reel" data-cursor className="btn-outline border-paper/40 text-paper hover:bg-paper hover:text-ink">
+            <a href="#reel" data-cursor data-magnetic className="btn-outline border-paper/40 text-paper hover:bg-paper hover:text-ink">
               <Play className="h-4 w-4 fill-current" /> Watch reel
             </a>
-            <a href="#contact" data-cursor className="btn-outline border-paper/40 text-paper hover:bg-paper hover:text-ink">
+            <a href="#contact" data-cursor data-magnetic className="btn-outline border-paper/40 text-paper hover:bg-paper hover:text-ink">
               Start a project <ArrowUpRight className="h-4 w-4" />
             </a>
           </div>
