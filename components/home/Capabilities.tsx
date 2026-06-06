@@ -53,8 +53,9 @@ export function Capabilities() {
           <div className="flex flex-col justify-between gap-6 rounded-sm bg-ocean p-6 text-white" data-reveal>
             <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-white/70">Trusted by</span>
             <div>
-              <div className="font-display text-5xl font-light leading-none tracking-tight">16+</div>
-              <p className="mt-2 font-grotesk text-sm text-white/80">Brands across SC &amp; GA.</p>
+              <div className="font-display text-3xl font-light leading-tight tracking-tight">
+                Brands across the Lowcountry &amp; beyond
+              </div>
             </div>
           </div>
           <TextCell kbd="02" title={WHY[1].title} body={WHY[1].body} />

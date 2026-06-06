@@ -83,10 +83,10 @@ export const SERVICES = [
 ];
 
 export const STATS = [
-  { value: '16+', label: 'Brands served' },
-  { value: 'SC + GA', label: 'On location' },
-  { value: 'Video + Photo', label: 'Full production' },
-  { value: 'Local → National', label: 'Trusted reach' },
+  { value: 'Video + Photo', label: 'Full production studio' },
+  { value: 'Bluffton, SC', label: 'Old Town home base' },
+  { value: 'SC · GA & beyond', label: 'On location' },
+  { value: '5.0 ★', label: 'Client rating' },
 ];
 
 export const WHY = [
