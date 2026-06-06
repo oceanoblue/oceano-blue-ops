@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { VIDEOS } from '@/lib/images';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -68,8 +67,8 @@ export function ScrollScrubStudio() {
       <div ref={media} className="absolute inset-0">
         <video
           ref={video}
-          src={VIDEOS.studioHQ || '/studio/studio-scrub.mp4'}
-          poster="/studio/studio-poster.jpg"
+          src="/studio/studio-hq.mp4"
+          poster="/studio/studio-hq-poster.jpg"
           muted
           loop={!enabled}
           autoPlay={!enabled}
