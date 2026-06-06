@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { VIDEOS } from '@/lib/images';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -14,7 +15,7 @@ const CAPS = [
 
 export function ScrollScrubStudio() {
   const section = useRef<HTMLElement>(null);
-  const video = useRef<HTMLVideoElement>(null);
+  const media = useRef<HTMLDivElement>(null);
   const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
@@ -26,8 +27,6 @@ export function ScrollScrubStudio() {
 
   useEffect(() => {
     if (!enabled || !section.current) return;
-    const v = video.current;
-    v?.pause();
 
     const ctx = gsap.context(() => {
       const caps = gsap.utils.toArray<HTMLElement>('.scrub-cap');
@@ -43,12 +42,10 @@ export function ScrollScrubStudio() {
           pin: true,
           anticipatePin: 1,
           invalidateOnRefresh: true,
-          onUpdate: (self) => {
-            const d = v?.duration;
-            if (v && d && isFinite(d)) v.currentTime = self.progress * d;
-          },
         },
       });
+      // Subtle slow zoom on the footage as you move through
+      if (media.current) tl.fromTo(media.current, { scale: 1.08 }, { scale: 1, ease: 'none' }, 0);
       tl.to(caps[0], { autoAlpha: 0, y: -16, duration: 0.4 }, 0.3)
         .fromTo(caps[1], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.34)
         .to(caps[1], { autoAlpha: 0, y: -16, duration: 0.4 }, 0.63)
@@ -60,18 +57,19 @@ export function ScrollScrubStudio() {
 
   return (
     <section ref={section} className="relative h-[100svh] w-full overflow-hidden bg-ink text-paper">
-      {/* Full-bleed scrubbed video */}
-      <video
-        ref={video}
-        src="/studio/studio-scrub.mp4"
-        poster="/studio/studio-poster.jpg"
-        muted
-        playsInline
-        preload="auto"
-        autoPlay={!enabled}
-        loop={!enabled}
-        className="absolute inset-0 h-full w-full object-cover"
-      />
+      {/* Full-bleed high-quality studio footage (falls back to real footage until the HQ clip is wired) */}
+      <div ref={media} className="absolute inset-0">
+        <video
+          src={VIDEOS.studioHQ || '/studio/studio-scrub.mp4'}
+          poster="/studio/studio-poster.jpg"
+          muted
+          loop
+          autoPlay
+          playsInline
+          preload="auto"
+          className="h-full w-full object-cover"
+        />
+      </div>
       <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-ink/55" />
       <div className="grain-overlay pointer-events-none absolute inset-0 overflow-hidden" />
 
@@ -88,7 +86,6 @@ export function ScrollScrubStudio() {
           </span>
         </div>
 
-        {/* Captions */}
         <div className="relative h-24 max-w-md">
           {(enabled ? CAPS : CAPS.slice(0, 1)).map((c) => (
             <div key={c.n} className="scrub-cap absolute inset-0 flex flex-col justify-end">
