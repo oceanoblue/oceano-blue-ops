@@ -1,3 +1,6 @@
+'use client';
+
+import { useRef } from 'react';
 import Image from 'next/image';
 import { ArrowUpRight } from 'lucide-react';
 import { WORK } from '@/lib/content';
@@ -11,23 +14,62 @@ function Tile({
   className?: string;
   aspect?: string;
 }) {
+  const vid = useRef<HTMLVideoElement>(null);
+
+  const onEnter = () => {
+    const v = vid.current;
+    if (v) {
+      v.currentTime = 0;
+      v.play().catch(() => {});
+    }
+  };
+  const onLeave = () => {
+    const v = vid.current;
+    if (v) {
+      v.pause();
+      v.currentTime = 0;
+    }
+  };
+
   return (
     <a
       href="#contact"
+      data-cursor
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
       className={`group relative block overflow-hidden rounded-sm bg-bone ${aspect} ${className}`}
       data-reveal
     >
-      <Image
-        src={item.image}
-        alt={item.title}
-        fill
-        sizes="(max-width: 768px) 100vw, 50vw"
-        className="object-cover transition-transform duration-[1.2s] ease-editorial group-hover:scale-105"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/5 to-transparent opacity-80 transition-opacity duration-500 group-hover:opacity-100" />
+      <div className="absolute -inset-[12%]" data-parallax="0.05">
+        <Image
+          src={item.image}
+          alt={item.title}
+          fill
+          sizes="(max-width: 768px) 100vw, 50vw"
+          className="object-cover transition-transform duration-[1.2s] ease-editorial group-hover:scale-105"
+        />
+        {item.video && (
+          <video
+            ref={vid}
+            className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-700 group-hover:opacity-100"
+            muted
+            loop
+            playsInline
+            preload="none"
+            poster={item.image}
+          >
+            <source src={item.video} type="video/mp4" />
+          </video>
+        )}
+      </div>
+
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/5 to-transparent opacity-80 transition-opacity duration-500 group-hover:opacity-100" />
       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-5 text-paper sm:p-6">
         <div className="translate-y-1 transition-transform duration-500 ease-editorial group-hover:translate-y-0">
-          <div className="font-mono text-[0.65rem] uppercase tracking-kicker text-paper/75">
+          <div className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-kicker text-paper/75">
+            {item.video && (
+              <span className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-coral" />
+            )}
             {item.category}
           </div>
           <div className="mt-1 font-display text-2xl font-light leading-none tracking-tight sm:text-3xl">
@@ -57,6 +99,7 @@ export function FeaturedWork() {
           </div>
           <a
             href="#contact"
+            data-cursor
             className="btn-outline border-paper/40 text-paper hover:bg-paper hover:text-ink"
           >
             Start your project <ArrowUpRight className="h-4 w-4" />
@@ -67,19 +110,11 @@ export function FeaturedWork() {
           {/* Row 1 */}
           <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-12">
             <Tile item={WORK[0]} className="md:col-span-8" aspect="aspect-[16/10]" />
-            <Tile
-              item={WORK[1]}
-              className="md:col-span-4 md:aspect-auto md:h-full"
-              aspect="aspect-[4/5]"
-            />
+            <Tile item={WORK[1]} className="md:col-span-4 md:aspect-auto md:h-full" aspect="aspect-[4/5]" />
           </div>
           {/* Row 2 */}
           <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-12">
-            <Tile
-              item={WORK[2]}
-              className="md:col-span-4 md:aspect-auto md:h-full"
-              aspect="aspect-[4/5]"
-            />
+            <Tile item={WORK[2]} className="md:col-span-4 md:aspect-auto md:h-full" aspect="aspect-[4/5]" />
             <Tile item={WORK[3]} className="md:col-span-8" aspect="aspect-[16/10]" />
           </div>
           {/* Row 3 */}

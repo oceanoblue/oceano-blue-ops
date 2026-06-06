@@ -1,4 +1,4 @@
-import { IMAGES } from './images';
+import { IMAGES, VIDEOS } from './images';
 
 export const SITE = {
   name: 'Oceano Blue',
@@ -98,12 +98,12 @@ export const PROCESS = [
 ];
 
 export const WORK = [
-  { title: 'Marsh & Tide', category: 'Brand Film', image: IMAGES.lowcountry, span: 'big' },
-  { title: 'Coastal Living', category: 'Real Estate', image: IMAGES.twilightHome, span: 'tall' },
-  { title: 'Founder Series', category: 'Portraits', image: IMAGES.headshot, span: 'tall' },
-  { title: 'In the Studio', category: 'Studio', image: IMAGES.studio, span: 'wide' },
-  { title: 'Still Life No. 4', category: 'Brand Photography', image: IMAGES.brandStill, span: 'std' },
-  { title: 'The Room', category: 'Podcast Studio', image: IMAGES.podcast, span: 'std' },
+  { title: 'Marsh & Tide', category: 'Brand Film', image: IMAGES.lowcountry, video: VIDEOS.marsh, span: 'big' },
+  { title: 'Coastal Living', category: 'Real Estate', image: IMAGES.twilightHome, video: VIDEOS.realEstate, span: 'tall' },
+  { title: 'Founder Series', category: 'Portraits', image: IMAGES.headshot, video: '', span: 'tall' },
+  { title: 'In the Studio', category: 'Studio', image: IMAGES.studio, video: VIDEOS.studioRoom, span: 'wide' },
+  { title: 'Still Life No. 4', category: 'Brand Photography', image: IMAGES.brandStill, video: '', span: 'std' },
+  { title: 'The Room', category: 'Podcast Studio', image: IMAGES.podcast, video: '', span: 'std' },
 ] as const;
 
 export const CLIENT_TYPES = [
