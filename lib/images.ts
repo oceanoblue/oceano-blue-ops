@@ -38,7 +38,7 @@ export const PHOTOS = {
  */
 export const VIDEOS = {
   showreel: `${CDN}/hf_20260606_122752_982a0705-272b-4e5b-96d9-54ad3d791a08.mp4`, // bright white-cyc studio pan
-  studioHQ: '', // polished Seedance studio clip (filled when ready)
+  studioHQ: `${CDN}/hf_20260606_222748_3d2da817-00fd-46a6-84ca-d1882d1da2ae.mp4`, // polished Seedance studio clip (1080p)
   hero: `${CDN}/hf_20260606_122209_48cdf09b-5343-4fe8-8c45-30f8a7bd1aa9.mp4`, // Lowcountry aerial drift
   marsh: `${CDN}/hf_20260606_122209_48cdf09b-5343-4fe8-8c45-30f8a7bd1aa9.mp4`, // Lowcountry aerial drift
   realEstate: `${CDN}/hf_20260606_002726_b5d0a4df-b64f-4399-9357-d16cc3a15ab3.mp4`, // twilight real-estate transition
