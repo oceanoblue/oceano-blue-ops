@@ -7,7 +7,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
 
 const TEXT =
-  'We are a cinematic studio in the Lowcountry — turning brands into films, frames, and stories people actually remember.';
+  'We help organizations communicate clearly through video and visual storytelling — work that is strategic, unforgettable, and timeless.';
 
 export function ScrollManifesto() {
   const section = useRef<HTMLElement>(null);

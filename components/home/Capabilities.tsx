@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import { IMAGES } from '@/lib/images';
+import { WORKS, WHY } from '@/lib/content';
 
 function TextCell({ kbd, title, body }: { kbd: string; title: string; body?: string }) {
   return (
@@ -34,34 +35,34 @@ export function Capabilities() {
       <div className="container-edge">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between" data-reveal>
           <div>
-            <span className="kicker text-ocean">The edge</span>
+            <span className="kicker text-ocean">Why work with us</span>
             <h2 className="mt-4 font-display font-light leading-[0.9] tracking-tight text-giant">
-              Cinema-grade,
+              Every project gets our
               <br />
-              <em className="italic">end to end.</em>
+              <em className="italic">full weight.</em>
             </h2>
           </div>
           <p className="max-w-xs font-grotesk text-sm leading-relaxed opacity-70">
-            One team, the right gear, and a process that gets you something
-            extraordinary — fast.
+            Experience, tools, and creative vision — on every brief, large or
+            small.
           </p>
         </div>
 
         <div className="mt-12 grid auto-rows-[minmax(150px,1fr)] grid-cols-2 gap-4 sm:gap-5 md:grid-cols-4">
-          <ImageCell src={IMAGES.studioDetail} label="Inside the kit" className="col-span-2 row-span-2" />
-          <TextCell kbd="Capture" title="4K cinema cameras" body="Pro bodies & cine glass." />
+          <ImageCell src={WORKS.southernCoastal} label="Architectural & aerial" className="col-span-2 row-span-2" />
+          <TextCell kbd="01" title={WHY[0].title} body={WHY[0].body} />
           <div className="flex flex-col justify-between gap-6 rounded-sm bg-ocean p-6 text-white" data-reveal>
-            <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-white/70">Turnaround</span>
+            <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-white/70">Trusted by</span>
             <div>
-              <div className="font-display text-5xl font-light leading-none tracking-tight">48h</div>
-              <p className="mt-2 font-grotesk text-sm text-white/80">Typical edit delivery.</p>
+              <div className="font-display text-5xl font-light leading-none tracking-tight">16+</div>
+              <p className="mt-2 font-grotesk text-sm text-white/80">Brands across SC &amp; GA.</p>
             </div>
           </div>
-          <TextCell kbd="Air" title="Aerial & drone" body="Sweeping coverage on demand." />
+          <TextCell kbd="02" title={WHY[1].title} body={WHY[1].body} />
+          <TextCell kbd="03" title={WHY[2].title} body={WHY[2].body} />
+          <ImageCell src={WORKS.newport} label="Events & corporate" className="col-span-2" />
+          <TextCell kbd="Air" title="Aerial & drone" body="Ground and sky, one team." />
           <TextCell kbd="Finish" title="Color & sound" body="Graded and mixed in-house." />
-          <ImageCell src={IMAGES.podcast} label="Podcast studio" className="col-span-2" />
-          <TextCell kbd="Set" title="Lighting & grip" body="Teleprompter-ready." />
-          <TextCell kbd="Reach" title="Lowcountry-based" body="Travel-ready, beyond." />
         </div>
       </div>
     </section>

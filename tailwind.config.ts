@@ -30,9 +30,9 @@ const config: Config = {
       },
       fontSize: {
         // Fluid editorial display sizes
-        'mega': ['clamp(3rem, 13vw, 12rem)', { lineHeight: '0.86', letterSpacing: '-0.03em' }],
-        'giant': ['clamp(2.5rem, 8vw, 7rem)', { lineHeight: '0.9', letterSpacing: '-0.02em' }],
-        'huge': ['clamp(2rem, 5vw, 4.5rem)', { lineHeight: '0.95', letterSpacing: '-0.02em' }],
+        'mega': ['clamp(2.75rem, 11.5vw, 10rem)', { lineHeight: '0.88', letterSpacing: '-0.03em' }],
+        'giant': ['clamp(2.25rem, 7vw, 5.75rem)', { lineHeight: '0.92', letterSpacing: '-0.02em' }],
+        'huge': ['clamp(1.9rem, 4.6vw, 4rem)', { lineHeight: '0.98', letterSpacing: '-0.02em' }],
       },
       letterSpacing: {
         kicker: '0.28em',

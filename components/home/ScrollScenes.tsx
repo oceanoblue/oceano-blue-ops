@@ -5,12 +5,13 @@ import Image from 'next/image';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { IMAGES } from '@/lib/images';
+import { WORKS } from '@/lib/content';
 
 gsap.registerPlugin(ScrollTrigger);
 
 const SCENES = [
-  { no: '01', tag: 'Motion', title: 'Film', copy: 'Brand films, commercials & social — shot and cut with cinematic intent.', image: IMAGES.hero },
-  { no: '02', tag: 'Stills', title: 'Photography', copy: 'Brand, product & portrait work with one ownable, consistent look.', image: IMAGES.brandStill },
+  { no: '01', tag: 'Motion', title: 'Film', copy: 'From concept to final cut — video that captures your brand and commands attention.', image: WORKS.mike },
+  { no: '02', tag: 'Stills', title: 'Photography', copy: 'Still images that speak volumes — composed with purpose, lit with care.', image: WORKS.stee },
   { no: '03', tag: 'Space', title: 'The Studio', copy: 'A white-cyc studio in Old Town Bluffton, built for all of it.', image: IMAGES.studio },
 ];
 

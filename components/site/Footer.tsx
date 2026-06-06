@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { ArrowUpRight } from 'lucide-react';
 import { NAV, SITE } from '@/lib/content';
 import { SpinBadge } from '@/components/site/SpinBadge';
@@ -18,14 +19,7 @@ export function Footer() {
 
         <div className="grid gap-12 pt-14 lg:grid-cols-[1.4fr_1fr_1fr]">
           <div>
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-full bg-ocean text-white font-display text-xl leading-none">
-                O
-              </span>
-              <span className="font-grotesk text-lg font-extrabold uppercase tracking-[0.18em]">
-                Oceano Blue
-              </span>
-            </div>
+            <Image src="/brand/logo-blue.png" alt="Oceano Blue Media" width={220} height={51} className="h-9 w-auto" />
             <p className="mt-6 max-w-sm font-display text-2xl font-light leading-tight text-paper/90">
               Cinematic stories, crafted by hand in the Lowcountry.
             </p>

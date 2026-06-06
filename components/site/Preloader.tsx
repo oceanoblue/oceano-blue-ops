@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 
 export function Preloader() {
   const [phase, setPhase] = useState<'in' | 'out' | 'done'>('in');
@@ -41,8 +42,8 @@ export function Preloader() {
   return (
     <div className={`preloader ${phase === 'out' ? 'preloader--out' : ''}`} aria-hidden>
       <div className="preloader__inner">
+        <Image src="/brand/mark-blue.png" alt="" width={64} height={84} className="preloader__mark h-16 w-auto" priority />
         <span className="preloader__kicker font-mono">Oceano Blue Media</span>
-        <span className="preloader__word font-display">Oceano Blue</span>
         <span className="preloader__bar">
           <span className="preloader__fill" />
         </span>

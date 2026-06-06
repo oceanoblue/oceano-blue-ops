@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { Menu, X, ArrowUpRight } from 'lucide-react';
 import { NAV, SITE } from '@/lib/content';
 
@@ -36,18 +37,15 @@ export function Nav() {
               : 'border border-paper/15 bg-paper/5 backdrop-blur-sm'
           }`}
         >
-        <a href="#top" className="group flex items-center gap-3" aria-label="Oceano Blue Media home">
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-ocean text-white font-display text-lg leading-none transition-transform duration-500 ease-editorial group-hover:rotate-[20deg]">
-            O
-          </span>
-          <span className="flex flex-col leading-none">
-            <span className="font-grotesk text-sm font-extrabold uppercase tracking-[0.18em]">
-              Oceano Blue
-            </span>
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.3em] opacity-60">
-              Media Studio
-            </span>
-          </span>
+        <a href="#top" data-cursor className="flex items-center" aria-label="Oceano Blue Media home">
+          <Image
+            src={scrolled ? '/brand/logo-dark.png' : '/brand/logo-blue.png'}
+            alt="Oceano Blue Media"
+            width={160}
+            height={37}
+            priority
+            className="h-7 w-auto sm:h-[30px]"
+          />
         </a>
 
         <nav className="hidden items-center gap-8 md:flex">
@@ -88,9 +86,8 @@ export function Nav() {
         }`}
       >
         <div className="container-edge flex items-center justify-between py-4">
-          <span className="font-grotesk text-sm font-extrabold uppercase tracking-[0.18em]">
-            Oceano Blue
-          </span>
+          <Image src="/brand/logo-blue.png" alt="Oceano Blue Media" width={150} height={35} className="h-7 w-auto" />
+
           <button
             className="grid h-10 w-10 place-items-center"
             onClick={() => setOpen(false)}

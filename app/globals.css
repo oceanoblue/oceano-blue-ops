@@ -311,3 +311,8 @@ html.loaded .hero-fade {
     transform: rotate(360deg);
   }
 }
+
+.preloader__mark {
+  opacity: 0;
+  animation: pl-fade 0.8s ease forwards;
+}

@@ -45,16 +45,20 @@ export function Studio() {
               full brand campaign in a space built for it.
             </p>
             <p className="mt-4 max-w-lg font-grotesk text-base leading-relaxed opacity-75">
-              And when the story lives out in the world, we bring that same
-              film-set discipline on location — across the Lowcountry, Hilton
-              Head, Savannah, and beyond.
+              We work with healthcare systems, real estate firms, cultural
+              institutions, nonprofits, and local governments to create media that
+              informs, connects, and supports real business goals — across the
+              Lowcountry and beyond.
             </p>
 
             <blockquote className="mt-10 border-l-2 border-ocean pl-6">
               <p className="font-display text-2xl font-light italic leading-snug sm:text-3xl">
-                &ldquo;If it&apos;s worth showing, it&apos;s worth shooting
-                beautifully.&rdquo;
+                &ldquo;Clear storytelling and thoughtful production are at the
+                center of every project we deliver.&rdquo;
               </p>
+              <footer className="mt-4 font-mono text-xs uppercase tracking-kicker opacity-70">
+                {SITE.contactName} — {SITE.contactRole}
+              </footer>
             </blockquote>
 
             <div className="mt-8 flex flex-wrap gap-x-10 gap-y-4 font-mono text-xs uppercase tracking-kicker opacity-70">
