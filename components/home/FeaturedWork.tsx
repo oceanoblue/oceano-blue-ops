@@ -35,6 +35,7 @@ function Tile({
     <a
       href="#contact"
       data-cursor
+      data-cursor-label="View"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       className={`group relative block overflow-hidden rounded-sm bg-bone ${aspect} ${className}`}

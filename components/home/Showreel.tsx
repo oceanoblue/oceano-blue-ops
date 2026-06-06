@@ -41,6 +41,7 @@ export function Showreel() {
       <button
         onClick={() => setOpen(true)}
         data-cursor
+        data-cursor-label="Play"
         className="group absolute inset-0 z-10 flex h-full w-full flex-col items-center justify-center text-center"
         aria-label="Play showreel"
       >

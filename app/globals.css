@@ -275,3 +275,39 @@ html.loaded .hero-fade {
 .cursor-ring.is-hidden {
   opacity: 0;
 }
+.cursor-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  mix-blend-mode: normal;
+}
+.cursor-ring.has-label {
+  width: 92px;
+  height: 92px;
+  margin-top: -46px;
+  margin-left: -46px;
+  background: #1452f0;
+  border-color: transparent;
+  mix-blend-mode: normal;
+  display: grid;
+  place-items: center;
+}
+.cursor-ring.has-label .cursor-label {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ---------- Spinning badge ---------- */
+.spin-badge {
+  animation: spin 16s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

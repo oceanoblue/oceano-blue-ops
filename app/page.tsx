@@ -16,6 +16,7 @@ import { Studio } from '@/components/home/Studio';
 import { Showreel } from '@/components/home/Showreel';
 import { Stats } from '@/components/home/Stats';
 import { Process } from '@/components/home/Process';
+import { Capabilities } from '@/components/home/Capabilities';
 import { Contact } from '@/components/home/Contact';
 
 export default function HomePage() {
@@ -39,6 +40,7 @@ export default function HomePage() {
         <Showreel />
         <Stats />
         <Process />
+        <Capabilities />
         <Contact />
       </main>
       <Footer />

@@ -24,13 +24,18 @@ export function Nav() {
 
   return (
     <header
-      className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ease-editorial ${
-        scrolled
-          ? 'bg-paper/80 backdrop-blur-md border-b border-ink/10'
-          : 'bg-transparent border-b border-transparent'
+      className={`fixed inset-x-0 top-0 z-50 transition-colors duration-500 ease-editorial ${
+        scrolled ? 'text-ink' : 'text-paper'
       }`}
     >
-      <div className="container-edge flex items-center justify-between py-4">
+      <div className="container-edge pt-3 sm:pt-4">
+        <div
+          className={`flex items-center justify-between rounded-full px-4 py-2.5 transition-all duration-500 ease-editorial sm:px-5 ${
+            scrolled
+              ? 'border border-ink/10 bg-paper/80 shadow-[0_10px_40px_rgba(0,0,0,0.07)] backdrop-blur-md'
+              : 'border border-paper/15 bg-paper/5 backdrop-blur-sm'
+          }`}
+        >
         <a href="#top" className="group flex items-center gap-3" aria-label="Oceano Blue Media home">
           <span className="grid h-9 w-9 place-items-center rounded-full bg-ocean text-white font-display text-lg leading-none transition-transform duration-500 ease-editorial group-hover:rotate-[20deg]">
             O
@@ -73,6 +78,7 @@ export function Nav() {
         >
           {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
+        </div>
       </div>
 
       {/* Mobile overlay */}

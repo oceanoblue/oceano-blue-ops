@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 export function Cursor() {
   const ring = useRef<HTMLDivElement>(null);
   const dot = useRef<HTMLDivElement>(null);
+  const label = useRef<HTMLSpanElement>(null);
   const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
@@ -24,8 +25,12 @@ export function Cursor() {
         dot.current.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
       }
       const t = e.target as HTMLElement;
-      const interactive = t.closest('a, button, [data-cursor]');
+      const interactive = t.closest('a, button, [data-cursor]') as HTMLElement | null;
+      const labelled = t.closest('[data-cursor-label]') as HTMLElement | null;
       ring.current?.classList.toggle('is-active', !!interactive);
+      const text = labelled?.dataset.cursorLabel || '';
+      if (label.current) label.current.textContent = text;
+      ring.current?.classList.toggle('has-label', !!text);
     };
 
     const loop = () => {
@@ -57,7 +62,9 @@ export function Cursor() {
 
   return (
     <>
-      <div ref={ring} className="cursor-ring" aria-hidden />
+      <div ref={ring} className="cursor-ring" aria-hidden>
+        <span ref={label} className="cursor-label" />
+      </div>
       <div ref={dot} className="cursor-dot" aria-hidden />
     </>
   );

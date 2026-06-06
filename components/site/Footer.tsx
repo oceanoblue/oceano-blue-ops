@@ -1,11 +1,22 @@
 import { ArrowUpRight } from 'lucide-react';
 import { NAV, SITE } from '@/lib/content';
+import { SpinBadge } from '@/components/site/SpinBadge';
 
 export function Footer() {
   return (
-    <footer className="bg-ink text-paper">
+    <footer className="overflow-hidden bg-ink text-paper">
       <div className="container-edge py-16 sm:py-20">
-        <div className="grid gap-12 lg:grid-cols-[1.4fr_1fr_1fr]">
+        {/* Call to action band */}
+        <div className="flex flex-col items-start justify-between gap-10 border-b border-paper/15 pb-14 sm:flex-row sm:items-center" data-reveal>
+          <h2 className="max-w-2xl font-display font-light leading-[0.92] tracking-tight text-huge">
+            Have a project
+            <br />
+            in mind?
+          </h2>
+          <SpinBadge tone="light" className="h-32 w-32 shrink-0 sm:h-40 sm:w-40" />
+        </div>
+
+        <div className="grid gap-12 pt-14 lg:grid-cols-[1.4fr_1fr_1fr]">
           <div>
             <div className="flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-full bg-ocean text-white font-display text-xl leading-none">
@@ -67,6 +78,13 @@ export function Footer() {
           <span className="font-mono uppercase tracking-widest">
             Video · Photography · Bluffton, SC
           </span>
+        </div>
+      </div>
+
+      {/* Oversized wordmark */}
+      <div aria-hidden className="select-none px-2 pb-2">
+        <div className="whitespace-nowrap text-center font-display font-light leading-none tracking-tight text-paper/10 [font-size:23vw]">
+          Oceano Blue
         </div>
       </div>
     </footer>
