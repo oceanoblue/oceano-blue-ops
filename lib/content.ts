@@ -1,4 +1,4 @@
-import { IMAGES, PHOTOS } from './images';
+import { PHOTOS } from './images';
 
 /** Real project imagery pulled from the Oceano Blue Webflow CMS (public CDN). */
 const WF = 'https://cdn.prod.website-files.com/69444684984a6f0201f00572';
@@ -77,8 +77,8 @@ export const SERVICES = [
     title: 'Headshots & Portraits',
     blurb:
       'Confident, character-rich portraits for teams and founders — studio-lit, expertly directed, and retouched with a natural hand.',
-    tags: ['Teams', 'Founders', 'Studio', 'On-location'],
-    image: PHOTOS.gustavo,
+    tags: ['Corporate', 'LinkedIn', 'Executive', 'Team', 'Personal Brand'],
+    image: PHOTOS.headshot,
   },
   {
     no: '04',
@@ -93,16 +93,16 @@ export const SERVICES = [
     title: 'Podcast Studio',
     blurb:
       'A fully treated, camera-ready podcast and content studio in Old Town Bluffton — book the room, we run the gear.',
-    tags: ['Multi-cam', 'Audio', 'Live-stream', 'Editing'],
-    image: IMAGES.podcast,
+    tags: ['Recording', 'Studio Rental', 'Editing', 'Multi-Mic', 'Remote Guest'],
+    image: PHOTOS.podcast,
   },
 ];
 
 export const STATS = [
   { value: '143+', label: 'Projects delivered' },
   { value: '268', label: 'Clients served' },
-  { value: 'Since 2018', label: 'In the Lowcountry' },
-  { value: '5.0 ★', label: 'Client rating' },
+  { value: '5.0', label: 'Google rating · 65+ reviews' },
+  { value: '100%', label: 'Client satisfaction' },
 ];
 
 export const WHY = [

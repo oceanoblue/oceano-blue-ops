@@ -14,12 +14,12 @@ export function Hero() {
           muted
           loop
           playsInline
-          poster={IMAGES.lowcountry}
+          poster={IMAGES.heroStill}
         >
           <source src={VIDEOS.hero} type="video/mp4" />
         </video>
         <Image
-          src={IMAGES.lowcountry}
+          src={IMAGES.heroStill}
           alt=""
           fill
           priority

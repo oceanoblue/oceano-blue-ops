@@ -16,6 +16,7 @@ export const IMAGES = {
   headshot: `${CDN}/hf_20260606_120948_0ad2e5d9-0500-4807-b7e1-6635d6f29f0a.png`, // editorial headshot
   podcast: `${CDN}/hf_20260606_120949_5f524227-6919-498c-8a21-f963ec85d285.png`, // podcast studio
   lowcountry: `${CDN}/hf_20260606_120951_ba7b4fe9-a067-4699-bbea-0198088ad932.png`, // aerial marsh
+  heroStill: `${CDN}/hf_20260606_233429_b69d463d-e128-4147-b05e-14f7fef23706.png`, // photoreal Lowcountry aerial (hero poster)
   interior: `${CDN}/hf_20260606_120155_4ab2af85-525e-4dde-adde-94fcaf03803d.png`, // bright living room
   twilightHome: `${CDN}/hf_20260606_120154_9cad0bb8-17ce-4ab1-91cd-95b1a444429f.png`, // twilight real estate
 } as const;
@@ -29,6 +30,8 @@ export const PHOTOS = {
   team: `${WFS}/69e6cc24ad7209b2dc72a5a4_OBM02627.jpg`, // team group outdoors (photography)
   twilight: `${WFS}/69e6cde56b7b89e2267d10e4_OBM07703%23twilight.jpeg`, // twilight real estate
   gustavo: `${WFS}/69f90d2d466fe5ec2e776dac_Gustavo%201x1.png`, // Gustavo portrait
+  headshot: `${WFS}/69e6cd91367617e3d5b3b65e_OBM09911.jpg`, // real client headshot (Headshots service)
+  podcast: `${WFS}/69e6ce175b00e085c5da6e9d_Screenshot%202026-04-20%20at%209.08.28%E2%80%AFPM.png`, // real podcast shoot
 } as const;
 
 
@@ -39,7 +42,8 @@ export const PHOTOS = {
 export const VIDEOS = {
   showreel: `${CDN}/hf_20260606_122752_982a0705-272b-4e5b-96d9-54ad3d791a08.mp4`, // bright white-cyc studio pan
   studioHQ: `${CDN}/hf_20260606_222748_3d2da817-00fd-46a6-84ca-d1882d1da2ae.mp4`, // polished Seedance studio clip (1080p)
-  hero: `${CDN}/hf_20260606_122209_48cdf09b-5343-4fe8-8c45-30f8a7bd1aa9.mp4`, // Lowcountry aerial drift
+  hero: `${CDN}/hf_20260606_233537_c6d48135-3b01-474c-9ed1-272585fd76a7.mp4`, // photoreal Lowcountry aerial (1080p)
+  heroPrev: `${CDN}/hf_20260606_122209_48cdf09b-5343-4fe8-8c45-30f8a7bd1aa9.mp4`, // previous hero (revert option)
   marsh: `${CDN}/hf_20260606_122209_48cdf09b-5343-4fe8-8c45-30f8a7bd1aa9.mp4`, // Lowcountry aerial drift
   realEstate: `${CDN}/hf_20260606_002726_b5d0a4df-b64f-4399-9357-d16cc3a15ab3.mp4`, // twilight real-estate transition
   studioRoom: `${CDN}/hf_20260606_122752_982a0705-272b-4e5b-96d9-54ad3d791a08.mp4`, // studio pan
