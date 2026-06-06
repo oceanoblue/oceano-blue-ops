@@ -1,10 +1,10 @@
 import Image from 'next/image';
 import { SHOWCASE, WHY } from '@/lib/content';
 
-function TextCell({ kbd, title, body }: { kbd: string; title: string; body?: string }) {
+function TextCell({ kbd, title, body, className = '' }: { kbd: string; title: string; body?: string; className?: string }) {
   return (
     <div
-      className="group flex flex-col justify-between gap-6 rounded-sm border border-ink/12 bg-bone/40 p-6 transition-colors duration-300 hover:bg-ink hover:text-paper"
+      className={`group flex flex-col justify-between gap-6 rounded-sm border border-ink/12 bg-bone/40 p-6 transition-colors duration-300 hover:bg-ink hover:text-paper ${className}`}
       data-reveal
     >
       <span className="font-mono text-[0.65rem] uppercase tracking-kicker opacity-50 group-hover:opacity-80">
@@ -47,8 +47,8 @@ export function Capabilities() {
           </p>
         </div>
 
-        <div className="mt-12 grid auto-rows-[minmax(150px,1fr)] grid-cols-2 gap-4 sm:gap-5 md:grid-cols-4">
-          <ImageCell src={SHOWCASE.aerial} label="Architectural & aerial" className="col-span-2 row-span-2" />
+        <div className="mt-12 grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-4">
+          <ImageCell src={SHOWCASE.aerial} label="Architectural & aerial" className="col-span-2 aspect-[16/10]" />
           <TextCell kbd="01" title={WHY[0].title} body={WHY[0].body} />
           <div className="flex flex-col justify-between gap-6 rounded-sm bg-ocean p-6 text-white" data-reveal>
             <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-white/70">Trusted by</span>
@@ -58,11 +58,11 @@ export function Capabilities() {
               </div>
             </div>
           </div>
+          <ImageCell src={SHOWCASE.event} label="Events & corporate" className="col-span-2 aspect-[16/10]" />
           <TextCell kbd="02" title={WHY[1].title} body={WHY[1].body} />
           <TextCell kbd="03" title={WHY[2].title} body={WHY[2].body} />
-          <ImageCell src={SHOWCASE.event} label="Events & corporate" className="col-span-2" />
-          <TextCell kbd="Air" title="Aerial & drone" body="Ground and sky, one team." />
-          <TextCell kbd="Finish" title="Color & sound" body="Graded and mixed in-house." />
+          <TextCell kbd="Air" title="Aerial & drone" body="Ground and sky, one team." className="col-span-2" />
+          <TextCell kbd="Finish" title="Color & sound" body="Graded and mixed in-house." className="col-span-2" />
         </div>
       </div>
     </section>
