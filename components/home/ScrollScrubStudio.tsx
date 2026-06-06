@@ -14,7 +14,6 @@ const CAPS = [
 
 export function ScrollScrubStudio() {
   const section = useRef<HTMLElement>(null);
-  const stage = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const [enabled, setEnabled] = useState(false);
 
@@ -26,9 +25,9 @@ export function ScrollScrubStudio() {
   }, []);
 
   useEffect(() => {
-    if (!enabled || !section.current || !video.current) return;
+    if (!enabled || !section.current) return;
     const v = video.current;
-    v.pause();
+    v?.pause();
 
     const ctx = gsap.context(() => {
       const caps = gsap.utils.toArray<HTMLElement>('.scrub-cap');
@@ -39,13 +38,14 @@ export function ScrollScrubStudio() {
         scrollTrigger: {
           trigger: section.current,
           start: 'top top',
-          end: '+=300%',
+          end: '+=260%',
           scrub: 0.4,
-          pin: stage.current,
+          pin: true,
           anticipatePin: 1,
+          invalidateOnRefresh: true,
           onUpdate: (self) => {
-            const d = v.duration;
-            if (d && isFinite(d)) v.currentTime = self.progress * d;
+            const d = v?.duration;
+            if (v && d && isFinite(d)) v.currentTime = self.progress * d;
           },
         },
       });
@@ -59,62 +59,47 @@ export function ScrollScrubStudio() {
   }, [enabled]);
 
   return (
-    <section ref={section} className={`relative bg-ink text-paper ${enabled ? 'h-[300vh]' : ''}`}>
-      <div
-        ref={stage}
-        className={
-          enabled
-            ? 'flex min-h-[100svh] flex-col justify-center overflow-hidden py-16'
-            : 'overflow-hidden py-20'
-        }
-      >
-        <div className="grain-overlay pointer-events-none absolute inset-0 overflow-hidden" />
-        <div className="container-edge relative z-10">
-          <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <span className="kicker text-ocean-soft">Inside the studio</span>
-              <h2 className="mt-3 font-display font-light leading-[0.95] tracking-tight text-huge">
-                The room where it
-                <br className="hidden sm:block" /> comes together.
-              </h2>
-            </div>
-            <span className="hidden font-mono text-[0.65rem] uppercase tracking-kicker text-paper/50 sm:block">
-              Scroll to explore ↓
-            </span>
-          </div>
+    <section ref={section} className="relative h-[100svh] w-full overflow-hidden bg-ink text-paper">
+      {/* Full-bleed scrubbed video */}
+      <video
+        ref={video}
+        src="/studio/studio-scrub.mp4"
+        poster="/studio/studio-poster.jpg"
+        muted
+        playsInline
+        preload="auto"
+        autoPlay={!enabled}
+        loop={!enabled}
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-ink/55" />
+      <div className="grain-overlay pointer-events-none absolute inset-0 overflow-hidden" />
 
-          {/* 16:9 cinematic frame */}
-          <div className="relative mx-auto aspect-video w-full max-w-5xl overflow-hidden rounded-sm bg-black shadow-2xl">
-            <video
-              ref={video}
-              src="/studio/studio-scrub.mp4"
-              poster="/studio/studio-poster.jpg"
-              muted
-              playsInline
-              preload="auto"
-              autoPlay={!enabled}
-              loop={!enabled}
-              className="h-full w-full object-cover"
-            />
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/70 via-transparent to-transparent" />
-
-            {/* Captions */}
-            <div className="absolute inset-x-0 bottom-0 p-5 sm:p-8">
-              <div className="relative h-20 sm:h-24">
-                {(enabled ? CAPS : CAPS.slice(0, 1)).map((c) => (
-                  <div key={c.n} className="scrub-cap absolute inset-0 flex flex-col justify-end">
-                    <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-ocean-soft">
-                      {c.n} — {c.t}
-                    </span>
-                    <p className="mt-2 max-w-md font-display text-xl font-light leading-snug tracking-tight sm:text-2xl">
-                      {c.s}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
+      <div className="container-edge relative z-10 flex h-full flex-col justify-between py-20 sm:py-24">
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <span className="kicker text-ocean-soft">Inside the studio</span>
+            <h2 className="mt-4 max-w-[14ch] font-display font-light leading-[0.95] tracking-tight text-giant">
+              The room where it comes together.
+            </h2>
           </div>
+          <span className="hidden font-mono text-[0.65rem] uppercase tracking-kicker text-paper/50 sm:block">
+            Scroll to explore ↓
+          </span>
+        </div>
+
+        {/* Captions */}
+        <div className="relative h-24 max-w-md">
+          {(enabled ? CAPS : CAPS.slice(0, 1)).map((c) => (
+            <div key={c.n} className="scrub-cap absolute inset-0 flex flex-col justify-end">
+              <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-ocean-soft">
+                {c.n} — {c.t}
+              </span>
+              <p className="mt-2 font-display text-xl font-light leading-snug tracking-tight sm:text-2xl">
+                {c.s}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
