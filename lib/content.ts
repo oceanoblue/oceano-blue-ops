@@ -23,6 +23,7 @@ export const SITE = {
   location: 'Old Town Bluffton, SC',
   region: 'The Lowcountry & beyond',
   instagram: 'https://instagram.com/oceanobluemedia',
+  reelVimeoId: '1185993361',
 };
 
 export const NAV = [

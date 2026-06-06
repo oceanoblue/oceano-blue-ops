@@ -3,7 +3,11 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Play, X } from 'lucide-react';
-import { IMAGES, VIDEOS } from '@/lib/images';
+import { IMAGES } from '@/lib/images';
+import { SITE } from '@/lib/content';
+
+const BG_SRC = `https://player.vimeo.com/video/${SITE.reelVimeoId}?background=1&autoplay=1&loop=1&muted=1&autopause=0`;
+const PLAY_SRC = `https://player.vimeo.com/video/${SITE.reelVimeoId}?autoplay=1&title=0&byline=0&portrait=0&dnt=1`;
 
 export function Showreel() {
   const [open, setOpen] = useState(false);
@@ -19,34 +23,33 @@ export function Showreel() {
   }, [open]);
 
   return (
-    <section id="reel" className="relative h-[78svh] min-h-[460px] w-full overflow-hidden bg-ink text-paper">
-      {VIDEOS.showreel ? (
-        <video
-          className="absolute inset-0 h-full w-full scale-[1.06] object-cover"
-          autoPlay
-          muted
-          loop
-          playsInline
-          poster={IMAGES.studio}
-        >
-          <source src={VIDEOS.showreel} type="video/mp4" />
-        </video>
-      ) : (
-        <Image src={IMAGES.studio} alt="Inside the Oceano Blue studio" fill sizes="100vw" className="object-cover" />
-      )}
+    <section id="reel" className="relative h-[100svh] min-h-[520px] w-full overflow-hidden bg-ink text-paper">
+      {/* Poster fallback behind the player */}
+      <Image src={IMAGES.studio} alt="" fill sizes="100vw" className="object-cover" aria-hidden />
 
-      <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/25 to-ink/40" />
+      {/* Ambient reel background (cover) */}
+      <div className="absolute inset-0 overflow-hidden">
+        <iframe
+          src={BG_SRC}
+          title="Oceano Blue showreel"
+          allow="autoplay; fullscreen; picture-in-picture"
+          className="pointer-events-none absolute left-1/2 top-1/2 h-[56.25vw] min-h-full w-[177.78vh] min-w-full -translate-x-1/2 -translate-y-1/2"
+        />
+      </div>
+
+      <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-ink/50" />
       <div className="grain-overlay absolute inset-0 overflow-hidden" />
 
       <button
         onClick={() => setOpen(true)}
         data-cursor
-        data-cursor-label="Play"
+        data-cursor-label="Play reel"
         className="group absolute inset-0 z-10 flex h-full w-full flex-col items-center justify-center text-center"
         aria-label="Play showreel"
       >
-        <span className="grid h-20 w-20 place-items-center rounded-full border border-paper/40 backdrop-blur-sm transition-all duration-500 ease-editorial group-hover:scale-110 group-hover:border-paper group-hover:bg-paper/10">
-          <Play className="h-7 w-7 translate-x-0.5 fill-paper" />
+        <span className="kicker mb-8 text-paper/70" data-reveal>The Reel — 2026</span>
+        <span className="grid h-24 w-24 place-items-center rounded-full border border-paper/40 backdrop-blur-sm transition-all duration-500 ease-editorial group-hover:scale-110 group-hover:border-paper group-hover:bg-paper/10">
+          <Play className="h-8 w-8 translate-x-0.5 fill-paper" />
         </span>
         <h2 className="mt-8 max-w-[18ch] font-display font-light leading-[0.95] tracking-tight text-giant" data-reveal>
           We don&apos;t describe it.
@@ -54,7 +57,7 @@ export function Showreel() {
           We <em className="italic">show</em> it.
         </h2>
         <p className="mt-5 max-w-md font-grotesk text-sm leading-relaxed text-paper/75" data-reveal>
-          Press play — real production value, real cameras, real craft.
+          Press play — a look at what we make for brands across the Lowcountry.
         </p>
       </button>
 
@@ -71,8 +74,17 @@ export function Showreel() {
           >
             <X className="h-6 w-6" />
           </button>
-          <div className="aspect-video w-full max-w-5xl overflow-hidden rounded-sm bg-black shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <video className="h-full w-full" src={VIDEOS.showreel} autoPlay controls loop playsInline />
+          <div
+            className="aspect-video w-full max-w-5xl overflow-hidden rounded-sm bg-black shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <iframe
+              src={PLAY_SRC}
+              title="Oceano Blue Media — Showreel"
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+              className="h-full w-full"
+            />
           </div>
         </div>
       )}
