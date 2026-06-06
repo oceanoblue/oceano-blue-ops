@@ -16,6 +16,7 @@ const CAPS = [
 export function ScrollScrubStudio() {
   const section = useRef<HTMLElement>(null);
   const media = useRef<HTMLDivElement>(null);
+  const video = useRef<HTMLVideoElement>(null);
   const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
@@ -27,6 +28,8 @@ export function ScrollScrubStudio() {
 
   useEffect(() => {
     if (!enabled || !section.current) return;
+    const v = video.current;
+    v?.pause();
 
     const ctx = gsap.context(() => {
       const caps = gsap.utils.toArray<HTMLElement>('.scrub-cap');
@@ -42,6 +45,10 @@ export function ScrollScrubStudio() {
           pin: true,
           anticipatePin: 1,
           invalidateOnRefresh: true,
+          onUpdate: (self) => {
+            const d = v?.duration;
+            if (v && d && isFinite(d)) v.currentTime = self.progress * d;
+          },
         },
       });
       // Subtle slow zoom on the footage as you move through
@@ -60,11 +67,12 @@ export function ScrollScrubStudio() {
       {/* Full-bleed high-quality studio footage (falls back to real footage until the HQ clip is wired) */}
       <div ref={media} className="absolute inset-0">
         <video
+          ref={video}
           src={VIDEOS.studioHQ || '/studio/studio-scrub.mp4'}
           poster="/studio/studio-poster.jpg"
           muted
-          loop
-          autoPlay
+          loop={!enabled}
+          autoPlay={!enabled}
           playsInline
           preload="auto"
           className="h-full w-full object-cover"
