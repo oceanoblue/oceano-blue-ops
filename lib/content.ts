@@ -136,3 +136,22 @@ export const CLIENT_TYPES = [
   'The Richardson Group',
   'Barefoot Technologies',
 ];
+
+/** Real client logos (from the Oceano Blue Webflow asset library). */
+const WFA = 'https://cdn.prod.website-files.com/69444682984a6f0201f004c9';
+export const CLIENT_LOGOS = [
+  { name: 'Novant Health', src: `${WFA}/69444bbaffbcd3523c0fe559_9bde34759b8ffd041f1e8916a1b14924_Novant-Health-logo-wordmark.png` },
+  { name: 'Beaufort Memorial', src: `${WFA}/69444e7bbe1416448ef2bc2e_beaufort-logo.png` },
+  { name: 'Tanger Outlets', src: `${WFA}/69445067ce615f2607e800d5_Tanger_logo.svg.png` },
+  { name: 'Berkeley Hall', src: `${WFA}/69444cb61e328704a50a4023_BerkleyHalllogoHorizontal.png` },
+  { name: 'The Greenery', src: `${WFA}/69444c738dcf894d784e18cf_fb9d70f249edae2614918b360c1db9a1_The%20greenery%20logo.png` },
+  { name: 'Historic Mitchelville', src: `${WFA}/69444dc1f58ba9ecde0643a5_Mitchelville-Logo-2023-Full-Color-1.png` },
+  { name: 'Mike Hostilo Law', src: `${WFA}/69444c2683e7827dc80eec66_47ecdf4c6a4b9b2ef1668191badc3604_MH-Logo-2021-NavyBlue.png` },
+  { name: 'Keller Williams', src: `${WFA}/69445151604a7e0edf2868ab_Keller_Williams_Realty_logo.svg.png` },
+  { name: 'Town of Hilton Head', src: `${WFA}/6944521adfb9a2be01355e03_HHITownLogo.png` },
+  { name: 'Arts Center of Coastal Carolina', src: `${WFA}/69445017180eddd76b1138cb_Arts-Center-of-Coastal-Carolina.jpg.webp` },
+  { name: 'The Richardson Group', src: `${WFA}/694451e23874955c586b4fc1_RGLogO_2024-1.png` },
+  { name: 'Mirasol Health', src: `${WFA}/69444f9ca58e76f5c80604c1_Mirasol-Health-Logo-colored.svg` },
+  { name: 'Moul Realtors', src: `${WFA}/69444f613b711cf245daa6c8_moul-realtors-logo-1.png` },
+  { name: 'GBCC', src: `${WFA}/694451920fd6ac0cfdefda50_GBCC-Logo_Transparent.png` },
+];

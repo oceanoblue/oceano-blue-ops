@@ -1,13 +1,35 @@
-import { Marquee } from '@/components/site/Marquee';
-import { CLIENT_TYPES } from '@/lib/content';
+import { CLIENT_LOGOS } from '@/lib/content';
 
 export function ClientStrip() {
+  const loop = [...CLIENT_LOGOS, ...CLIENT_LOGOS];
   return (
-    <section className="border-b border-ink/15 bg-paper py-6">
-      <div className="container-edge mb-4">
-        <span className="kicker opacity-50">Trusted across the Lowcountry by</span>
+    <section className="border-b border-ink/15 bg-paper py-12 sm:py-16">
+      <div className="container-edge mb-8">
+        <span className="kicker text-ocean">Partners</span>
+        <p className="mt-3 max-w-2xl font-display text-xl font-light leading-snug tracking-tight sm:text-2xl">
+          We collaborate with forward-thinking brands to build lasting creative
+          impact.
+        </p>
       </div>
-      <Marquee items={CLIENT_TYPES} />
+
+      <div className="group relative flex overflow-hidden">
+        {/* edge fades */}
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-paper to-transparent sm:w-32" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-paper to-transparent sm:w-32" />
+        <div className="flex shrink-0 animate-marquee items-center group-hover:[animation-play-state:paused]">
+          {loop.map((logo, i) => (
+            <div key={i} className="flex shrink-0 items-center justify-center px-8 sm:px-12">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logo.src}
+                alt={logo.name}
+                loading="lazy"
+                className="h-8 w-auto max-w-[160px] object-contain opacity-60 grayscale transition-all duration-500 ease-editorial hover:opacity-100 hover:grayscale-0 sm:h-10"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
