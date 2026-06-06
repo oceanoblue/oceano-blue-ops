@@ -27,6 +27,6 @@ export type ImageKey = keyof typeof IMAGES;
  * still poster image in the component. Filled once the renders complete.
  */
 export const VIDEOS = {
-  showreel: '', // bright white-cyc studio pan (filled when ready)
+  showreel: `${CDN}/hf_20260606_122752_982a0705-272b-4e5b-96d9-54ad3d791a08.mp4`, // bright white-cyc studio pan
   marsh: '', // Lowcountry aerial drift (filled when ready)
 } as const;
