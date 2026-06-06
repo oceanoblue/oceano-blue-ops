@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --paper: #f3efe6;
+  --paper: #ffffff;
   --ink: #0b0b0e;
 }
 
@@ -13,14 +13,14 @@
 }
 
 html {
-  scroll-behavior: smooth;
+  overflow-x: clip;
 }
 
 body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-grotesk), system-ui, sans-serif;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 ::selection {

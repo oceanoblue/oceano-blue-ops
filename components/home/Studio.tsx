@@ -1,67 +1,35 @@
-import Image from 'next/image';
-import { IMAGES, PHOTOS } from '@/lib/images';
 import { SITE } from '@/lib/content';
 
 export function Studio() {
   return (
     <section id="studio" className="bg-paper py-20 sm:py-28">
       <div className="container-edge">
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
-          {/* The people behind it */}
-          <div className="relative" data-reveal>
-            <div className="relative mx-auto aspect-[4/5] w-full max-w-[460px] overflow-hidden rounded-sm bg-ink shadow-2xl">
-              <Image
-                src={PHOTOS.gustavo}
-                alt="Gustavo Rattia, co-owner of Oceano Blue Media"
-                fill
-                sizes="(max-width: 1024px) 100vw, 45vw"
-                className="object-cover"
-              />
-              <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/10" />
-              <span className="absolute bottom-4 left-4 rounded-full bg-ink/60 px-3 py-1 font-mono text-[0.6rem] uppercase tracking-kicker text-paper backdrop-blur-sm">
-                ● Gustavo · Co-owner
-              </span>
-            </div>
-            {/* Lowcountry inset */}
-            <div className="absolute -bottom-6 -right-2 hidden aspect-[4/3] w-1/3 overflow-hidden rounded-sm border-4 border-paper bg-bone shadow-xl sm:block lg:-right-6">
-              <Image src={IMAGES.lowcountry} alt="The Lowcountry" fill sizes="20vw" className="object-cover" />
+        <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
+          <div data-reveal>
+            <span className="kicker text-ocean">About Oceano Blue Media</span>
+            <div className="mt-8 flex flex-wrap gap-x-10 gap-y-4 font-mono text-xs uppercase tracking-kicker opacity-60">
+              <span>{SITE.location}</span>
+              <span>{SITE.region}</span>
             </div>
           </div>
 
           <div data-reveal data-reveal-delay={120}>
-            <span className="kicker text-ocean">The studio</span>
-            <h2 className="mt-4 font-display font-light leading-[0.95] tracking-tight text-huge">
-              A bright, white-cyc studio in the
-              <em className="italic"> heart </em>
-              of Bluffton.
+            <h2 className="font-display font-light leading-[0.98] tracking-tight text-huge">
+              We help organizations communicate clearly through video and visual
+              <em className="italic"> storytelling.</em>
             </h2>
-            <p className="mt-6 max-w-lg font-grotesk text-base leading-relaxed opacity-75">
-              Our home base is a clean, professional cyclorama studio in Old Town
-              Bluffton — cinema cameras, pro lighting, and a podcast-ready setup,
-              all under one roof. Come shoot portraits, products, interviews, or a
-              full brand campaign in a space built for it.
+            <p className="mt-8 max-w-xl font-grotesk text-base leading-relaxed opacity-75">
+              Oceano Blue Media is a visual production studio specializing in
+              commercial video, photography, and digital content.
             </p>
-            <p className="mt-4 max-w-lg font-grotesk text-base leading-relaxed opacity-75">
+            <p className="mt-4 max-w-xl font-grotesk text-base leading-relaxed opacity-75">
               We work with healthcare systems, real estate firms, cultural
               institutions, nonprofits, and local governments to create media that
-              informs, connects, and supports real business goals — across the
-              Lowcountry and beyond.
+              informs, connects, and supports real business goals.
             </p>
-
-            <blockquote className="mt-10 border-l-2 border-ocean pl-6">
-              <p className="font-display text-2xl font-light italic leading-snug sm:text-3xl">
-                &ldquo;Clear storytelling and thoughtful production are at the
-                center of every project we deliver.&rdquo;
-              </p>
-              <footer className="mt-4 font-mono text-xs uppercase tracking-kicker opacity-70">
-                {SITE.contactName} — {SITE.contactRole}
-              </footer>
-            </blockquote>
-
-            <div className="mt-8 flex flex-wrap gap-x-10 gap-y-4 font-mono text-xs uppercase tracking-kicker opacity-70">
-              <span>{SITE.location}</span>
-              <span>{SITE.region}</span>
-            </div>
+            <a href="#services" className="btn-blue mt-10 text-xs">
+              Explore our services
+            </a>
           </div>
         </div>
       </div>

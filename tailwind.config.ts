@@ -10,8 +10,8 @@ const config: Config = {
       colors: {
         // Core editorial palette
         ink: '#0B0B0E',        // near-black
-        paper: '#F3EFE6',      // warm off-white
-        bone: '#E7E1D4',       // slightly deeper paper
+        paper: '#FFFFFF',      // white (matches oceanoblue.net)
+        bone: '#EEF1F6',       // light cool gray (placeholders / tints)
         // Brand ocean
         ocean: {
           DEFAULT: '#1452F0',  // electric blue
