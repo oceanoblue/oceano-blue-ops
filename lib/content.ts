@@ -16,6 +16,22 @@ export const WORKS = {
   barefoot: `${WF}/69f4e552a754197b3e719db1_24bcb2c75ce6defeb8d57cce59100e63-xlarge.jpeg`,
 } as const;
 
+/** Real portfolio photos (project case images from the Webflow CMS). */
+export const GALLERY = [
+  { src: `${WF}/69f4fcdef4d48923e83174ad_9938ca783fe9b8aeed3dd94a524c38d3-xlarge.jpeg`, cat: 'Architectural · Aerial' },
+  { src: `${WF}/6984f28682ac7a7bace817a6_Stee2.jpeg`, cat: 'Photography · Portrait' },
+  { src: `${WF}/69f4fdb51caa685cefdde87e_74807bfcd1237fd7c442bbd25767fcbb-xlarge.jpeg`, cat: 'Event Coverage' },
+  { src: `${WF}/69f4e51df0dc9af6c10022a3_05688b7ef8bc23f09afc1e1ea2825a7b-xlarge.jpeg`, cat: 'Corporate · Event' },
+  { src: `${WF}/69f4f6c231bf851acfcaa1cc_73bdb0f54eeedf41c263fa8d83dea91c-xlarge.jpeg`, cat: 'Commercial Video' },
+  { src: `${WF}/69f4fcddf4d48923e8317496_e70bba5b5f9275c8b4ca89329e14fe29-xlarge.jpeg`, cat: 'Custom Homes' },
+  { src: `${WF}/6984f41818c54d81ea6f114a_Stee3.jpeg`, cat: 'Photography · Portrait' },
+  { src: `${WF}/69f4fdb51caa685cefdde88c_ba487061404040335b46bfbf304eca70-xlarge.jpeg`, cat: 'Event Coverage' },
+  { src: `${WF}/69f4deb1e08410a8d6800959_7c332968e47b395d19ae4319c0489b41-xlarge.jpeg`, cat: 'Corporate' },
+  { src: `${WF}/69f4e51df0dc9af6c10022ac_68818c3cca3c84ff325bdea56c258a15-xlarge.jpeg`, cat: 'Hospitality' },
+  { src: `${WF}/69f4fcddf4d48923e8317499_8035759ebb964209e9e7d47a739f668e-xlarge.jpeg`, cat: 'Architecture' },
+  { src: 'https://cdn.prod.website-files.com/69444682984a6f0201f004c9/69e6cde56b7b89e2267d10e4_OBM07703%23twilight.jpeg', cat: 'Real Estate · Twilight' },
+];
+
 export const SITE = {
   name: 'Oceano Blue',
   full: 'Oceano Blue Media',
@@ -83,9 +99,9 @@ export const SERVICES = [
 ];
 
 export const STATS = [
-  { value: 'Video + Photo', label: 'Full production studio' },
-  { value: 'Bluffton, SC', label: 'Old Town home base' },
-  { value: 'SC · GA & beyond', label: 'On location' },
+  { value: '143+', label: 'Projects delivered' },
+  { value: '268', label: 'Clients served' },
+  { value: 'Since 2018', label: 'In the Lowcountry' },
   { value: '5.0 ★', label: 'Client rating' },
 ];
 
