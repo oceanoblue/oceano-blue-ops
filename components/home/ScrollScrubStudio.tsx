@@ -29,6 +29,9 @@ export function ScrollScrubStudio() {
     const v = video.current;
     // Prime the decoder (esp. iOS) so currentTime scrubbing is responsive on touch.
     v?.play().then(() => v?.pause()).catch(() => {});
+    // Re-measure once the video metadata is in, so pin start/end are accurate.
+    const onMeta = () => ScrollTrigger.refresh();
+    v?.addEventListener('loadedmetadata', onMeta);
 
     const ctx = gsap.context(() => {
       const caps = gsap.utils.toArray<HTMLElement>('.scrub-cap');
@@ -58,7 +61,10 @@ export function ScrollScrubStudio() {
         .fromTo(caps[2], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.57);
     }, section);
 
-    return () => ctx.revert();
+    return () => {
+      v?.removeEventListener('loadedmetadata', onMeta);
+      ctx.revert();
+    };
   }, [enabled]);
 
   return (

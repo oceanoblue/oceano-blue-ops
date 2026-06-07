@@ -12,12 +12,19 @@ export function SmoothScroll() {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce) return;
 
+    // Always start at the top on (re)load. Browser scroll-restoration fights
+    // Lenis + GSAP pinning on refresh — the pin gets measured from a restored
+    // scroll position, producing white gaps / a frozen pinned section.
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    window.scrollTo(0, 0);
+
     const lenis = new Lenis({
       duration: 1.15,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       smoothWheel: true,
       touchMultiplier: 1.6,
     });
+    lenis.scrollTo(0, { immediate: true });
 
     // Drive Lenis from GSAP's ticker so ScrollTrigger + smooth scroll stay in sync
     lenis.on('scroll', ScrollTrigger.update);
