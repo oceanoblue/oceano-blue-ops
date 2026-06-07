@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { SITE } from '@/lib/content';
 
 export function Studio() {
@@ -27,9 +28,9 @@ export function Studio() {
               institutions, nonprofits, and local governments to create media that
               informs, connects, and supports real business goals.
             </p>
-            <a href="#services" className="btn-blue mt-10 text-xs">
+            <Link href="/services" className="btn-blue mt-10 text-xs">
               Explore our services
-            </a>
+            </Link>
           </div>
         </div>
       </div>

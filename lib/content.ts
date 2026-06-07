@@ -48,11 +48,10 @@ export const SITE = {
 };
 
 export const NAV = [
-  { label: 'Work', href: '#work' },
-  { label: 'Services', href: '#services' },
-  { label: 'Studio', href: '#studio' },
-  { label: 'Process', href: '#process' },
-  { label: 'Contact', href: '#contact' },
+  { label: 'Work', href: '/work' },
+  { label: 'Services', href: '/services' },
+  { label: 'Studio', href: '/studio' },
+  { label: 'Contact', href: '/contact' },
 ];
 
 export const SERVICES = [

@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { NAV, SITE } from '@/lib/content';
 import { SpinBadge } from '@/components/site/SpinBadge';
@@ -14,7 +15,7 @@ export function Footer() {
             <br />
             in mind?
           </h2>
-          <SpinBadge tone="light" className="h-32 w-32 shrink-0 sm:h-40 sm:w-40" />
+          <SpinBadge href="/contact" tone="light" className="h-32 w-32 shrink-0 sm:h-40 sm:w-40" />
         </div>
 
         <div className="grid gap-12 pt-14 lg:grid-cols-[1.4fr_1fr_1fr]">
@@ -23,9 +24,9 @@ export function Footer() {
             <p className="mt-6 max-w-sm font-display text-2xl font-light leading-tight text-paper/90">
               Cinematic stories, crafted by hand in the Lowcountry.
             </p>
-            <a href="#contact" className="btn-blue mt-8 text-xs">
+            <Link href="/contact" className="btn-blue mt-8 text-xs">
               Start a project <ArrowUpRight className="h-4 w-4" />
-            </a>
+            </Link>
           </div>
 
           <div>
@@ -33,9 +34,9 @@ export function Footer() {
             <ul className="mt-5 space-y-3">
               {NAV.map((item) => (
                 <li key={item.href}>
-                  <a href={item.href} className="link-underline text-paper/85 hover:text-white">
+                  <Link href={item.href} className="link-underline text-paper/85 hover:text-white">
                     {item.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>

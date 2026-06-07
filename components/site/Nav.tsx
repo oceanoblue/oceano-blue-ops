@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Menu, X, ArrowUpRight } from 'lucide-react';
 import { NAV, SITE } from '@/lib/content';
 
@@ -37,45 +38,45 @@ export function Nav() {
               : 'border border-paper/15 bg-paper/5 backdrop-blur-sm'
           }`}
         >
-        <a href="#top" data-cursor className="flex items-center" aria-label="Oceano Blue Media home">
-          <Image
-            src={scrolled ? '/brand/logo-dark.png' : '/brand/logo-blue.png'}
-            alt="Oceano Blue Media"
-            width={160}
-            height={37}
-            priority
-            className="h-7 w-auto sm:h-[30px]"
-          />
-        </a>
+          <Link href="/" data-cursor className="flex items-center" aria-label="Oceano Blue Media home">
+            <Image
+              src={scrolled ? '/brand/logo-dark.png' : '/brand/logo-blue.png'}
+              alt="Oceano Blue Media"
+              width={160}
+              height={37}
+              priority
+              className="h-7 w-auto sm:h-[30px]"
+            />
+          </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
-          {NAV.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="link-underline font-grotesk text-sm font-medium uppercase tracking-wide"
-            >
-              {item.label}
+          <nav className="hidden items-center gap-8 md:flex">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="link-underline font-grotesk text-sm font-medium uppercase tracking-wide"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="hidden items-center gap-3 md:flex">
+            <a href={SITE.phoneHref} className="font-mono text-xs tracking-wide opacity-70 hover:opacity-100">
+              {SITE.phone}
             </a>
-          ))}
-        </nav>
+            <Link href="/contact" data-magnetic className="btn-blue text-xs">
+              Start a project <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </div>
 
-        <div className="hidden items-center gap-3 md:flex">
-          <a href={SITE.phoneHref} className="font-mono text-xs tracking-wide opacity-70 hover:opacity-100">
-            {SITE.phone}
-          </a>
-          <a href="#contact" data-magnetic className="btn-blue text-xs">
-            Start a project <ArrowUpRight className="h-4 w-4" />
-          </a>
-        </div>
-
-        <button
-          className="grid h-10 w-10 place-items-center md:hidden"
-          onClick={() => setOpen((v) => !v)}
-          aria-label={open ? 'Close menu' : 'Open menu'}
-        >
-          {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
+          <button
+            className="grid h-10 w-10 place-items-center md:hidden"
+            onClick={() => setOpen((v) => !v)}
+            aria-label={open ? 'Close menu' : 'Open menu'}
+          >
+            {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
         </div>
       </div>
 
@@ -87,7 +88,6 @@ export function Nav() {
       >
         <div className="container-edge flex items-center justify-between py-4">
           <Image src="/brand/logo-blue.png" alt="Oceano Blue Media" width={150} height={35} className="h-7 w-auto" />
-
           <button
             className="grid h-10 w-10 place-items-center"
             onClick={() => setOpen(false)}
@@ -98,7 +98,7 @@ export function Nav() {
         </div>
         <nav className="container-edge flex flex-1 flex-col justify-center gap-2 pb-20">
           {NAV.map((item, i) => (
-            <a
+            <Link
               key={item.href}
               href={item.href}
               onClick={() => setOpen(false)}
@@ -106,7 +106,7 @@ export function Nav() {
               style={{ transitionDelay: `${i * 30}ms` }}
             >
               {item.label}
-            </a>
+            </Link>
           ))}
           <div className="mt-10 flex flex-col gap-2 font-mono text-sm opacity-80">
             <a href={SITE.phoneHref}>{SITE.phone}</a>
