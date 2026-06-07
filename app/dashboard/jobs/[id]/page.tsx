@@ -38,7 +38,7 @@ export default async function JobDetailPage({
   const { data: job } = await supabase
     .from('jobs')
     .select(
-      'id, job_number, title, description, status, priority, language, due_date, scheduled_at, next_action, created_at, clients(full_name), projects(id, name), job_types(name, category)'
+      'id, job_number, title, description, status, priority, language, due_date, scheduled_at, next_action, created_at, clients(full_name), projects(id, name), job_types(key, name, category)'
     )
     .eq('id', params.id)
     .maybeSingle();
@@ -146,9 +146,26 @@ async function TabContent({ tab, jobId, job }: { tab: string; jobId: string; job
       .select('id, filename, media_type, asset_type, status')
       .eq('job_id', jobId)
       .limit(100);
-    if (!assets || assets.length === 0) return <Empty>No assets registered for this job yet.</Empty>;
+    const isRePhoto = job.job_types?.key === 'real_estate_photo';
+    const rescueLink = isRePhoto ? (
+      <Link
+        href={`/dashboard/jobs/${jobId}/photo-rescue`}
+        className="btn-secondary mb-3 inline-flex w-fit"
+      >
+        Open Photo Rescue (ingest + bracket review + QC) →
+      </Link>
+    ) : null;
+    if (!assets || assets.length === 0)
+      return (
+        <div className="flex flex-col">
+          {rescueLink}
+          <Empty>No assets registered for this job yet.</Empty>
+        </div>
+      );
     return (
-      <ul className="card divide-y divide-slate-100">
+      <div className="flex flex-col">
+        {rescueLink}
+        <ul className="card divide-y divide-slate-100">
         {assets.map((a: any) => (
           <li key={a.id} className="flex items-center justify-between px-4 py-3 text-sm">
             <span className="font-medium text-slate-800">{a.filename ?? a.id}</span>
@@ -157,7 +174,8 @@ async function TabContent({ tab, jobId, job }: { tab: string; jobId: string; job
             </span>
           </li>
         ))}
-      </ul>
+        </ul>
+      </div>
     );
   }
 

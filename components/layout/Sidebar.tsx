@@ -20,6 +20,7 @@ import {
   Zap,
   Plug,
   Send,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -47,6 +48,7 @@ const REAL_ESTATE: NavItem[] = [
   { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/dashboard/listings', label: 'Listings', icon: Home },
   { href: '/dashboard/photos', label: 'Photos', icon: ImageIcon },
+  { href: '/dashboard/photo-rescue', label: 'Photo Rescue', icon: Sparkles },
   { href: '/dashboard/products', label: 'Products', icon: Package },
 ];
 
