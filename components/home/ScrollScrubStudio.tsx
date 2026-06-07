@@ -56,61 +56,54 @@ export function ScrollScrubStudio() {
         .fromTo(caps[1], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.3)
         .to(caps[1], { autoAlpha: 0, y: -16, duration: 0.4 }, 0.52)
         .fromTo(caps[2], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.57);
-      // Exit: the whole stage slides up and out in the final stretch, revealing
-      // the next (white) section — so the footage stays fully visible the whole
-      // way down and never reappears as a frozen "still" below the animation.
-      tl.to('.scrub-stage', { yPercent: -100, ease: 'none', duration: 0.16 }, 1.04);
     }, section);
 
     return () => ctx.revert();
   }, [enabled]);
 
   return (
-    <section ref={section} className="relative h-[100svh] w-full overflow-hidden bg-paper text-paper">
-      {/* Everything that animates lives in one stage that slides up and out at the end. */}
-      <div className="scrub-stage absolute inset-0 bg-ink">
-        {/* Full-bleed high-quality studio footage */}
-        <div ref={media} className="absolute inset-0">
-          <video
-            ref={video}
-            src="/studio/studio-hq.mp4"
-            poster="/studio/studio-hq-poster.jpg"
-            muted
-            loop={!enabled}
-            autoPlay={!enabled}
-            playsInline
-            preload="auto"
-            className="h-full w-full object-cover"
-          />
+    <section ref={section} className="relative h-[100svh] w-full overflow-hidden bg-ink text-paper">
+      {/* Full-bleed high-quality studio footage (falls back to real footage until the HQ clip is wired) */}
+      <div ref={media} className="absolute inset-0">
+        <video
+          ref={video}
+          src="/studio/studio-hq.mp4"
+          poster="/studio/studio-hq-poster.jpg"
+          muted
+          loop={!enabled}
+          autoPlay={!enabled}
+          playsInline
+          preload="auto"
+          className="h-full w-full object-cover"
+        />
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-ink/55" />
+      <div className="grain-overlay pointer-events-none absolute inset-0 overflow-hidden" />
+
+      <div className="scrub-content container-edge relative z-10 flex h-full flex-col justify-between py-20 sm:py-24">
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <span className="kicker text-ocean-soft">Inside the studio</span>
+            <h2 className="mt-4 max-w-[14ch] font-display font-light leading-[0.95] tracking-tight text-giant">
+              The room where it comes together.
+            </h2>
+          </div>
+          <span className="hidden font-mono text-[0.65rem] uppercase tracking-kicker text-paper/50 sm:block">
+            Scroll to explore ↓
+          </span>
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-ink/55" />
-        <div className="grain-overlay pointer-events-none absolute inset-0 overflow-hidden" />
 
-        <div className="scrub-content container-edge relative z-10 flex h-full flex-col justify-between py-20 sm:py-24">
-          <div className="flex items-start justify-between gap-6">
-            <div>
-              <span className="kicker text-ocean-soft">Inside the studio</span>
-              <h2 className="mt-4 max-w-[14ch] font-display font-light leading-[0.95] tracking-tight text-giant">
-                The room where it comes together.
-              </h2>
+        <div className="relative h-24 max-w-md">
+          {(enabled ? CAPS : CAPS.slice(0, 1)).map((c) => (
+            <div key={c.n} className="scrub-cap absolute inset-0 flex flex-col justify-end">
+              <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-ocean-soft">
+                {c.n} — {c.t}
+              </span>
+              <p className="mt-2 font-display text-xl font-light leading-snug tracking-tight sm:text-2xl">
+                {c.s}
+              </p>
             </div>
-            <span className="hidden font-mono text-[0.65rem] uppercase tracking-kicker text-paper/50 sm:block">
-              Scroll to explore ↓
-            </span>
-          </div>
-
-          <div className="relative h-24 max-w-md">
-            {(enabled ? CAPS : CAPS.slice(0, 1)).map((c) => (
-              <div key={c.n} className="scrub-cap absolute inset-0 flex flex-col justify-end">
-                <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-ocean-soft">
-                  {c.n} — {c.t}
-                </span>
-                <p className="mt-2 font-display text-xl font-light leading-snug tracking-tight sm:text-2xl">
-                  {c.s}
-                </p>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
     </section>
