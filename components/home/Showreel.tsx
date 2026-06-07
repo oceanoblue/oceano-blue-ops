@@ -4,14 +4,23 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Play, X } from 'lucide-react';
 import { SITE } from '@/lib/content';
+import { IMAGES } from '@/lib/images';
 
-const POSTER = '/studio/studio-poster.jpg';
+const POSTER = IMAGES.hero;
 
 const BG_SRC = `https://player.vimeo.com/video/${SITE.reelVimeoId}?background=1&autoplay=1&loop=1&muted=1&autopause=0`;
 const PLAY_SRC = `https://player.vimeo.com/video/${SITE.reelVimeoId}?autoplay=1&title=0&byline=0&portrait=0&dnt=1`;
 
 export function Showreel() {
   const [open, setOpen] = useState(false);
+  // Vimeo background mode can't autoplay on mobile (renders black), so we only
+  // mount the ambient player on larger pointer-capable screens and fall back to
+  // the cinematic poster everywhere else. Tapping play still opens the reel.
+  const [ambient, setAmbient] = useState(false);
+
+  useEffect(() => {
+    setAmbient(window.matchMedia('(min-width: 768px)').matches);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
@@ -28,15 +37,17 @@ export function Showreel() {
       {/* Poster fallback behind the player */}
       <Image src={POSTER} alt="" fill sizes="100vw" className="object-cover" aria-hidden />
 
-      {/* Ambient reel background (cover) */}
-      <div className="absolute inset-0 overflow-hidden">
-        <iframe
-          src={BG_SRC}
-          title="Oceano Blue showreel"
-          allow="autoplay; fullscreen; picture-in-picture"
-          className="pointer-events-none absolute left-1/2 top-1/2 h-[56.25vw] min-h-full w-[177.78vh] min-w-full -translate-x-1/2 -translate-y-1/2"
-        />
-      </div>
+      {/* Ambient reel background (cover) — desktop only; mobile keeps the poster */}
+      {ambient && (
+        <div className="absolute inset-0 overflow-hidden">
+          <iframe
+            src={BG_SRC}
+            title="Oceano Blue showreel"
+            allow="autoplay; fullscreen; picture-in-picture"
+            className="pointer-events-none absolute left-1/2 top-1/2 h-[56.25vw] min-h-full w-[177.78vh] min-w-full -translate-x-1/2 -translate-y-1/2"
+          />
+        </div>
+      )}
 
       <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-ink/50" />
       <div className="grain-overlay absolute inset-0 overflow-hidden" />
