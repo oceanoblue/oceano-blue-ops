@@ -1,10 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { gsap } from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-
-gsap.registerPlugin(ScrollTrigger);
 
 const CAPS = [
   { n: '01', t: 'The room', s: 'A white-cyc studio in Old Town Bluffton.' },
@@ -13,103 +9,104 @@ const CAPS = [
 ];
 
 export function ScrollScrubStudio() {
-  const section = useRef<HTMLElement>(null);
+  const wrap = useRef<HTMLElement>(null);
   const media = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
-  const [enabled, setEnabled] = useState(false);
+  const [cap, setCap] = useState(0);
 
   useEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) return;
-    setEnabled(true);
-  }, []);
-
-  useEffect(() => {
-    if (!enabled || !section.current) return;
+    const w = wrap.current;
     const v = video.current;
+    if (!w || reduce) return;
+
     // Prime the decoder (esp. iOS) so currentTime scrubbing is responsive on touch.
     v?.play().then(() => v?.pause()).catch(() => {});
-    // Re-measure once the video metadata is in, so pin start/end are accurate.
-    const onMeta = () => ScrollTrigger.refresh();
-    v?.addEventListener('loadedmetadata', onMeta);
 
-    const ctx = gsap.context(() => {
-      const caps = gsap.utils.toArray<HTMLElement>('.scrub-cap');
-      gsap.set(caps, { autoAlpha: 0, y: 16 });
-      gsap.set(caps[0], { autoAlpha: 1, y: 0 });
+    let raf = 0;
+    let running = false;
+    const tick = () => {
+      const rect = w.getBoundingClientRect();
+      const total = rect.height - window.innerHeight;
+      const p = total > 0 ? Math.min(Math.max(-rect.top / total, 0), 1) : 0;
+      if (v && v.duration && isFinite(v.duration)) v.currentTime = p * v.duration;
+      if (media.current) media.current.style.transform = `scale(${(1.08 - 0.08 * p).toFixed(4)})`;
+      setCap(p < 0.4 ? 0 : p < 0.7 ? 1 : 2);
+      if (running) raf = requestAnimationFrame(tick);
+    };
 
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: section.current,
-          start: 'top top',
-          end: '+=220%',
-          scrub: 0.4,
-          pin: true,
-          anticipatePin: 1,
-          invalidateOnRefresh: true,
-          onUpdate: (self) => {
-            const d = v?.duration;
-            if (v && d && isFinite(d)) v.currentTime = self.progress * d;
-          },
-        },
-      });
-      // Subtle slow zoom on the footage as you move through
-      if (media.current) tl.fromTo(media.current, { scale: 1.08 }, { scale: 1, ease: 'none' }, 0);
-      tl.to(caps[0], { autoAlpha: 0, y: -16, duration: 0.4 }, 0.25)
-        .fromTo(caps[1], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.3)
-        .to(caps[1], { autoAlpha: 0, y: -16, duration: 0.4 }, 0.52)
-        .fromTo(caps[2], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.57);
-    }, section);
+    // Only run the scrub loop while the section is on/near screen.
+    const io = new IntersectionObserver(
+      (entries) => {
+        const onScreen = entries[0].isIntersecting;
+        if (onScreen && !running) {
+          running = true;
+          raf = requestAnimationFrame(tick);
+        } else if (!onScreen && running) {
+          running = false;
+          cancelAnimationFrame(raf);
+        }
+      },
+      { rootMargin: '200px 0px' }
+    );
+    io.observe(w);
 
     return () => {
-      v?.removeEventListener('loadedmetadata', onMeta);
-      ctx.revert();
+      running = false;
+      cancelAnimationFrame(raf);
+      io.disconnect();
     };
-  }, [enabled]);
+  }, []);
 
   return (
-    <section ref={section} className="relative h-[100svh] w-full overflow-hidden bg-ink text-paper">
-      {/* Full-bleed high-quality studio footage (falls back to real footage until the HQ clip is wired) */}
-      <div ref={media} className="absolute inset-0">
-        <video
-          ref={video}
-          src="/studio/studio-hq.mp4"
-          poster="/studio/studio-hq-poster.jpg"
-          muted
-          loop={!enabled}
-          autoPlay={!enabled}
-          playsInline
-          preload="auto"
-          className="h-full w-full object-cover"
-        />
-      </div>
-      <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-ink/55" />
-      <div className="grain-overlay pointer-events-none absolute inset-0 overflow-hidden" />
-
-      <div className="scrub-content container-edge relative z-10 flex h-full flex-col justify-between py-20 sm:py-24">
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <span className="kicker text-ocean-soft">Inside the studio</span>
-            <h2 className="mt-4 max-w-[14ch] font-display font-light leading-[0.95] tracking-tight text-giant">
-              The room where it comes together.
-            </h2>
-          </div>
-          <span className="hidden font-mono text-[0.65rem] uppercase tracking-kicker text-paper/50 sm:block">
-            Scroll to explore ↓
-          </span>
+    // Tall scroll track. The visual sticks (native CSS) for the duration — no
+    // GSAP pin / spacer, so it can't leave white gaps or a duplicated still.
+    <section ref={wrap} className="relative h-[280vh]">
+      <div className="sticky top-0 h-[100svh] w-full overflow-hidden bg-ink text-paper">
+        {/* Full-bleed high-quality studio footage */}
+        <div ref={media} className="absolute inset-0 will-change-transform">
+          <video
+            ref={video}
+            src="/studio/studio-hq.mp4"
+            poster="/studio/studio-hq-poster.jpg"
+            muted
+            playsInline
+            preload="auto"
+            className="h-full w-full object-cover"
+          />
         </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-ink/55" />
+        <div className="grain-overlay pointer-events-none absolute inset-0 overflow-hidden" />
 
-        <div className="relative h-24 max-w-md">
-          {(enabled ? CAPS : CAPS.slice(0, 1)).map((c) => (
-            <div key={c.n} className="scrub-cap absolute inset-0 flex flex-col justify-end">
-              <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-ocean-soft">
-                {c.n} — {c.t}
-              </span>
-              <p className="mt-2 font-display text-xl font-light leading-snug tracking-tight sm:text-2xl">
-                {c.s}
-              </p>
+        <div className="container-edge relative z-10 flex h-full flex-col justify-between py-20 sm:py-24">
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <span className="kicker text-ocean-soft">Inside the studio</span>
+              <h2 className="mt-4 max-w-[14ch] font-display font-light leading-[0.95] tracking-tight text-giant">
+                The room where it comes together.
+              </h2>
             </div>
-          ))}
+            <span className="hidden font-mono text-[0.65rem] uppercase tracking-kicker text-paper/50 sm:block">
+              Scroll to explore ↓
+            </span>
+          </div>
+
+          <div className="relative h-24 max-w-md">
+            {CAPS.map((c, i) => (
+              <div
+                key={c.n}
+                className="absolute inset-0 flex flex-col justify-end transition-all duration-500 ease-editorial"
+                style={{ opacity: cap === i ? 1 : 0, transform: `translateY(${cap === i ? 0 : 16}px)` }}
+              >
+                <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-ocean-soft">
+                  {c.n} — {c.t}
+                </span>
+                <p className="mt-2 font-display text-xl font-light leading-snug tracking-tight sm:text-2xl">
+                  {c.s}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
