@@ -56,10 +56,6 @@ export function ScrollScrubStudio() {
         .fromTo(caps[1], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.3)
         .to(caps[1], { autoAlpha: 0, y: -16, duration: 0.4 }, 0.52)
         .fromTo(caps[2], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.57);
-      // Exit: dissolve the footage + captions before the pin releases so the
-      // frozen final frame never reappears as a "still" below the animation.
-      tl.to(media.current, { autoAlpha: 0, duration: 0.18 }, 0.86)
-        .to('.scrub-content', { autoAlpha: 0, duration: 0.18 }, 0.86);
     }, section);
 
     return () => ctx.revert();
