@@ -39,7 +39,7 @@ export function ScrollScrubStudio() {
         scrollTrigger: {
           trigger: section.current,
           start: 'top top',
-          end: '+=260%',
+          end: '+=220%',
           scrub: 0.4,
           pin: true,
           anticipatePin: 1,
@@ -52,10 +52,14 @@ export function ScrollScrubStudio() {
       });
       // Subtle slow zoom on the footage as you move through
       if (media.current) tl.fromTo(media.current, { scale: 1.08 }, { scale: 1, ease: 'none' }, 0);
-      tl.to(caps[0], { autoAlpha: 0, y: -16, duration: 0.4 }, 0.3)
-        .fromTo(caps[1], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.34)
-        .to(caps[1], { autoAlpha: 0, y: -16, duration: 0.4 }, 0.63)
-        .fromTo(caps[2], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.67);
+      tl.to(caps[0], { autoAlpha: 0, y: -16, duration: 0.4 }, 0.25)
+        .fromTo(caps[1], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.3)
+        .to(caps[1], { autoAlpha: 0, y: -16, duration: 0.4 }, 0.52)
+        .fromTo(caps[2], { y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.57);
+      // Exit: dissolve the footage + captions before the pin releases so the
+      // frozen final frame never reappears as a "still" below the animation.
+      tl.to(media.current, { autoAlpha: 0, duration: 0.18 }, 0.86)
+        .to('.scrub-content', { autoAlpha: 0, duration: 0.18 }, 0.86);
     }, section);
 
     return () => ctx.revert();
@@ -80,7 +84,7 @@ export function ScrollScrubStudio() {
       <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-ink/55" />
       <div className="grain-overlay pointer-events-none absolute inset-0 overflow-hidden" />
 
-      <div className="container-edge relative z-10 flex h-full flex-col justify-between py-20 sm:py-24">
+      <div className="scrub-content container-edge relative z-10 flex h-full flex-col justify-between py-20 sm:py-24">
         <div className="flex items-start justify-between gap-6">
           <div>
             <span className="kicker text-ocean-soft">Inside the studio</span>
