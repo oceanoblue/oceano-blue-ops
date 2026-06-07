@@ -45,7 +45,7 @@ export const SITE = {
   region: 'The Lowcountry & beyond',
   instagram: 'https://instagram.com/oceanobluemedia',
   reelVimeoId: '1185993361',
-  honeybookUrl: 'https://www.honeybook.com/widget/oceano_blue_150600/cf_id/62869802d2bc8603976f1d5e',
+  honeybookPid: '5dde6b893bf0cf001839b151',
 };
 
 export const NAV = [
