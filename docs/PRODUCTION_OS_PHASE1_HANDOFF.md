@@ -3,7 +3,8 @@
 
 Prepared for: Gustavo Rattia / Oceano Blue Media
 Repo: `oceanoblue/oceano-blue-ops`
-Branch with Phase 1 work: `production-os-foundation`
+Branch with Phase 1 work: `production-os-foundation` (pushed to `origin`, no PR opened yet)
+Latest commits: `a083e95` (Phase 1 implementation) · `a4238cd` (this handoff doc)
 Stack: Vercel, Supabase (Postgres), Next.js 14 (App Router), TypeScript, Tailwind
 Date: 2026-06-07
 
@@ -163,17 +164,32 @@ typing and delete the hand-written shapes.
 
 ## 2. How it was validated (so you can trust it)
 
-- `npm run build` — succeeds; all 10 new routes compile.
-- `npm run typecheck` — **0 new errors** from Phase 1 files. (The repo has 142
-  pre-existing errors on `main`; the production build ignores TS/ESLint via
-  `next.config.js`, which is why it still deploys.)
-- Migrations were applied to a throwaway **Postgres 16** instance with a
-  minimal Supabase `auth` shim (`auth.users` + `auth.uid()`): base schema
-  (`0001`) + `0015`–`0024` all apply cleanly, and `0023`/`0024` are idempotent
-  on re-run (no duplicate seed rows).
+| Check | Command | Result |
+|-------|---------|--------|
+| Build | `npm run build` | ✓ Compiled successfully, exit 0; all 10 new routes emitted |
+| Types | `npm run typecheck` | **0 errors in Phase 1 files** (142 pre-existing on `main`, unchanged) |
+| Lint | `next lint` | **0 errors in Phase 1 files** (4 pre-existing errors in other files) |
+| Run app | `npm run start` | Server boots in ~2s; `/login` → 200; all 10 new dashboard routes → 307 redirect to `/login?next=…` (auth gating works); server log clean |
+| Migrations | Postgres 16 | base `0001` + `0015`–`0024` apply cleanly; `0023`/`0024` idempotent on re-run (no duplicate seeds) |
 
-> Note: migrations were validated locally but **not** applied to the live
-> Supabase project. Apply via `npm run db:push` or your deploy pipeline.
+Detail notes:
+
+- The production build ignores TS/ESLint via `next.config.js`
+  (`ignoreBuildErrors` / `ignoreDuringBuilds`), which is why the repo deploys
+  despite the 142 pre-existing typecheck errors. Phase 1 code is nonetheless
+  type- and lint-clean.
+- The repo has **no committed ESLint config**; `next lint` prompts for setup.
+  Lint was run with a temporary `.eslintrc.json` (`extends: next/core-web-vitals`)
+  that was removed afterward. Consider committing a real ESLint config in
+  Phase 2.
+- Migrations were validated against a throwaway **Postgres 16** instance with a
+  minimal Supabase `auth` shim (`auth.users` + `auth.uid()`). They were **not**
+  applied to the live Supabase project — do that via `npm run db:push` or your
+  deploy pipeline.
+- "Run app" used placeholder Supabase env vars (no live DB), so authenticated
+  dashboard rendering wasn't exercised end-to-end; routing, middleware, and
+  server boot were confirmed. With real creds the pages render their tables
+  with empty states until data exists.
 
 ---
 
@@ -251,8 +267,12 @@ There is existing related code to reuse/build on:
 - **Migrations**: next file is `0025_*.sql`. Keep them additive and idempotent
   (`create table if not exists`, `add column if not exists`, `on conflict do
   nothing`). Reuse `set_updated_at()` for new `updated_at` columns.
-- **Don't** commit `tsconfig.tsbuildinfo` or build artifacts.
-- **Branch**: Phase 1 lives on `production-os-foundation` (not yet a PR).
+- **Don't** commit `tsconfig.tsbuildinfo` or build artifacts (the build mutates
+  `tsconfig.tsbuildinfo`; restore it with `git checkout -- tsconfig.tsbuildinfo`
+  before committing).
+- **Branch**: Phase 1 lives on `production-os-foundation`, pushed to `origin`.
+  No PR has been opened yet. This handoff doc lives at
+  `docs/PRODUCTION_OS_PHASE1_HANDOFF.md` on that branch.
 
 ---
 
