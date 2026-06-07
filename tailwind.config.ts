@@ -5,6 +5,9 @@ const config: Config = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  // Only apply hover: styles on devices that actually support hover (desktop).
+  // Prevents touch taps from "sticking" light cards into their dark hover state.
+  future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
       colors: {
