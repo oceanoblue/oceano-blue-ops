@@ -20,7 +20,12 @@ export function ScrollScrubStudio() {
 
   useEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) return;
+    // Scroll-scrub pinning only on hover-capable desktops. On mobile the URL bar
+    // shows/hides while scrolling, which resizes the viewport and forces GSAP to
+    // recalc the pin mid-scroll — leaving white gaps and jumps. Mobile instead
+    // gets the clean autoplay fallback (no pin), which is rock-solid.
+    const desktop = window.matchMedia('(min-width: 1024px) and (hover: hover)').matches;
+    if (reduce || !desktop) return;
     setEnabled(true);
   }, []);
 
