@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, GitMerge, Scissors, Loader2, AlertTriangle, Layers } from 'lucide-react';
+import { Check, GitMerge, Scissors, Loader2, AlertTriangle, Layers, Camera } from 'lucide-react';
+import { SCENE_TYPES, sceneBadgeClass } from '@/lib/photos/scene';
 
 export type ReviewItem = {
   asset_id: string;
@@ -11,6 +12,8 @@ export type ReviewItem = {
   filename: string;
   status: string;
   exposure_bias: number | null;
+  thumb_url: string | null;
+  scene: string | null;
 };
 
 export type ReviewGroup = {
@@ -23,9 +26,32 @@ export type ReviewGroup = {
   items: ReviewItem[];
 };
 
-export type Single = { id: string; filename: string; status: string };
+export type Single = {
+  id: string;
+  filename: string;
+  status: string;
+  thumb_url: string | null;
+  scene: string | null;
+};
 
 const ROLES = ['base_exposure', 'flash', 'ambient', 'drone', 'manual_review'] as const;
+
+function Thumb({ url, alt }: { url: string | null; alt: string }) {
+  if (!url) {
+    return (
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-100 text-slate-300">
+        <Camera className="h-4 w-4" />
+      </div>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={alt} className="h-10 w-10 shrink-0 rounded object-cover" />;
+}
+
+function SceneBadge({ scene }: { scene: string | null }) {
+  if (!scene || scene === 'unknown') return null;
+  return <span className={`pill ${sceneBadgeClass(scene)} capitalize`}>{scene}</span>;
+}
 
 function ConfidenceBadge({ score, manual }: { score: number | null; manual: boolean }) {
   if (manual || score == null) return <span className="pill bg-slate-100 text-slate-600">manual</span>;
@@ -64,6 +90,20 @@ export function GroupReviewList({
         setSelectedSingles(new Set());
         router.refresh();
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setScene(asset_id: string, scene: string) {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/re-photo/scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset_id, scene }),
+      });
+      if (res.ok) router.refresh();
     } finally {
       setBusy(false);
     }
@@ -137,16 +177,34 @@ export function GroupReviewList({
               <ul className="mb-3 divide-y divide-slate-100 rounded-md border border-slate-100">
                 {g.items.map((it) => (
                   <li key={it.asset_id} className="flex items-center gap-2 px-2 py-1.5 text-xs">
-                    <span className={`flex-1 truncate ${it.status === 'rejected' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                      {it.filename}
-                    </span>
-                    {it.exposure_bias != null && (
-                      <span className="font-mono text-slate-400">{it.exposure_bias > 0 ? '+' : ''}{it.exposure_bias} EV</span>
-                    )}
+                    <Thumb url={it.thumb_url} alt={it.filename} />
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className={`truncate ${it.status === 'rejected' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                        {it.filename}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        {it.exposure_bias != null && (
+                          <span className="font-mono text-slate-400">{it.exposure_bias > 0 ? '+' : ''}{it.exposure_bias} EV</span>
+                        )}
+                        <SceneBadge scene={it.scene} />
+                      </span>
+                    </div>
+                    <select
+                      className="rounded border-slate-200 text-xs"
+                      value={it.scene ?? 'unknown'}
+                      disabled={busy}
+                      title="Scene"
+                      onChange={(e) => setScene(it.asset_id, e.target.value)}
+                    >
+                      {SCENE_TYPES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                     <select
                       className="rounded border-slate-200 text-xs"
                       value={it.role ?? ''}
                       disabled={busy}
+                      title="Role"
                       onChange={(e) =>
                         act({ action: 'set_role', group_id: g.id, asset_id: it.asset_id, role: e.target.value })
                       }
@@ -197,7 +255,7 @@ export function GroupReviewList({
               <Layers className="h-3.5 w-3.5" /> Group selected ({selectedSingles.size})
             </button>
           </div>
-          <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {singles.map((s) => (
               <li key={s.id} className="flex items-center gap-2 text-xs">
                 <input
@@ -205,9 +263,24 @@ export function GroupReviewList({
                   checked={selectedSingles.has(s.id)}
                   onChange={() => toggle(selectedSingles, s.id, setSelectedSingles)}
                 />
-                <span className={`truncate ${s.status === 'rejected' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                  {s.filename}
-                </span>
+                <Thumb url={s.thumb_url} alt={s.filename} />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className={`truncate ${s.status === 'rejected' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                    {s.filename}
+                  </span>
+                  <SceneBadge scene={s.scene} />
+                </div>
+                <select
+                  className="rounded border-slate-200 text-xs"
+                  value={s.scene ?? 'unknown'}
+                  disabled={busy}
+                  title="Scene"
+                  onChange={(e) => setScene(s.id, e.target.value)}
+                >
+                  {SCENE_TYPES.map((sc) => (
+                    <option key={sc} value={sc}>{sc}</option>
+                  ))}
+                </select>
               </li>
             ))}
           </ul>

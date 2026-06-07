@@ -2,11 +2,8 @@ import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-import {
-  detectAssetBracketGroups,
-  looksLikeDrone,
-  type AssetLike,
-} from '@/lib/photos/asset-bracket-detect';
+import { detectAssetBracketGroups, type AssetLike } from '@/lib/photos/asset-bracket-detect';
+import { heuristicScene } from '@/lib/photos/scene';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,7 +65,8 @@ export async function POST(request: Request) {
   // 1-3) Register every file as an asset (id generated here so we can correlate
   // with detection without a second round-trip).
   const assetRows = files.map((f) => {
-    const isDrone = looksLikeDrone({ id: 'x', filename: f.filename, exif: f.exif });
+    const assetLike: AssetLike = { id: 'x', filename: f.filename, exif: f.exif };
+    const scene = heuristicScene(assetLike);
     return {
       id: randomUUID(),
       job_id,
@@ -84,7 +82,7 @@ export async function POST(request: Request) {
       byte_size: f.byte_size ?? 0,
       captured_at: f.captured_at ?? null,
       exif: f.exif ?? {},
-      metadata: { source: 're_photo_ingest', is_drone: isDrone },
+      metadata: { source: 're_photo_ingest', is_drone: scene === 'drone', scene, scene_source: 'heuristic' },
       created_by: user.id,
     };
   });
@@ -195,5 +193,10 @@ export async function POST(request: Request) {
     .eq('id', job_id)
     .in('status', ['intake', 'scheduled', 'media_received', 'ingesting']);
 
-  return NextResponse.json({ ok: true, ...summary });
+  return NextResponse.json({
+    ok: true,
+    ...summary,
+    // Returned so the client can attach a thumbnail to each new asset.
+    assets: assetRows.map((a) => ({ id: a.id, local_path: a.local_path, filename: a.filename })),
+  });
 }
