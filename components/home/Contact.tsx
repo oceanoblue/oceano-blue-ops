@@ -1,34 +1,10 @@
-'use client';
-
-import { useState } from 'react';
-import { ArrowUpRight } from 'lucide-react';
 import { SITE } from '@/lib/content';
 
-const SERVICE_OPTIONS = [
-  'Video Production',
-  'Brand Photography',
-  'Headshots',
-  'Real Estate',
-  'Podcast Studio',
-  'Something else',
-];
-
 export function Contact() {
-  const [service, setService] = useState('Video Production');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [message, setMessage] = useState('');
-
-  const mailto = `${SITE.emailHref}?subject=${encodeURIComponent(
-    `New project inquiry — ${service}`
-  )}&body=${encodeURIComponent(
-    `Name: ${name}\nEmail: ${email}\nService: ${service}\n\n${message}`
-  )}`;
-
   return (
     <section id="contact" className="bg-ink py-20 text-paper sm:py-28">
       <div className="container-edge">
-        <div className="grid gap-14 lg:grid-cols-[1.1fr_0.9fr] lg:gap-20">
+        <div className="grid gap-14 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
           {/* Statement + details */}
           <div data-reveal>
             <span className="kicker text-ocean-soft">Let&apos;s talk</span>
@@ -39,6 +15,12 @@ export function Contact() {
               <br />
               <em className="italic text-ocean-soft">unforgettable.</em>
             </h2>
+
+            <p className="mt-8 max-w-md font-grotesk text-base leading-relaxed text-paper/70">
+              Tell us about your project and we&apos;ll be in touch within one
+              business day. Prefer to talk it through? Call or email the studio
+              directly.
+            </p>
 
             <div className="mt-12 space-y-6">
               <a href={SITE.phoneHref} className="group block">
@@ -68,98 +50,28 @@ export function Contact() {
             </div>
           </div>
 
-          {/* Inquiry form */}
-          <form
-            className="flex flex-col gap-5 border-t border-paper/15 pt-10 lg:border-l lg:border-t-0 lg:pl-16 lg:pt-0"
-            onSubmit={(e) => {
-              e.preventDefault();
-              window.location.href = mailto;
-            }}
+          {/* HoneyBook inquiry form */}
+          <div
+            className="border-t border-paper/15 pt-10 lg:border-l lg:border-t-0 lg:pl-16 lg:pt-0"
             data-reveal
             data-reveal-delay={120}
           >
-            <div>
-              <label className="font-mono text-[0.65rem] uppercase tracking-kicker text-paper/50">
-                What do you need?
-              </label>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {SERVICE_OPTIONS.map((opt) => (
-                  <button
-                    type="button"
-                    key={opt}
-                    onClick={() => setService(opt)}
-                    className={`rounded-full border px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide transition-colors ${
-                      service === opt
-                        ? 'border-ocean bg-ocean text-white'
-                        : 'border-paper/25 text-paper/70 hover:border-paper/60'
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Field label="Your name" value={name} onChange={setName} placeholder="Jane Doe" />
-            <Field
-              label="Email"
-              value={email}
-              onChange={setEmail}
-              placeholder="jane@brand.com"
-              type="email"
-            />
-
-            <div>
-              <label className="font-mono text-[0.65rem] uppercase tracking-kicker text-paper/50">
-                Tell us about the project
-              </label>
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                rows={4}
-                placeholder="Timeline, budget range, the vibe you're after…"
-                className="mt-3 w-full resize-none border-b border-paper/25 bg-transparent py-2 font-grotesk text-base text-paper placeholder:text-paper/35 focus:border-ocean focus:outline-none"
+            <div className="overflow-hidden rounded-lg bg-paper shadow-2xl">
+              <iframe
+                src={SITE.honeybookUrl}
+                title="Contact Oceano Blue Media"
+                loading="lazy"
+                className="h-[820px] w-full border-0"
+                style={{ colorScheme: 'light' }}
               />
             </div>
-
-            <button type="submit" data-magnetic className="btn-blue mt-2 self-start">
-              Send inquiry <ArrowUpRight className="h-4 w-4" />
-            </button>
-            <p className="font-mono text-[0.65rem] leading-relaxed text-paper/40">
-              Opens your email app, pre-filled. Prefer to call? {SITE.phone}.
+            <p className="mt-4 font-mono text-[0.65rem] leading-relaxed text-paper/40">
+              Secure inquiry form powered by HoneyBook. Your details go straight
+              to our studio inbox.
             </p>
-          </form>
+          </div>
         </div>
       </div>
     </section>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  type?: string;
-}) {
-  return (
-    <div>
-      <label className="font-mono text-[0.65rem] uppercase tracking-kicker text-paper/50">
-        {label}
-      </label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="mt-3 w-full border-b border-paper/25 bg-transparent py-2 font-grotesk text-base text-paper placeholder:text-paper/35 focus:border-ocean focus:outline-none"
-      />
-    </div>
   );
 }
