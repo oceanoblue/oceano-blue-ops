@@ -4,7 +4,7 @@ import { SHOWCASE, WHY } from '@/lib/content';
 function TextCell({ kbd, title, body, className = '' }: { kbd: string; title: string; body?: string; className?: string }) {
   return (
     <div
-      className={`group flex flex-col justify-between gap-6 rounded-sm border border-ink/12 bg-bone/40 p-6 transition-colors duration-300 hover:bg-ink hover:text-paper ${className}`}
+      className={`group flex flex-col justify-between gap-6 rounded-sm border border-ink/12 bg-bone/40 p-6 transition-colors duration-300 [@media(hover:hover)]:hover:bg-ink [@media(hover:hover)]:hover:text-paper ${className}`}
       data-reveal
     >
       <span className="font-mono text-[0.65rem] uppercase tracking-kicker opacity-50 group-hover:opacity-80">

@@ -43,7 +43,7 @@ export function StudioRoom() {
           {FEATURES.map((f) => (
             <div
               key={f.no}
-              className="group bg-ink p-7 transition-colors duration-300 hover:bg-paper hover:text-ink"
+              className="group bg-ink p-7 transition-colors duration-300 [@media(hover:hover)]:hover:bg-paper [@media(hover:hover)]:hover:text-ink"
               data-reveal
             >
               <span className="font-mono text-[0.65rem] uppercase tracking-kicker text-ocean-soft group-hover:text-ocean">

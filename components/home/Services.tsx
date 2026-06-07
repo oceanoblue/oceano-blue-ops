@@ -55,7 +55,7 @@ export function Services() {
               <li
                 key={s.title}
                 onMouseEnter={() => setActive(i)}
-                className="group border-b border-ink/15 py-7 transition-colors duration-300 hover:bg-ink hover:text-paper"
+                className="group border-b border-ink/15 py-7 transition-colors duration-300 [@media(hover:hover)]:hover:bg-ink [@media(hover:hover)]:hover:text-paper"
                 data-reveal
                 data-reveal-delay={i * 60}
               >
@@ -81,7 +81,7 @@ export function Services() {
                       {s.tags.map((t) => (
                         <span
                           key={t}
-                          className="rounded-full border border-ink/20 px-3 py-1 font-mono text-[0.65rem] uppercase tracking-wide opacity-70 group-hover:border-paper/30"
+                          className="rounded-full border border-ink/20 px-3 py-1 font-mono text-[0.65rem] uppercase tracking-wide opacity-70 [@media(hover:hover)]:group-hover:border-paper/30"
                         >
                           {t}
                         </span>
