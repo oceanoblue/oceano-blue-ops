@@ -1,0 +1,19 @@
+{
+  "key": "podcast_episode_standard",
+  "name": "Podcast Episode Standard",
+  "job_type": "podcast_episode",
+  "description": "Ingest → transcript → show notes → clips → delivery → publishing package.",
+  "version": 1,
+  "steps": [
+    { "name": "Create episode + folders", "step_type": "make_scenario", "config": { "scenario": "Podcast Folder Creation" } },
+    { "name": "Ingest media", "step_type": "worker_task", "config": { "task_type": "scan_folder" } },
+    { "name": "Transcribe", "step_type": "worker_task", "config": { "task_type": "transcribe_media" } },
+    { "name": "AI summary + show notes", "step_type": "ai_task", "config": { "task_type": "generate_podcast_show_notes" } },
+    { "name": "Clip ideas", "step_type": "ai_task", "config": { "task_type": "generate_clip_ideas" } },
+    { "name": "Edit recipe", "step_type": "ai_task", "config": { "task_type": "generate_video_edit_recipe" } },
+    { "name": "Review", "step_type": "review", "config": { "review_required": true } },
+    { "name": "Full episode delivery", "step_type": "delivery", "config": { "delivery_type": "podcast_episode" } },
+    { "name": "Clips delivery", "step_type": "delivery", "config": { "delivery_type": "podcast_clip" } },
+    { "name": "Publishing package", "step_type": "make_scenario", "config": { "scenario": "Podcast Publishing Package" } }
+  ]
+}

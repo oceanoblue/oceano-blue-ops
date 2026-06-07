@@ -1,0 +1,19 @@
+{
+  "key": "commercial_video_standard",
+  "name": "Commercial Video Standard",
+  "job_type": "commercial_video",
+  "description": "Ingest → proxy → transcript → edit recipe → review → QC → delivery.",
+  "version": 1,
+  "steps": [
+    { "name": "Ingest media", "step_type": "worker_task", "config": { "task_type": "scan_folder" } },
+    { "name": "Proxy generation", "step_type": "worker_task", "config": { "task_type": "generate_proxy" } },
+    { "name": "Transcribe", "step_type": "worker_task", "config": { "task_type": "transcribe_media" } },
+    { "name": "Client profile match", "step_type": "ai_task", "config": { "task_type": "review_client_brand_fit" } },
+    { "name": "Edit recipe", "step_type": "ai_task", "config": { "task_type": "generate_video_edit_recipe" } },
+    { "name": "Approve edit recipe", "step_type": "review", "config": { "review_required": true } },
+    { "name": "Editor / DaVinci pass", "step_type": "external_editor", "config": {} },
+    { "name": "QC", "step_type": "qc", "config": { "qc_type": "video_story_qc" } },
+    { "name": "Client review", "step_type": "review", "config": { "provider": "frame_io" } },
+    { "name": "Delivery", "step_type": "delivery", "config": { "delivery_type": "video_final" } }
+  ]
+}
