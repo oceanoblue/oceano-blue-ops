@@ -5,6 +5,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { SiteShell } from '@/components/site/SiteShell';
 import { PageHero } from '@/components/site/PageHero';
 import { Films } from '@/components/work/Films';
+import { CtaBand } from '@/components/site/CtaBand';
 import { PROJECTS } from '@/lib/projects';
 
 export const metadata: Metadata = {
@@ -62,6 +63,9 @@ export default function WorkPage() {
       </section>
 
       <Films />
+      <CtaBand
+        title={<>Let&apos;s add yours to <em className="italic text-ocean-soft">the list.</em></>}
+      />
     </SiteShell>
   );
 }
