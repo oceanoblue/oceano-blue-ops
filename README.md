@@ -185,6 +185,13 @@ instructions (trigger, verify `0015`–`0025`, confirm the `thumbnails` bucket a
 new tables, and avoid the wrong project) are in
 [`docs/DB_MIGRATIONS_RUNBOOK.md`](docs/DB_MIGRATIONS_RUNBOOK.md).
 
+## Local Worker (local/NAS media)
+
+A small read-only Node client (`worker-local/`) connects local/NAS folders to
+Production OS: it scans folders, indexes media into `assets`, and generates
+thumbnails — originals never leave the machine. Setup, env vars, scanning, and
+troubleshooting are in [`docs/LOCAL_WORKER.md`](docs/LOCAL_WORKER.md).
+
 ## License
 
 Private — Oceano Blue internal use.
