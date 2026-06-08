@@ -24,8 +24,9 @@ import { detectBrackets } from '@/lib/ai/bracket-detect';
  *   filename run, EXIF present but disagrees   → 0.60  (review)
  *   EXIF-only group (filenames not sequential) → 0.65  (review)
  *
- * Groups below REVIEW_THRESHOLD are flagged for human review — this is the
- * core of the "Real Estate Photo Rescue" fix.
+ * Groups below REVIEW_THRESHOLD (0.80) are flagged for human review — this is
+ * the core of the "Real Estate Photo Rescue" fix. The threshold sits below the
+ * filename-only score (0.82, reliable) and above the uncertain scores (≤0.65).
  */
 
 export interface AssetLike {
@@ -63,7 +64,7 @@ export interface AssetDetectionResult {
   singleAssetIds: string[];
 }
 
-export const REVIEW_THRESHOLD = 0.85;
+export const REVIEW_THRESHOLD = 0.8;
 
 interface ExifLike {
   DateTimeOriginal?: unknown;

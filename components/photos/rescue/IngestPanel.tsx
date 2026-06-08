@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FolderOpen, Loader2, UploadCloud } from 'lucide-react';
+import { generateThumbnail, blobToBase64 } from '@/lib/photos/client-thumbnail';
 
 const IMAGE_EXT = /\.(jpe?g|png|tiff?|heic|webp|arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i;
 const EXIF_PICK = [
@@ -61,10 +62,13 @@ export function IngestPanel({ jobId }: { jobId: string }) {
     try {
       const exifr = (await import('exifr')).default;
       const payloads: FilePayload[] = [];
+      const fileByPath = new Map<string, File>();
 
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         setProgress(`Reading EXIF ${i + 1}/${files.length}…`);
+        const localPath = (f as any).webkitRelativePath || f.name;
+        fileByPath.set(localPath, f);
         let tags: Record<string, unknown> = {};
         let capturedAt: string | null = null;
         try {
@@ -79,7 +83,7 @@ export function IngestPanel({ jobId }: { jobId: string }) {
         }
         payloads.push({
           filename: f.name,
-          local_path: (f as any).webkitRelativePath || f.name,
+          local_path: localPath,
           byte_size: f.size,
           mime_type: f.type || 'application/octet-stream',
           captured_at: capturedAt,
@@ -91,6 +95,7 @@ export function IngestPanel({ jobId }: { jobId: string }) {
       const CHUNK = 150;
       let totalGroups = 0;
       let totalReview = 0;
+      const created: Array<{ id: string; local_path: string }> = [];
       for (let i = 0; i < payloads.length; i += CHUNK) {
         const slice = payloads.slice(i, i + CHUNK);
         setProgress(`Ingesting ${Math.min(i + CHUNK, payloads.length)}/${payloads.length}…`);
@@ -103,7 +108,32 @@ export function IngestPanel({ jobId }: { jobId: string }) {
         if (!res.ok) throw new Error(json.error ?? 'ingest_failed');
         totalGroups += json.groups ?? 0;
         totalReview += json.needs_review ?? 0;
+        for (const a of json.assets ?? []) created.push(a);
       }
+
+      // Generate thumbnails locally and upload only the small previews.
+      let thumbBatch: Array<{ asset_id: string; content_base64: string; mime: string }> = [];
+      const flush = async () => {
+        if (thumbBatch.length === 0) return;
+        await fetch('/api/re-photo/thumbnails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId, items: thumbBatch }),
+        }).catch(() => {});
+        thumbBatch = [];
+      };
+      for (let i = 0; i < created.length; i++) {
+        const a = created[i];
+        const file = fileByPath.get(a.local_path);
+        if (!file) continue;
+        setProgress(`Building thumbnails ${i + 1}/${created.length}…`);
+        const thumb = await generateThumbnail(file);
+        if (!thumb) continue;
+        thumbBatch.push({ asset_id: a.id, content_base64: await blobToBase64(thumb.blob), mime: thumb.mime });
+        if (thumbBatch.length >= 10) await flush();
+      }
+      await flush();
+
       setProgress(`Done — ${payloads.length} files, ${totalGroups} groups, ${totalReview} need review.`);
       router.refresh();
     } catch (e: any) {

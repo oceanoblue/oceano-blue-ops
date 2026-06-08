@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, LayoutGrid } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { signThumbnails } from '@/lib/photos/thumbnails-server';
 import { IngestPanel } from '@/components/photos/rescue/IngestPanel';
 import { GroupReviewList, type ReviewGroup, type Single } from '@/components/photos/rescue/GroupReviewList';
 import { QcPanel } from '@/components/photos/rescue/QcPanel';
+import { ClassifyButton } from '@/components/photos/rescue/ClassifyButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,10 +35,10 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
     supabase
       .from('asset_groups')
       .select(
-        'id, name, confidence_score, review_required, metadata, items:asset_group_items(asset_id, role, sort_order, asset:assets(filename, status, exif))'
+        'id, name, confidence_score, review_required, metadata, items:asset_group_items(asset_id, role, sort_order, asset:assets(filename, status, exif, thumbnail_url, metadata))'
       )
       .eq('job_id', params.id),
-    supabase.from('assets').select('id, filename, status').eq('job_id', params.id),
+    supabase.from('assets').select('id, filename, status, thumbnail_url, metadata').eq('job_id', params.id),
     supabase
       .from('qc_reports')
       .select('status, quality_score, checks, created_at')
@@ -45,6 +47,13 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
       .order('created_at', { ascending: false })
       .limit(1),
   ]);
+
+  // Sign every thumbnail path once.
+  const allPaths: Array<string | null> = [
+    ...(assetsData ?? []).map((a: any) => a.thumbnail_url),
+    ...(groupsData ?? []).flatMap((g: any) => (g.items ?? []).map((it: any) => it.asset?.thumbnail_url)),
+  ];
+  const thumbs = await signThumbnails(supabase, allPaths);
 
   const groupedAssetIds = new Set<string>();
   const groups: ReviewGroup[] = (groupsData ?? []).map((g: any) => {
@@ -64,6 +73,8 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
         filename: it.asset?.filename ?? it.asset_id,
         status: it.asset?.status ?? 'indexed',
         exposure_bias: exposureBias(it.asset?.exif),
+        thumb_url: it.asset?.thumbnail_url ? thumbs[it.asset.thumbnail_url] ?? null : null,
+        scene: it.asset?.metadata?.scene ?? null,
       })),
     };
   });
@@ -73,7 +84,13 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
 
   const singles: Single[] = (assetsData ?? [])
     .filter((a: any) => !groupedAssetIds.has(a.id))
-    .map((a: any) => ({ id: a.id, filename: a.filename ?? a.id, status: a.status }));
+    .map((a: any) => ({
+      id: a.id,
+      filename: a.filename ?? a.id,
+      status: a.status,
+      thumb_url: a.thumbnail_url ? thumbs[a.thumbnail_url] ?? null : null,
+      scene: a.metadata?.scene ?? null,
+    }));
 
   const latestQc = (qcData ?? [])[0]
     ? {
@@ -86,14 +103,22 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link href={`/dashboard/jobs/${j.id}`} className="inline-flex items-center gap-1 text-sm text-ocean-700 hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back to job
-        </Link>
-        <h1 className="mt-1 text-2xl font-semibold text-ocean-950">Real Estate Photo Rescue</h1>
-        <p className="text-sm text-slate-600">
-          {j.title} · <span className="capitalize">{j.status?.replace(/_/g, ' ')}</span>
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Link href={`/dashboard/jobs/${j.id}`} className="inline-flex items-center gap-1 text-sm text-ocean-700 hover:underline">
+            <ArrowLeft className="h-4 w-4" /> Back to job
+          </Link>
+          <h1 className="mt-1 text-2xl font-semibold text-ocean-950">Real Estate Photo Rescue</h1>
+          <p className="text-sm text-slate-600">
+            {j.title} · <span className="capitalize">{j.status?.replace(/_/g, ' ')}</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ClassifyButton jobId={j.id} />
+          <Link href={`/dashboard/jobs/${j.id}/photo-rescue/contact-sheet`} className="btn-secondary">
+            <LayoutGrid className="h-4 w-4" /> Contact sheet
+          </Link>
+        </div>
       </div>
 
       <IngestPanel jobId={j.id} />
