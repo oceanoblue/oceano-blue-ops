@@ -24,6 +24,20 @@ export default async function WorkersPage() {
     .limit(50);
   const jobOptions = (jobs ?? []).map((j: any) => ({ id: j.id, title: j.title ?? j.id }));
 
+  const { data: recentTasks } = await supabase
+    .from('worker_tasks')
+    .select('id, task_type, status, created_at, result, error, jobs(title)')
+    .order('created_at', { ascending: false })
+    .limit(15);
+
+  const taskStatusStyle: Record<string, string> = {
+    completed: 'bg-emerald-100 text-emerald-700',
+    running: 'bg-sky-100 text-sky-700',
+    queued: 'bg-slate-100 text-slate-600',
+    failed: 'bg-rose-100 text-rose-700',
+    cancelled: 'bg-slate-100 text-slate-400',
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
@@ -82,6 +96,47 @@ export default async function WorkersPage() {
           </tbody>
         </table>
       </div>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold text-slate-900">Recent tasks</h2>
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50">
+              <tr className="text-left">
+                <th className="table-head px-4 py-3">Task</th>
+                <th className="table-head px-4 py-3">Job</th>
+                <th className="table-head px-4 py-3">Status</th>
+                <th className="table-head px-4 py-3">Detail</th>
+                <th className="table-head px-4 py-3">When</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(recentTasks ?? []).map((t: any) => (
+                <tr key={t.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 text-slate-700">{t.task_type?.replace(/_/g, ' ')}</td>
+                  <td className="px-4 py-3 text-slate-600">{t.jobs?.title ?? '—'}</td>
+                  <td className="px-4 py-3">
+                    <span className={`pill ${taskStatusStyle[t.status] ?? 'bg-slate-100 text-slate-600'}`}>{t.status}</span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-500">
+                    {t.error
+                      ? t.error
+                      : t.result
+                      ? Object.entries(t.result).map(([k, v]) => `${k}: ${v}`).join(' · ')
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-slate-400">{new Date(t.created_at).toLocaleString()}</td>
+                </tr>
+              ))}
+              {(recentTasks ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">No worker tasks yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
