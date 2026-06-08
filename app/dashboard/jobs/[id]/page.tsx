@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { DeliveryManager } from '@/components/deliveries/DeliveryManager';
 
 export const dynamic = 'force-dynamic';
 
@@ -220,7 +221,16 @@ async function TabContent({ tab, jobId, job }: { tab: string; jobId: string; job
     );
   }
 
-  // Brief, AI Plan, Automations, Review, QC, Delivery — Phase 1 placeholders.
+  if (tab === 'delivery') {
+    const { data: deliveries } = await supabase
+      .from('delivery_versions')
+      .select('id, delivery_type, status, version_number, title, external_url, created_at')
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: false });
+    return <DeliveryManager jobId={jobId} deliveries={(deliveries ?? []) as any} />;
+  }
+
+  // Brief, AI Plan, Automations, Review, QC — Phase 1 placeholders.
   return (
     <Empty>
       This tab is part of the Phase 1 shell. Data wiring for <strong>{tab}</strong> arrives in a
