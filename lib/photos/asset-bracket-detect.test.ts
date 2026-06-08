@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectAssetBracketGroups, REVIEW_THRESHOLD, type AssetLike } from './asset-bracket-detect';
+import { detectAssetBracketGroups, looksLikeDrone, REVIEW_THRESHOLD, type AssetLike } from './asset-bracket-detect';
 
 /** Build an asset with EXIF in the shapes the detectors expect. */
 function asset(
@@ -86,5 +86,38 @@ describe('detectAssetBracketGroups', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].size).toBe(5);
     expect(groups[0].method).toBe('filename+exif');
+  });
+
+  it('flags a filename run as review when EXIF is present but disagrees', () => {
+    // Sequential names, but EXIF has identical timestamps + identical bias, so
+    // the EXIF detector won't confirm a bracket -> medium confidence + review.
+    const assets = [
+      asset('d1', 'DSC0001.ARW', { time: '2026:06:07 09:00:00', bias: 0, ...RIG }),
+      asset('d2', 'DSC0002.ARW', { time: '2026:06:07 09:00:00', bias: 0, ...RIG }),
+      asset('d3', 'DSC0003.ARW', { time: '2026:06:07 09:00:00', bias: 0, ...RIG }),
+    ];
+    const { groups } = detectAssetBracketGroups(assets);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].method).toBe('filename');
+    expect(groups[0].confidence).toBe(0.6);
+    expect(groups[0].reviewRequired).toBe(true);
+  });
+
+  it('detects 7-shot filename+EXIF brackets', () => {
+    const assets = [1, 2, 3, 4, 5, 6, 7].map((n) =>
+      asset(`g${n}`, `B000${n}.ARW`, { time: `2026:06:07 14:00:0${n}`, bias: n - 4, ...RIG })
+    );
+    const { groups } = detectAssetBracketGroups(assets);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].size).toBe(7);
+    expect(groups[0].reviewRequired).toBe(false);
+  });
+});
+
+describe('looksLikeDrone', () => {
+  it('matches DJI rigs and not normal cameras', () => {
+    expect(looksLikeDrone({ id: 'a', filename: 'x.JPG', exif: { Make: 'DJI', Model: 'FC3411' } })).toBe(true);
+    expect(looksLikeDrone({ id: 'b', filename: 'x.JPG', exif: { Model: 'Phantom 4' } })).toBe(true);
+    expect(looksLikeDrone({ id: 'c', filename: 'x.ARW', exif: { Make: 'SONY', Model: 'ILCE-7M4' } })).toBe(false);
   });
 });
