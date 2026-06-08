@@ -8,6 +8,7 @@ import { GroupReviewList, type ReviewGroup, type Single } from '@/components/pho
 import { QcPanel } from '@/components/photos/rescue/QcPanel';
 import { ClassifyButton } from '@/components/photos/rescue/ClassifyButton';
 import { GenerateThumbsButton } from '@/components/photos/rescue/GenerateThumbsButton';
+import { RedetectButton } from '@/components/photos/rescue/RedetectButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,7 +115,8 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
             {j.title} · <span className="capitalize">{j.status?.replace(/_/g, ' ')}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <RedetectButton jobId={j.id} />
           <GenerateThumbsButton jobId={j.id} />
           <ClassifyButton jobId={j.id} />
           <Link href={`/dashboard/jobs/${j.id}/photo-rescue/contact-sheet`} className="btn-secondary">
