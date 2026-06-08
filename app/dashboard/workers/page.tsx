@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { RegisterWorkerButton } from '@/components/workers/RegisterWorkerButton';
+import { EnqueueScanForm } from '@/components/workers/EnqueueScanForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,13 @@ export default async function WorkersPage() {
     .select('id, name, hostname, status, capabilities, last_heartbeat_at, api_key_prefix, created_at')
     .order('created_at', { ascending: false });
 
+  const { data: jobs } = await supabase
+    .from('jobs')
+    .select('id, title')
+    .order('created_at', { ascending: false })
+    .limit(50);
+  const jobOptions = (jobs ?? []).map((j: any) => ({ id: j.id, title: j.title ?? j.id }));
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
@@ -28,6 +36,8 @@ export default async function WorkersPage() {
         </div>
         <RegisterWorkerButton />
       </div>
+
+      <EnqueueScanForm jobs={jobOptions} />
 
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
