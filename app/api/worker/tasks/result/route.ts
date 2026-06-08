@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
 import { authenticateWorker } from '@/lib/worker/auth';
 import { mediaTypeFromExt } from '@/lib/worker/path-safety';
+import { persistDetectedGroups } from '@/lib/photos/persist-bracket-groups';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,14 +118,52 @@ export async function POST(request: Request) {
         exif: f.exif ?? {},
         metadata: { source: 'local_worker' },
       }));
-    if (rows.length) await admin.from('assets').insert(rows);
+    let inserted: any[] = [];
+    if (rows.length) {
+      const { data } = await admin.from('assets').insert(rows).select('id, filename, exif, local_path, media_type');
+      inserted = data ?? [];
+    }
 
-    summary.indexed = rows.length;
-    summary.skipped = body.files.length - rows.length;
+    summary.indexed = inserted.length;
+    summary.skipped = body.files.length - inserted.length;
+
+    // scan → rescue integration ------------------------------------------------
+    const newPhotos = inserted.filter((a: any) => a.media_type === 'photo');
+
+    // (1) Auto-queue thumbnail generation for the new photos (worker-targeted so
+    // the machine that has the files does it). Chunked to the server's 20/task cap.
+    const items = newPhotos.filter((a: any) => a.local_path).map((a: any) => ({ asset_id: a.id, local_path: a.local_path }));
+    let thumbTasks = 0;
+    for (let i = 0; i < items.length; i += 20) {
+      await admin.from('worker_tasks').insert({
+        job_id: task.job_id,
+        worker_id: worker.id,
+        task_type: 'generate_thumbnails',
+        status: 'queued',
+        payload: { items: items.slice(i, i + 20) },
+      });
+      thumbTasks++;
+    }
+    summary.thumbnail_tasks = thumbTasks;
+
+    // (2) For real-estate-photo jobs, detect + persist bracket groups so the
+    // scanned shoot flows straight into Photo Rescue.
+    if (newPhotos.length) {
+      const jobRow = (await admin.from('jobs').select('job_types(key)').eq('id', task.job_id).maybeSingle()).data;
+      if (jobRow?.job_types?.key === 'real_estate_photo') {
+        const det = await persistDetectedGroups(
+          admin,
+          task.job_id,
+          newPhotos.map((a: any) => ({ id: a.id, filename: a.filename, exif: a.exif }))
+        );
+        summary.bracket_groups = det.groups;
+        summary.needs_review = det.needs_review;
+      }
+    }
 
     await admin.from('production_events').insert([
       { job_id: task.job_id, actor_type: 'worker', actor_id: worker.id, event_type: 'folder_scanned', summary: `Scanned ${body.files.length} files`, details: { task_id: task.id } },
-      { job_id: task.job_id, actor_type: 'worker', actor_id: worker.id, event_type: 'assets_indexed', summary: `Indexed ${rows.length} new assets`, details: summary },
+      { job_id: task.job_id, actor_type: 'worker', actor_id: worker.id, event_type: 'assets_indexed', summary: `Indexed ${inserted.length} new assets`, details: summary },
     ]);
   }
 
