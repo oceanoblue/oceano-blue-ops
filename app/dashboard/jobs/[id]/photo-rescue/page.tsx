@@ -7,6 +7,7 @@ import { IngestPanel } from '@/components/photos/rescue/IngestPanel';
 import { GroupReviewList, type ReviewGroup, type Single } from '@/components/photos/rescue/GroupReviewList';
 import { QcPanel } from '@/components/photos/rescue/QcPanel';
 import { ClassifyButton } from '@/components/photos/rescue/ClassifyButton';
+import { GenerateThumbsButton } from '@/components/photos/rescue/GenerateThumbsButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,6 +115,7 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <GenerateThumbsButton jobId={j.id} />
           <ClassifyButton jobId={j.id} />
           <Link href={`/dashboard/jobs/${j.id}/photo-rescue/contact-sheet`} className="btn-secondary">
             <LayoutGrid className="h-4 w-4" /> Contact sheet
