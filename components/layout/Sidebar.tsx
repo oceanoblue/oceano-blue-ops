@@ -21,6 +21,7 @@ import {
   Plug,
   Send,
   Sparkles,
+  Mic,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -31,6 +32,7 @@ const PRODUCTION_OS: NavItem[] = [
   { href: '/dashboard/command-center', label: 'Command Center', icon: Gauge },
   { href: '/dashboard/projects', label: 'Projects', icon: FolderKanban },
   { href: '/dashboard/jobs', label: 'Jobs', icon: Briefcase },
+  { href: '/dashboard/podcasts', label: 'Podcasts', icon: Mic },
   { href: '/dashboard/clients', label: 'Clients', icon: Users },
   { href: '/dashboard/assets', label: 'Assets', icon: Boxes },
   { href: '/dashboard/workflows', label: 'Workflows', icon: Workflow },
