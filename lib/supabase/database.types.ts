@@ -183,6 +183,148 @@ export interface ActivityLog {
   created_at: string;
 }
 
+// -----------------------------------------------------------------
+// Production OS (Phase 1) — hand-typed shapes for the tables the UI
+// queries directly. Lifecycle/type columns are `string` because the
+// underlying SQL uses text columns (see supabase/migrations/0015+).
+// -----------------------------------------------------------------
+export interface ClientProfile {
+  id: string;
+  client_id: string | null;
+  display_name: string | null;
+  tone: string | null;
+  visual_style: string | null;
+  default_language: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Project {
+  id: string;
+  client_id: string | null;
+  name: string;
+  description: string | null;
+  status: string;
+  language: string;
+  start_date: string | null;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobType {
+  id: string;
+  key: string;
+  name: string;
+  category: string;
+  description: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface Job {
+  id: string;
+  job_number: number;
+  project_id: string | null;
+  client_id: string | null;
+  job_type_id: string | null;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  language: string;
+  scheduled_at: string | null;
+  due_date: string | null;
+  assigned_to: string | null;
+  next_action: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Asset {
+  id: string;
+  job_id: string | null;
+  project_id: string | null;
+  asset_type: string;
+  media_type: string;
+  status: string;
+  filename: string | null;
+  thumbnail_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowRun {
+  id: string;
+  job_id: string;
+  workflow_template_id: string | null;
+  name: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolRun {
+  id: string;
+  job_id: string | null;
+  tool_type: string;
+  provider: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface ReviewSession {
+  id: string;
+  job_id: string | null;
+  provider: string | null;
+  status: string;
+  title: string | null;
+  external_url: string | null;
+  created_at: string;
+}
+
+export interface DeliveryVersion {
+  id: string;
+  job_id: string | null;
+  version_number: number;
+  delivery_type: string;
+  status: string;
+  title: string | null;
+  external_url: string | null;
+  created_at: string;
+}
+
+export interface AutomationScenario {
+  id: string;
+  provider: string;
+  name: string;
+  status: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Integration {
+  id: string;
+  provider: string;
+  name: string;
+  status: string;
+  last_synced_at: string | null;
+  created_at: string;
+}
+
+export interface ProductionEvent {
+  id: string;
+  job_id: string | null;
+  project_id: string | null;
+  actor_type: string;
+  actor_id: string | null;
+  event_type: string;
+  summary: string | null;
+  created_at: string;
+}
+
 /**
  * Permissive Database shape. This intentionally widens Row/Insert/Update to
  * `any` so that joined selects (e.g. `select('*, listings(*), clients(*)')`)
@@ -216,6 +358,48 @@ export interface Database {
       delivery_links:  AnyTable<DeliveryLink>;
       schedule_blocks: AnyTable<ScheduleBlock>;
       activity_log:    AnyTable<ActivityLog>;
+
+      // --- Production OS (Phase 1) ---
+      user_profiles:        AnyTable<Record<string, unknown>>;
+      project_members:      AnyTable<Record<string, unknown>>;
+      client_profiles:      AnyTable<ClientProfile>;
+      projects:             AnyTable<Project>;
+      job_types:            AnyTable<JobType>;
+      jobs:                 AnyTable<Job>;
+      storage_locations:    AnyTable<Record<string, unknown>>;
+      assets:               AnyTable<Asset>;
+      asset_versions:       AnyTable<Record<string, unknown>>;
+      asset_groups:         AnyTable<Record<string, unknown>>;
+      asset_group_items:    AnyTable<Record<string, unknown>>;
+      workflow_templates:   AnyTable<Record<string, unknown>>;
+      workflow_runs:        AnyTable<WorkflowRun>;
+      workflow_steps:       AnyTable<Record<string, unknown>>;
+      tool_runs:            AnyTable<ToolRun>;
+      ai_models:            AnyTable<Record<string, unknown>>;
+      agents:               AnyTable<Record<string, unknown>>;
+      prompt_templates:     AnyTable<Record<string, unknown>>;
+      ai_tasks:             AnyTable<Record<string, unknown>>;
+      tools:                AnyTable<Record<string, unknown>>;
+      integrations:         AnyTable<Integration>;
+      external_links:       AnyTable<Record<string, unknown>>;
+      approval_policies:    AnyTable<Record<string, unknown>>;
+      approvals:            AnyTable<Record<string, unknown>>;
+      automation_scenarios: AnyTable<AutomationScenario>;
+      podcast_shows:        AnyTable<Record<string, unknown>>;
+      podcast_episodes:     AnyTable<Record<string, unknown>>;
+      podcast_deliverables: AnyTable<Record<string, unknown>>;
+      transcripts:          AnyTable<Record<string, unknown>>;
+      edit_recipes:         AnyTable<Record<string, unknown>>;
+      resolve_projects:     AnyTable<Record<string, unknown>>;
+      review_sessions:      AnyTable<ReviewSession>;
+      review_comments:      AnyTable<Record<string, unknown>>;
+      qc_reports:           AnyTable<Record<string, unknown>>;
+      quality_score_events: AnyTable<Record<string, unknown>>;
+      delivery_versions:    AnyTable<DeliveryVersion>;
+      local_workers:        AnyTable<Record<string, unknown>>;
+      worker_tasks:         AnyTable<Record<string, unknown>>;
+      editor_assignments:   AnyTable<Record<string, unknown>>;
+      production_events:    AnyTable<ProductionEvent>;
     };
     Views: Record<string, { Row: any }>;
     Functions: Record<string, { Args: any; Returns: any }>;

@@ -1,0 +1,17 @@
+{
+  "key": "restaurant_reel_standard",
+  "name": "Restaurant Reel Standard",
+  "job_type": "restaurant_reel",
+  "description": "Ingest → edit recipe → review → QC → delivery.",
+  "version": 1,
+  "steps": [
+    { "name": "Ingest media", "step_type": "worker_task", "config": { "task_type": "scan_folder" } },
+    { "name": "Proxy generation", "step_type": "worker_task", "config": { "task_type": "generate_proxy" } },
+    { "name": "Client profile match", "step_type": "ai_task", "config": { "task_type": "review_client_brand_fit" } },
+    { "name": "Edit recipe", "step_type": "ai_task", "config": { "task_type": "generate_video_edit_recipe" } },
+    { "name": "Approve edit recipe", "step_type": "review", "config": { "review_required": true } },
+    { "name": "Editor pass", "step_type": "external_editor", "config": {} },
+    { "name": "QC", "step_type": "qc", "config": { "qc_type": "video_story_qc" } },
+    { "name": "Delivery", "step_type": "delivery", "config": { "delivery_type": "video_final" } }
+  ]
+}
