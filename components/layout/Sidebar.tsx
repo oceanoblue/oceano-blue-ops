@@ -22,6 +22,7 @@ import {
   Send,
   Sparkles,
   Mic,
+  HardDrive,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -35,6 +36,7 @@ const PRODUCTION_OS: NavItem[] = [
   { href: '/dashboard/podcasts', label: 'Podcasts', icon: Mic },
   { href: '/dashboard/clients', label: 'Clients', icon: Users },
   { href: '/dashboard/assets', label: 'Assets', icon: Boxes },
+  { href: '/dashboard/workers', label: 'Workers', icon: HardDrive },
   { href: '/dashboard/workflows', label: 'Workflows', icon: Workflow },
   { href: '/dashboard/reviews', label: 'Reviews', icon: MessageSquare },
   { href: '/dashboard/automations', label: 'Automations', icon: Zap },
