@@ -176,6 +176,15 @@ oceanoblue-platform/
 └── middleware.ts               # Auth guard
 ```
 
+## Database migrations (production)
+
+Live Supabase migrations are applied via a **manual** GitHub Actions workflow
+(`.github/workflows/db-migrate.yml`) — never on push/PR, dry-run by default,
+with a typed project-ref confirmation. Required secrets and step-by-step
+instructions (trigger, verify `0015`–`0025`, confirm the `thumbnails` bucket and
+new tables, and avoid the wrong project) are in
+[`docs/DB_MIGRATIONS_RUNBOOK.md`](docs/DB_MIGRATIONS_RUNBOOK.md).
+
 ## License
 
 Private — Oceano Blue internal use.
