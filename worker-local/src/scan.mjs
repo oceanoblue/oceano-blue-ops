@@ -17,12 +17,21 @@ async function walk(dir, out) {
   }
   for (const ent of entries) {
     if (out.length >= MAX_FILES) return;
-    if (ent.isSymbolicLink()) continue; // never follow symlinks
     if (ent.name.startsWith('.') || ent.name === '@eaDir') continue; // hidden / Synology thumbs
     const full = path.join(dir, ent.name);
-    if (ent.isDirectory()) {
+    // Network mounts (SMB/AFP) frequently report dirent types as UNKNOWN, so
+    // ent.isDirectory()/isFile() can't be trusted. lstat each entry instead
+    // (also lets us skip symlinks without following them).
+    let st;
+    try {
+      st = await fs.lstat(full);
+    } catch {
+      continue;
+    }
+    if (st.isSymbolicLink()) continue; // never follow symlinks
+    if (st.isDirectory()) {
       await walk(full, out);
-    } else if (ent.isFile() && isMediaFile(ent.name)) {
+    } else if (st.isFile() && isMediaFile(ent.name)) {
       out.push(full);
     }
   }

@@ -38,7 +38,8 @@ async function tick() {
     const result = await runTask(task);
     try {
       await api.result(result);
-      console.log(`[worker] ${task.task_type} -> ${result.status}`, result.result ?? {});
+      const detail = result.status === 'failed' ? (result.error ?? 'unknown error') : (result.result ?? {});
+      console.log(`[worker] ${task.task_type} -> ${result.status}`, detail);
     } catch (e) {
       console.error(`[worker] failed to post result for ${task.id}:`, e?.message ?? e);
     }
