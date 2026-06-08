@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     .select('id, task_type, payload, job_id')
     .eq('status', 'queued')
     .in('task_type', caps)
+    .or(`worker_id.is.null,worker_id.eq.${worker.id}`)
     .order('created_at', { ascending: true })
     .limit(max);
 
