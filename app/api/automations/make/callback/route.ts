@@ -120,13 +120,18 @@ export async function POST(request: Request) {
         const show_slug = String(output.show_slug ?? '').trim();
         if (!show_slug) return NextResponse.json({ error: 'show_slug_required' }, { status: 400 });
 
-        // Upsert the show by slug (registry lives in POS).
-        let show = (await admin.from('podcast_shows').select('id').eq('slug', show_slug).maybeSingle()).data;
+        // Upsert the show by slug (registry lives in POS). Shows created in the
+        // dashboard carry client + language; auto-created ones get defaults.
+        let show = (await admin
+          .from('podcast_shows')
+          .select('id, client_id, default_language')
+          .eq('slug', show_slug)
+          .maybeSingle()).data;
         if (!show) {
           show = (await admin
             .from('podcast_shows')
             .insert({ slug: show_slug, name: show_slug, default_language: 'en' })
-            .select('id')
+            .select('id, client_id, default_language')
             .single()).data;
         }
 
@@ -136,6 +141,8 @@ export async function POST(request: Request) {
           .insert({
             title: output.filename ?? show_slug,
             job_type_id: jobType?.id ?? null,
+            client_id: show.client_id ?? null,
+            language: show.default_language ?? 'en',
             status: 'ingesting',
             next_action: 'Transcribe + generate copy',
           })
@@ -170,6 +177,7 @@ export async function POST(request: Request) {
             show_id: show.id,
             job_id: job.id,
             title: output.filename ?? null,
+            language: show.default_language ?? 'en',
             status: 'ingested',
             recorded_at: output.recorded_at ?? null,
             metadata: {
