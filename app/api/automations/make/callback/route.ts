@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
+import { parseJsonLenient } from '@/lib/automations/lenient-json';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,7 +55,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const parsed = Body.safeParse(await request.json());
+  // Make interpolates LLM copy into a raw JSON template, so multiline values
+  // arrive with bare newlines; parse leniently and answer 400 (not an
+  // unhandled 500) when the body is beyond repair.
+  let rawBody: unknown;
+  try {
+    rawBody = parseJsonLenient(await request.text());
+  } catch {
+    return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
+  }
+  const parsed = Body.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json({ error: 'validation_failed', issues: parsed.error.issues }, { status: 400 });
   }
