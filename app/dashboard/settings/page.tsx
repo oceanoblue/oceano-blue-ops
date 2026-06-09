@@ -19,7 +19,7 @@ export default async function SettingsPage() {
       <SettingsNav />
 
       <section className="card p-6">
-        <h2 className="font-semibold mb-4">Team</h2>
+        <h2 className="mb-4 font-semibold text-slate-900">Team</h2>
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left">
             <tr>
@@ -46,7 +46,7 @@ export default async function SettingsPage() {
       </section>
 
       <section className="card p-6">
-        <h2 className="font-semibold mb-2">AI providers</h2>
+        <h2 className="mb-2 font-semibold text-slate-900">AI providers</h2>
         <p className="text-sm text-slate-600 mb-4">
           Configure provider keys via environment variables in Vercel:
         </p>

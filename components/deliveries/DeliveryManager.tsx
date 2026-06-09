@@ -18,6 +18,7 @@ export type Delivery = {
 export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveries: Delivery[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [type, setType] = useState(DELIVERY_TYPES[0]);
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
@@ -25,6 +26,7 @@ export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveri
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch('/api/deliveries/create', {
         method: 'POST',
@@ -32,12 +34,14 @@ export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveri
         body: JSON.stringify({ job_id: jobId, delivery_type: type, title: title || undefined, external_url: url || undefined }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) alert(`Failed: ${json.error ?? res.status}`);
+      if (!res.ok) setError(`Create failed: ${json.error ?? res.status}`);
       else {
         setTitle('');
         setUrl('');
         router.refresh();
       }
+    } catch {
+      setError('Create failed: network error');
     } finally {
       setBusy(false);
     }
@@ -45,6 +49,7 @@ export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveri
 
   async function update(delivery_id: string, patch: Record<string, unknown>) {
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch('/api/deliveries/update', {
         method: 'POST',
@@ -54,8 +59,10 @@ export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveri
       if (res.ok) router.refresh();
       else {
         const j = await res.json().catch(() => ({}));
-        alert(`Failed: ${j.error ?? res.status}`);
+        setError(`Update failed: ${j.error ?? res.status}`);
       }
+    } catch {
+      setError('Update failed: network error');
     } finally {
       setBusy(false);
     }
@@ -63,6 +70,11 @@ export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveri
 
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">
+          {error}
+        </div>
+      )}
       <form onSubmit={create} className="card space-y-3 p-4">
         <h2 className="text-sm font-semibold text-slate-900">Create delivery (draft)</h2>
         <p className="text-xs text-slate-500">

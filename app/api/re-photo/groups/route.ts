@@ -50,6 +50,17 @@ export async function POST(request: Request) {
 
   switch (body.action) {
     case 'merge': {
+      // All selected groups must belong to the stated job — otherwise a stray
+      // group_id from another job would get its assets moved and itself deleted.
+      const { data: owned } = await admin
+        .from('asset_groups')
+        .select('id')
+        .eq('job_id', body.job_id)
+        .in('id', body.group_ids);
+      if ((owned ?? []).length !== body.group_ids.length) {
+        return NextResponse.json({ error: 'group_not_in_job' }, { status: 400 });
+      }
+
       // Collect all items across the selected groups, build one reviewed group.
       const { data: items } = await admin
         .from('asset_group_items')
@@ -101,6 +112,16 @@ export async function POST(request: Request) {
     }
 
     case 'create_group': {
+      // Every asset must belong to the stated job before it can be grouped here.
+      const { data: ownedAssets } = await admin
+        .from('assets')
+        .select('id')
+        .eq('job_id', body.job_id)
+        .in('id', body.asset_ids);
+      if ((ownedAssets ?? []).length !== body.asset_ids.length) {
+        return NextResponse.json({ error: 'asset_not_in_job' }, { status: 400 });
+      }
+
       const { data: grp, error: gErr } = await admin
         .from('asset_groups')
         .insert({
@@ -125,11 +146,17 @@ export async function POST(request: Request) {
     }
 
     case 'set_role': {
-      await admin
+      // Only act when the (group, asset) pair actually exists, so a stale or
+      // mismatched asset_id can't get its status flipped to rejected.
+      const { data: updated } = await admin
         .from('asset_group_items')
         .update({ role: body.role })
         .eq('group_id', body.group_id)
-        .eq('asset_id', body.asset_id);
+        .eq('asset_id', body.asset_id)
+        .select('asset_id');
+      if (!updated || updated.length === 0) {
+        return NextResponse.json({ error: 'item_not_found' }, { status: 404 });
+      }
       // Rejecting a frame also moves the asset out of the delivery set.
       if (body.role === 'reject') {
         await admin.from('assets').update({ status: 'rejected' }).eq('id', body.asset_id);
@@ -149,7 +176,17 @@ export async function POST(request: Request) {
     }
 
     case 'reject_asset': {
-      await admin.from('assets').update({ status: 'rejected' }).eq('id', body.asset_id);
+      const { data: rejected } = await admin
+        .from('assets')
+        .update({ status: 'rejected' })
+        .eq('id', body.asset_id)
+        .select('id, job_id');
+      if (!rejected || rejected.length === 0) {
+        return NextResponse.json({ error: 'asset_not_found' }, { status: 404 });
+      }
+      if (rejected[0].job_id) {
+        await logEvent(rejected[0].job_id, 'asset_rejected', 'Rejected single asset', { asset_id: body.asset_id });
+      }
       return NextResponse.json({ ok: true });
     }
   }

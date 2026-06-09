@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-import { generateWorkerKey } from '@/lib/worker/auth';
+import { generateWorkerKey, WORKER_CAPS as CAPS } from '@/lib/worker/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +9,6 @@ export const dynamic = 'force-dynamic';
  * Register a local worker (owner/internal action). Generates a per-worker API
  * key, stores only its SHA-256 hash, and returns the plaintext key ONCE.
  */
-const CAPS = ['scan_folder', 'generate_thumbnails'] as const;
 
 const Body = z.object({
   name: z.string().min(1).max(120),

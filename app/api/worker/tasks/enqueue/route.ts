@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { WORKER_CAPS } from '@/lib/worker/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,7 @@ export const dynamic = 'force-dynamic';
  */
 const Body = z.object({
   job_id: z.string().uuid(),
-  task_type: z.enum(['scan_folder', 'generate_thumbnails']),
+  task_type: z.enum(WORKER_CAPS),
   worker_id: z.string().uuid().optional(),
   payload: z.record(z.any()).optional(),
 });

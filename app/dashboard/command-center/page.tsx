@@ -6,6 +6,26 @@ export const dynamic = 'force-dynamic';
 // Statuses that mean a job is still "live" (used for the Overdue bucket).
 const CLOSED_STATUSES = ['delivered', 'approved', 'archived', 'cancelled'];
 
+// Semantic pill colors per job status (vocabulary documented in migration 0015).
+const STATUS_STYLE: Record<string, string> = {
+  intake: 'bg-slate-100 text-slate-600',
+  scheduled: 'bg-sky-100 text-sky-700',
+  media_received: 'bg-sky-100 text-sky-700',
+  ingesting: 'bg-sky-100 text-sky-700',
+  in_progress: 'bg-ocean-50 text-ocean-800',
+  waiting_on_ai: 'bg-violet-100 text-violet-700',
+  waiting_on_editor: 'bg-violet-100 text-violet-700',
+  waiting_on_client: 'bg-amber-100 text-amber-800',
+  needs_review: 'bg-amber-100 text-amber-800',
+  needs_revision: 'bg-rose-100 text-rose-700',
+  ready_to_deliver: 'bg-emerald-100 text-emerald-700',
+  delivered: 'bg-emerald-100 text-emerald-700',
+  approved: 'bg-emerald-100 text-emerald-700',
+  archived: 'bg-slate-100 text-slate-500',
+  cancelled: 'bg-slate-100 text-slate-500',
+  failed: 'bg-rose-100 text-rose-700',
+};
+
 type JobRow = {
   id: string;
   job_number: number;
@@ -41,7 +61,7 @@ function JobCard({ job }: { job: JobRow }) {
         <span className="text-xs font-medium text-slate-500">
           {job.clients?.full_name ?? 'Unassigned client'}
         </span>
-        <span className="pill bg-slate-100 text-slate-600 capitalize">
+        <span className={`pill ${STATUS_STYLE[job.status] ?? 'bg-slate-100 text-slate-600'} capitalize`}>
           {job.status.replace(/_/g, ' ')}
         </span>
       </div>
