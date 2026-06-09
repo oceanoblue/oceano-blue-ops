@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Loader2, ExternalLink, Save } from 'lucide-react';
+import { DELIVERY_TYPES, DELIVERY_STATUSES, STATUS_STYLE } from '@/lib/deliveries/constants';
 
 export type Delivery = {
   id: string;
@@ -12,26 +13,6 @@ export type Delivery = {
   title: string | null;
   external_url: string | null;
   created_at: string;
-};
-
-const DELIVERY_TYPES = [
-  'photo_gallery', 'download_zip', 'video_draft', 'video_final',
-  'podcast_episode', 'podcast_clip', 'caption_file', 'thumbnail',
-  'show_notes', 'social_caption_package', 'archive_package',
-];
-const STATUSES = [
-  'draft', 'internal_review', 'client_review', 'changes_requested',
-  'approved', 'delivered', 'published', 'archived',
-];
-const STATUS_STYLE: Record<string, string> = {
-  draft: 'bg-slate-100 text-slate-600',
-  internal_review: 'bg-amber-100 text-amber-800',
-  client_review: 'bg-sky-100 text-sky-700',
-  changes_requested: 'bg-rose-100 text-rose-700',
-  approved: 'bg-violet-100 text-violet-700',
-  delivered: 'bg-emerald-100 text-emerald-700',
-  published: 'bg-emerald-100 text-emerald-700',
-  archived: 'bg-slate-100 text-slate-400',
 };
 
 export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveries: Delivery[] }) {
@@ -138,7 +119,7 @@ export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveri
           onChange={(e) => onUpdate(d.id, { status: e.target.value })}
           title="Status"
         >
-          {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+          {DELIVERY_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
         </select>
         <span className={`pill ${STATUS_STYLE[d.status] ?? 'bg-slate-100 text-slate-600'} capitalize`}>
           {d.status.replace(/_/g, ' ')}
