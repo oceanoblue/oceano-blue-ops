@@ -11,8 +11,12 @@ export const dynamic = 'force-dynamic';
  * delivery requires this human approval. Approving marks the pending `approvals`
  * row + the `delivery_versions` row approved and the episode published.
  *
- * NOTE: actually flipping the YouTube video to public is a Phase 2 step (POS →
- * Make trigger). v1 records the human decision as the source of truth.
+ * Phase 2: approval also fires the Make publish webhook (MAKE_PUBLISH_WEBHOOK_URL)
+ * which flips the YouTube video from unlisted to public, then confirms back via
+ * the `youtube.published` callback event. The human click here IS the owner
+ * approval — nothing goes public without it. When the webhook isn't configured
+ * (or the episode has no YouTube link), the decision is still recorded and the
+ * response says so; clicking Approve again retries the flip.
  */
 const Body = z.object({
   episode_id: z.string().uuid(),
@@ -69,6 +73,62 @@ export async function POST(request: Request) {
       event_type: 'delivery_approved',
       summary: 'Podcast delivery approved for publishing',
     });
+
+    // Phase 2: flip the YouTube video public via the Make publish scenario.
+    const webhook = process.env.MAKE_PUBLISH_WEBHOOK_URL;
+    const { data: yt } = await admin
+      .from('external_links')
+      .select('url, external_id')
+      .eq('job_id', ep.job_id)
+      .eq('link_type', 'youtube_video')
+      .maybeSingle();
+
+    let publish: 'triggered' | 'not_configured' | 'no_youtube' | 'failed' = 'not_configured';
+    if (webhook && yt?.url) {
+      const tr = (await admin
+        .from('tool_runs')
+        .insert({
+          job_id: ep.job_id,
+          tool_type: 'make_publish',
+          provider: 'make',
+          status: 'queued',
+          input: { episode_id: ep.id, youtube_url: yt.url },
+          created_by: user.id,
+        })
+        .select('id')
+        .single()).data;
+      // The publish scenario must echo pos_run_id back as make_execution_id so
+      // youtube.published can close this tool_run.
+      if (tr) await admin.from('tool_runs').update({ external_id: tr.id }).eq('id', tr.id);
+
+      try {
+        const res = await fetch(webhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'publish_youtube',
+            pos_run_id: tr?.id ?? null,
+            episode_id: ep.id,
+            youtube_url: yt.url,
+            youtube_id: yt.external_id ?? null,
+            privacy: 'public',
+          }),
+        });
+        if (res.ok) {
+          publish = 'triggered';
+        } else {
+          publish = 'failed';
+          await admin.from('tool_runs').update({ status: 'failed', error: `make webhook ${res.status}` }).eq('id', tr?.id);
+        }
+      } catch (e: any) {
+        publish = 'failed';
+        await admin.from('tool_runs').update({ status: 'failed', error: e?.message ?? 'fetch_error' }).eq('id', tr?.id);
+      }
+    } else if (webhook && !yt?.url) {
+      publish = 'no_youtube';
+    }
+
+    return NextResponse.json({ ok: true, publish });
   } else {
     if (appr) {
       await admin.from('approvals').update({ status: 'rejected', decided_by: user.id, decided_at: now, notes: notes ?? null }).eq('id', appr.id);

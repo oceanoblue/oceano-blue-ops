@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
 import { parseJsonLenient } from '@/lib/automations/lenient-json';
+import { advancesEpisodeStatus } from '@/lib/podcasts/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,7 @@ const Body = z.object({
     'transcription.completed',
     'copy.generated',
     'youtube.uploaded',
+    'youtube.published', // Phase 2: Make confirms the video was flipped public
     'delivered',
     'scenario.failed',
   ]),
@@ -102,6 +104,18 @@ export async function POST(request: Request) {
       .contains('metadata', { make_execution_id })
       .maybeSingle();
     return data ?? null;
+  }
+
+  // Monotonic status writes: replayed/duplicate events never demote an episode
+  // (e.g. a re-run's transcription.completed after copy already landed).
+  async function advanceEpisode(epId: string, next: string, patch: Record<string, unknown> = {}) {
+    const { data: cur } = await admin.from('podcast_episodes').select('status').eq('id', epId).maybeSingle();
+    if (!advancesEpisodeStatus(cur?.status, next)) {
+      if (Object.keys(patch).length > 0) await admin.from('podcast_episodes').update(patch).eq('id', epId);
+      return false;
+    }
+    await admin.from('podcast_episodes').update({ status: next, ...patch }).eq('id', epId);
+    return true;
   }
 
   try {
@@ -231,7 +245,7 @@ export async function POST(request: Request) {
           });
           await admin.from('podcast_deliverables').insert({ episode_id: ep.id, deliverable_type: 'transcript', status: 'draft' });
         }
-        await admin.from('podcast_episodes').update({ status: 'transcribed' }).eq('id', ep.id);
+        await advanceEpisode(ep.id, 'transcribed');
         await admin.from('tool_runs').insert({
           job_id: ep.job_id,
           tool_type: 'assemblyai_transcribe',
@@ -276,9 +290,10 @@ export async function POST(request: Request) {
           ]);
         }
 
-        // Stash copy on the episode for easy display (read-merge metadata).
+        // Stash copy on the episode for easy display (read-merge metadata);
+        // the copy lands even when the status is already past needs_review.
         const meta = { ...(ep.metadata ?? {}), copy };
-        await admin.from('podcast_episodes').update({ status: 'needs_review', metadata: meta }).eq('id', ep.id);
+        await advanceEpisode(ep.id, 'needs_review', { metadata: meta });
         await logEvent(ep.job_id, 'agent', 'copy_generated', `AI copy ready: ${copy.title ?? '(untitled)'}`);
         return NextResponse.json({ ok: true, episode_id: ep.id });
       }
@@ -327,8 +342,40 @@ export async function POST(request: Request) {
           });
         }
 
-        await admin.from('podcast_episodes').update({ status: 'ready_to_publish', next_action: 'Human review + approve to publish' }).eq('id', ep.id);
+        await advanceEpisode(ep.id, 'ready_to_publish', { next_action: 'Human review + approve to publish' });
         await logEvent(ep.job_id, 'make', 'youtube_uploaded', 'Uploaded to YouTube (unlisted) — awaiting approval', { youtube_url });
+        return NextResponse.json({ ok: true, episode_id: ep.id });
+      }
+
+      case 'youtube.published': {
+        // Phase 2 confirmation: the publish scenario flipped the video public.
+        const ep = await resolveEpisode(parsed.data.episode_id);
+        if (!ep) return NextResponse.json({ error: 'episode_not_found' }, { status: 404 });
+
+        await advanceEpisode(ep.id, 'published', { next_action: null });
+        await admin
+          .from('delivery_versions')
+          .update({ status: 'published' })
+          .eq('job_id', ep.job_id)
+          .eq('delivery_type', 'podcast_episode');
+        await admin
+          .from('podcast_deliverables')
+          .update({ status: 'published' })
+          .eq('episode_id', ep.id)
+          .eq('deliverable_type', 'full_episode_video');
+        await admin
+          .from('external_links')
+          .update({ label: 'YouTube (public)' })
+          .eq('job_id', ep.job_id)
+          .eq('link_type', 'youtube_video');
+        await admin
+          .from('tool_runs')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('external_id', make_execution_id)
+          .eq('tool_type', 'make_publish');
+        await logEvent(ep.job_id, 'make', 'youtube_published', 'YouTube video flipped to public', {
+          youtube_url: output.youtube_url ?? null,
+        });
         return NextResponse.json({ ok: true, episode_id: ep.id });
       }
 
