@@ -112,14 +112,23 @@ export function IngestPanel({ jobId }: { jobId: string }) {
       }
 
       // Generate thumbnails locally and upload only the small previews.
+      // Upload failures don't abort the ingest (originals are already indexed),
+      // but they must not vanish silently either — count and report them.
       let thumbBatch: Array<{ asset_id: string; content_base64: string; mime: string }> = [];
+      let thumbFailures = 0;
       const flush = async () => {
         if (thumbBatch.length === 0) return;
-        await fetch('/api/re-photo/thumbnails', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: jobId, items: thumbBatch }),
-        }).catch(() => {});
+        const batchSize = thumbBatch.length;
+        try {
+          const res = await fetch('/api/re-photo/thumbnails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ job_id: jobId, items: thumbBatch }),
+          });
+          if (!res.ok) thumbFailures += batchSize;
+        } catch {
+          thumbFailures += batchSize;
+        }
         thumbBatch = [];
       };
       for (let i = 0; i < created.length; i++) {
@@ -135,6 +144,11 @@ export function IngestPanel({ jobId }: { jobId: string }) {
       await flush();
 
       setProgress(`Done — ${payloads.length} files, ${totalGroups} groups, ${totalReview} need review.`);
+      if (thumbFailures > 0) {
+        setError(
+          `${thumbFailures} thumbnail${thumbFailures === 1 ? '' : 's'} failed to upload — originals are indexed; use "Generate thumbnails" to retry previews.`
+        );
+      }
       router.refresh();
     } catch (e: any) {
       setError(e?.message ?? 'Ingest failed');

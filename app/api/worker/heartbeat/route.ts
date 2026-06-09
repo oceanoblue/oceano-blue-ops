@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
-import { authenticateWorker } from '@/lib/worker/auth';
+import { authenticateWorker, WORKER_CAPS } from '@/lib/worker/auth';
 
 export const dynamic = 'force-dynamic';
 
 /** Worker heartbeat — marks the worker online and refreshes capabilities/metadata. */
 const Body = z.object({
-  capabilities: z.array(z.string()).optional(),
+  capabilities: z.array(z.enum(WORKER_CAPS)).optional(),
   metadata: z.record(z.any()).optional(),
 });
 

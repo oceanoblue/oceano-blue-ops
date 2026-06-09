@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -45,7 +46,11 @@ export async function POST(request: Request) {
   if (!secret) {
     return NextResponse.json({ error: 'callback_not_configured' }, { status: 503 });
   }
-  if (request.headers.get('x-pos-automation-secret') !== secret) {
+  // Constant-time comparison (hash both sides so lengths always match).
+  const presented = request.headers.get('x-pos-automation-secret') ?? '';
+  const a = createHash('sha256').update(presented).digest();
+  const b = createHash('sha256').update(secret).digest();
+  if (!timingSafeEqual(a, b)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

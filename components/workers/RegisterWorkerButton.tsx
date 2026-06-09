@@ -11,25 +11,29 @@ import { Plus, Loader2, Copy } from 'lucide-react';
 export function RegisterWorkerButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [issued, setIssued] = useState<{ name: string; key: string } | null>(null);
 
   async function register() {
     const name = window.prompt('Worker name (e.g. "Studio iMac" or "Office NAS"):');
     if (!name) return;
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch('/api/worker/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(`Could not register: ${json.error ?? res.status}`);
+        setError(`Could not register: ${json.error ?? res.status}`);
         return;
       }
       setIssued({ name, key: json.api_key });
       router.refresh();
+    } catch {
+      setError('Could not register: network error');
     } finally {
       setBusy(false);
     }
@@ -41,6 +45,12 @@ export function RegisterWorkerButton() {
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         Register worker
       </button>
+
+      {error && (
+        <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">
+          {error}
+        </div>
+      )}
 
       {issued && (
         <div className="card w-full max-w-xl border border-amber-300 bg-amber-50 p-4">

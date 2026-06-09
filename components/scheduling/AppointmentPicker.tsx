@@ -53,6 +53,7 @@ export function AppointmentPicker({ value, onChange, photographers, allowOverrid
   );
   const [slots, setSlots] = useState<AvailabilitySlot[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
   const [hour24, setHour24] = useState(false);
   const [showUnavailable, setShowUnavailable] = useState(false);
 
@@ -73,10 +74,16 @@ export function AppointmentPicker({ value, onChange, photographers, allowOverrid
   useEffect(() => {
     if (!selectedDay) return;
     setLoading(true);
+    setFetchError(false);
     const dateStr = fmtDateInTz(selectedDay, value.timezone, 'iso');
     fetch(`/api/availability?date=${dateStr}&duration=${value.durationMinutes}`)
       .then((r) => r.json())
       .then((d) => setSlots(d.slots ?? []))
+      .catch(() => {
+        // Distinguish "couldn't load" from a genuinely empty day.
+        setSlots([]);
+        setFetchError(true);
+      })
       .finally(() => setLoading(false));
   }, [selectedDay, value.durationMinutes, value.timezone]);
 
@@ -295,6 +302,10 @@ export function AppointmentPicker({ value, onChange, photographers, allowOverrid
             <p className="text-sm text-slate-500">Select a date to see times</p>
           ) : loading ? (
             <p className="text-sm text-slate-500">Loading slots…</p>
+          ) : fetchError ? (
+            <p className="text-sm text-rose-600">
+              Couldn’t load availability — check your connection and reselect the day.
+            </p>
           ) : (slots?.length ?? 0) === 0 ? (
             <p className="text-sm text-slate-500">
               No slots available — try another day or change duration.
