@@ -26,7 +26,12 @@ export default async function PodcastEpisodePage({ params }: { params: { id: str
         ? supabase.from('external_links').select('link_type, url, label').eq('job_id', jobId)
         : Promise.resolve({ data: [] as any[] }),
       jobId
-        ? supabase.from('approvals').select('id, status').eq('job_id', jobId).eq('status', 'pending').limit(1)
+        ? supabase
+            .from('approvals')
+            .select('id, status')
+            .eq('job_id', jobId)
+            .order('created_at', { ascending: false })
+            .limit(1)
         : Promise.resolve({ data: [] as any[] }),
       jobId
         ? supabase
@@ -40,7 +45,12 @@ export default async function PodcastEpisodePage({ params }: { params: { id: str
 
   const copy = (e.metadata?.copy ?? {}) as any;
   const youtube = (links ?? []).find((l: any) => l.link_type === 'youtube_video');
-  const pendingApproval = (approvals ?? []).length > 0;
+  const latestApproval = (approvals ?? [])[0] as any;
+  const pendingApproval = latestApproval?.status === 'pending';
+  // Approved, video exists, but the publish confirmation never relabeled the
+  // link public — the flip didn't happen (webhook unconfigured/failed). Offer a retry.
+  const retryPublish =
+    latestApproval?.status === 'approved' && Boolean(youtube?.url) && youtube?.label !== 'YouTube (public)';
   const transcriptText: string = (transcript as any)?.text ?? '';
 
   return (
@@ -60,6 +70,7 @@ export default async function PodcastEpisodePage({ params }: { params: { id: str
       </div>
 
       {pendingApproval && <ApprovalPanel episodeId={e.id} />}
+      {retryPublish && <ApprovalPanel episodeId={e.id} retry />}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">

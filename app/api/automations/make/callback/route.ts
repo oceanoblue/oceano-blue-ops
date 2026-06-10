@@ -342,7 +342,8 @@ export async function POST(request: Request) {
           });
         }
 
-        await advanceEpisode(ep.id, 'ready_to_publish', { next_action: 'Human review + approve to publish' });
+        await advanceEpisode(ep.id, 'ready_to_publish');
+        await admin.from('jobs').update({ next_action: 'Human review + approve to publish' }).eq('id', ep.job_id);
         await logEvent(ep.job_id, 'make', 'youtube_uploaded', 'Uploaded to YouTube (unlisted) — awaiting approval', { youtube_url });
         return NextResponse.json({ ok: true, episode_id: ep.id });
       }
@@ -352,7 +353,8 @@ export async function POST(request: Request) {
         const ep = await resolveEpisode(parsed.data.episode_id);
         if (!ep) return NextResponse.json({ error: 'episode_not_found' }, { status: 404 });
 
-        await advanceEpisode(ep.id, 'published', { next_action: null });
+        await advanceEpisode(ep.id, 'published');
+        await admin.from('jobs').update({ next_action: null }).eq('id', ep.job_id);
         await admin
           .from('delivery_versions')
           .update({ status: 'published' })

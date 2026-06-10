@@ -65,7 +65,11 @@ export async function POST(request: Request) {
       .eq('job_id', ep.job_id)
       .eq('delivery_type', 'podcast_episode');
     await admin.from('podcast_deliverables').update({ status: 'approved' }).eq('episode_id', ep.id);
-    await admin.from('podcast_episodes').update({ status: 'published', next_action: null }).eq('id', ep.id);
+    // NOTE: next_action lives on jobs, not podcast_episodes — including it here
+    // made this update fail silently and the episode pill never left needs_review.
+    const { error: epErr } = await admin.from('podcast_episodes').update({ status: 'published' }).eq('id', ep.id);
+    if (epErr) return NextResponse.json({ error: `episode_update_failed: ${epErr.message}` }, { status: 500 });
+    if (ep.job_id) await admin.from('jobs').update({ next_action: null }).eq('id', ep.job_id);
     await admin.from('production_events').insert({
       job_id: ep.job_id,
       actor_type: 'user',
@@ -133,7 +137,9 @@ export async function POST(request: Request) {
     if (appr) {
       await admin.from('approvals').update({ status: 'rejected', decided_by: user.id, decided_at: now, notes: notes ?? null }).eq('id', appr.id);
     }
-    await admin.from('podcast_episodes').update({ status: 'needs_revision', next_action: 'Address review feedback' }).eq('id', ep.id);
+    const { error: epErr } = await admin.from('podcast_episodes').update({ status: 'needs_revision' }).eq('id', ep.id);
+    if (epErr) return NextResponse.json({ error: `episode_update_failed: ${epErr.message}` }, { status: 500 });
+    if (ep.job_id) await admin.from('jobs').update({ next_action: 'Address review feedback' }).eq('id', ep.job_id);
     await admin.from('production_events').insert({
       job_id: ep.job_id,
       actor_type: 'user',
