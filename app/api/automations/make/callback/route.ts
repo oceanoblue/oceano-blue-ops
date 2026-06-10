@@ -121,14 +121,31 @@ export async function POST(request: Request) {
   try {
     switch (event) {
       case 'intake': {
-        // Idempotency: one episode per make_execution_id.
+        // Idempotency: one episode per make_execution_id. On a repeat (re-run or
+        // a Dropbox rename that re-triggers the watcher) we return the existing
+        // episode AND whether it already has a YouTube upload, so the Make
+        // pipeline can skip re-uploading the same video (dedupe guard).
         const { data: existing } = await admin
           .from('podcast_episodes')
           .select('id, job_id')
           .contains('metadata', { make_execution_id })
           .maybeSingle();
         if (existing) {
-          return NextResponse.json({ ok: true, idempotent: true, episode_id: existing.id, job_id: existing.job_id });
+          const { data: ytLink } = await admin
+            .from('external_links')
+            .select('url, external_id')
+            .eq('job_id', existing.job_id)
+            .eq('link_type', 'youtube_video')
+            .maybeSingle();
+          return NextResponse.json({
+            ok: true,
+            idempotent: true,
+            episode_id: existing.id,
+            job_id: existing.job_id,
+            already_uploaded: Boolean(ytLink?.url),
+            youtube_url: ytLink?.url ?? null,
+            youtube_id: ytLink?.external_id ?? null,
+          });
         }
 
         const show_slug = String(output.show_slug ?? '').trim();
@@ -225,6 +242,7 @@ export async function POST(request: Request) {
           job_id: job.id,
           asset_id: asset.id,
           parent_tool_run_id: tr.id,
+          already_uploaded: false, // brand-new episode — pipeline should upload
         });
       }
 
