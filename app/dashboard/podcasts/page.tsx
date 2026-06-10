@@ -11,7 +11,7 @@ export default async function PodcastsPage() {
   const [{ data: shows }, { data: episodes }, { data: clients }] = await Promise.all([
     supabase
       .from('podcast_shows')
-      .select('id, name, slug, hosts, default_language, clients(full_name), episodes:podcast_episodes(id)')
+      .select('id, name, slug, hosts, default_language, brand_color, logo_url, clients(full_name), episodes:podcast_episodes(id)')
       .order('name'),
     supabase
       .from('podcast_episodes')
@@ -48,9 +48,17 @@ export default async function PodcastsPage() {
                 href={`/dashboard/podcasts/shows/${s.id}`}
                 className="card flex items-start gap-3 p-4 hover:border-ocean-300 hover:shadow-sm"
               >
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded bg-ocean-50 text-ocean-700">
-                  <Mic className="h-4 w-4" />
-                </div>
+                {s.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.logo_url} alt="" className="h-9 w-9 shrink-0 rounded object-contain ring-1 ring-slate-200" />
+                ) : (
+                  <div
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded text-white"
+                    style={{ backgroundColor: s.brand_color || '#0f766e' }}
+                  >
+                    <Mic className="h-4 w-4" />
+                  </div>
+                )}
                 <div className="min-w-0">
                   <div className="truncate font-medium text-slate-900">{s.name}</div>
                   <div className="text-xs text-slate-500">
