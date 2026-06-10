@@ -41,10 +41,11 @@ export async function POST(request: Request) {
 
   const { data: ep } = await admin
     .from('podcast_episodes')
-    .select('id, job_id')
+    .select('id, job_id, podcast_shows(slug)')
     .eq('id', episode_id)
     .maybeSingle();
   if (!ep) return NextResponse.json({ error: 'episode_not_found' }, { status: 404 });
+  const showSlug = (ep.podcast_shows as any)?.slug ?? null;
 
   const { data: appr } = await admin
     .from('approvals')
@@ -113,6 +114,7 @@ export async function POST(request: Request) {
             action: 'publish_youtube',
             pos_run_id: tr?.id ?? null,
             episode_id: ep.id,
+            show_slug: showSlug, // Router key — selects the client's YouTube connection
             youtube_url: yt.url,
             youtube_id: yt.external_id ?? null,
             privacy: 'public',
