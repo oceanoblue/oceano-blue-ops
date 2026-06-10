@@ -17,7 +17,7 @@ const PUBLISH_MESSAGE: Record<string, string> = {
  * sign-off after the unlisted YouTube upload. Approving fires the Make publish
  * scenario (Phase 2) — the click here is the owner approval.
  */
-export function ApprovalPanel({ episodeId }: { episodeId: string }) {
+export function ApprovalPanel({ episodeId, retry = false }: { episodeId: string; retry?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,10 +50,21 @@ export function ApprovalPanel({ episodeId }: { episodeId: string }) {
 
   return (
     <div className="card border border-amber-300 bg-amber-50 p-5">
-      <h2 className="font-semibold text-amber-900">Publish approval required</h2>
+      <h2 className="font-semibold text-amber-900">
+        {retry ? 'Publish to YouTube' : 'Publish approval required'}
+      </h2>
       <p className="mt-1 text-sm text-amber-800">
-        The episode is uploaded to YouTube as <strong>unlisted</strong>. Review the video and the
-        generated copy below, then approve to publish publicly / finalize delivery, or send it back.
+        {retry ? (
+          <>
+            This episode is <strong>approved</strong> but the video is still <strong>unlisted</strong> —
+            the publish step hasn’t completed (webhook unconfigured or failed). Publishing now retries the flip.
+          </>
+        ) : (
+          <>
+            The episode is uploaded to YouTube as <strong>unlisted</strong>. Review the video and the
+            generated copy below, then approve to publish publicly / finalize delivery, or send it back.
+          </>
+        )}
       </p>
       {error && (
         <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">
@@ -68,11 +79,13 @@ export function ApprovalPanel({ episodeId }: { episodeId: string }) {
       <div className="mt-3 flex gap-2">
         <button className="btn-primary" disabled={busy} onClick={() => decide('approve')}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-          Approve &amp; publish
+          {retry ? 'Publish now' : 'Approve & publish'}
         </button>
-        <button className="btn-secondary" disabled={busy} onClick={() => decide('reject')}>
-          <X className="h-4 w-4" /> Request changes
-        </button>
+        {!retry && (
+          <button className="btn-secondary" disabled={busy} onClick={() => decide('reject')}>
+            <X className="h-4 w-4" /> Request changes
+          </button>
+        )}
       </div>
     </div>
   );
