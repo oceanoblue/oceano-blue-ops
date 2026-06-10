@@ -152,17 +152,18 @@ export async function POST(request: Request) {
         if (!show_slug) return NextResponse.json({ error: 'show_slug_required' }, { status: 400 });
 
         // Upsert the show by slug (registry lives in POS). Shows created in the
-        // dashboard carry client + language; auto-created ones get defaults.
+        // dashboard carry client + language + branding; auto-created get defaults.
+        const SHOW_COLS = 'id, name, client_id, default_language, mood, tone, tagline, hosts, description';
         let show = (await admin
           .from('podcast_shows')
-          .select('id, client_id, default_language')
+          .select(SHOW_COLS)
           .eq('slug', show_slug)
           .maybeSingle()).data;
         if (!show) {
           show = (await admin
             .from('podcast_shows')
             .insert({ slug: show_slug, name: show_slug, default_language: 'en' })
-            .select('id, client_id, default_language')
+            .select(SHOW_COLS)
             .single()).data;
         }
 
@@ -243,6 +244,16 @@ export async function POST(request: Request) {
           asset_id: asset.id,
           parent_tool_run_id: tr.id,
           already_uploaded: false, // brand-new episode — pipeline should upload
+          // Branding for the AI copy step (Make passes these into the Claude prompt).
+          show: {
+            name: show.name ?? show_slug,
+            language: show.default_language ?? 'en',
+            mood: show.mood ?? null,
+            tone: show.tone ?? null,
+            tagline: show.tagline ?? null,
+            hosts: show.hosts ?? null,
+            description: show.description ?? null,
+          },
         });
       }
 

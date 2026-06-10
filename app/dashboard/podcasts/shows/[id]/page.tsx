@@ -14,7 +14,7 @@ export default async function ShowDetailPage({ params }: { params: { id: string 
   const [{ data: show }, { data: clients }] = await Promise.all([
     supabase
       .from('podcast_shows')
-      .select('id, name, slug, client_id, hosts, description, default_language, clients(full_name)')
+      .select('id, name, slug, client_id, hosts, description, default_language, tagline, mood, tone, brand_color, logo_url, clients(full_name)')
       .eq('id', params.id)
       .maybeSingle(),
     supabase.from('clients').select('id, full_name').order('full_name'),
@@ -35,10 +35,27 @@ export default async function ShowDetailPage({ params }: { params: { id: string 
         <Link href="/dashboard/podcasts" className="inline-flex items-center gap-1 text-sm text-ocean-700 hover:underline">
           <ArrowLeft className="h-4 w-4" /> Back to podcasts
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold text-ocean-950">{s.name}</h1>
-        <p className="text-sm text-slate-600">
-          {s.clients?.full_name ?? 'Internal'} · slug <code className="rounded bg-slate-100 px-1 font-mono text-xs">{s.slug}</code>
-        </p>
+        <div className="mt-1 flex items-center gap-3">
+          {s.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={s.logo_url} alt={`${s.name} logo`} className="h-11 w-11 rounded object-contain ring-1 ring-slate-200" />
+          ) : (
+            <div
+              className="grid h-11 w-11 place-items-center rounded text-sm font-bold text-white"
+              style={{ backgroundColor: s.brand_color || '#0f766e' }}
+            >
+              {s.name?.[0]?.toUpperCase() ?? '?'}
+            </div>
+          )}
+          <div>
+            <h1 className="text-2xl font-semibold text-ocean-950">{s.name}</h1>
+            <p className="text-sm text-slate-600">
+              {s.clients?.full_name ?? 'Internal'} · slug{' '}
+              <code className="rounded bg-slate-100 px-1 font-mono text-xs">{s.slug}</code>
+              {s.tagline ? ` · ${s.tagline}` : ''}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
@@ -54,6 +71,11 @@ export default async function ShowDetailPage({ params }: { params: { id: string 
               hosts: s.hosts ?? '',
               description: s.description ?? '',
               default_language: s.default_language ?? 'en',
+              tagline: s.tagline ?? '',
+              mood: s.mood ?? '',
+              tone: s.tone ?? '',
+              brand_color: s.brand_color ?? '',
+              logo_url: s.logo_url ?? null,
             }}
           />
           <p className="mt-3 text-xs text-slate-400">

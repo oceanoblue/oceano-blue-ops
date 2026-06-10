@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic';
  * episodes — no manual table edits.
  */
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const HEX = /^#?[0-9a-fA-F]{6}$/;
 
 const CreateBody = z.object({
   name: z.string().min(1).max(200),
@@ -19,9 +20,33 @@ const CreateBody = z.object({
   hosts: z.string().max(500).optional(),
   description: z.string().max(5000).optional(),
   default_language: z.string().min(2).max(10).default('en'),
+  // Branding (Phase A) — fed into the AI copy + dashboard.
+  tagline: z.string().max(300).optional(),
+  mood: z.string().max(300).optional(),
+  tone: z.string().max(300).optional(),
+  brand_color: z.string().regex(HEX, 'use a 6-digit hex color').optional().or(z.literal('')),
+  visual_style: z.string().max(2000).optional(),
+  audio_style: z.string().max(2000).optional(),
+  intro_rules: z.string().max(2000).optional(),
+  outro_rules: z.string().max(2000).optional(),
 });
 
 const UpdateBody = CreateBody.partial().extend({ show_id: z.string().uuid() });
+
+/** Drop undefined keys + normalize empties so PATCH only writes provided fields. */
+function brandingColumns(src: Record<string, any>) {
+  const out: Record<string, any> = {};
+  for (const k of [
+    'name', 'slug', 'client_id', 'hosts', 'description', 'default_language',
+    'tagline', 'mood', 'tone', 'visual_style', 'audio_style', 'intro_rules', 'outro_rules',
+  ]) {
+    if (src[k] !== undefined) out[k] = src[k] === '' ? null : src[k];
+  }
+  if (src.brand_color !== undefined) {
+    out.brand_color = src.brand_color ? `#${String(src.brand_color).replace('#', '')}` : null;
+  }
+  return out;
+}
 
 export async function POST(request: Request) {
   const supabase = createClient();
@@ -42,11 +67,9 @@ export async function POST(request: Request) {
   const { data: show, error } = await admin
     .from('podcast_shows')
     .insert({
-      name: parsed.data.name,
+      ...brandingColumns(parsed.data),
       slug: parsed.data.slug,
       client_id: parsed.data.client_id ?? null,
-      hosts: parsed.data.hosts ?? null,
-      description: parsed.data.description ?? null,
       default_language: parsed.data.default_language,
     })
     .select('id')
@@ -86,9 +109,11 @@ export async function PATCH(request: Request) {
     if (clash) return NextResponse.json({ error: 'slug_taken' }, { status: 409 });
   }
 
+  const columns = brandingColumns(patch);
+
   const { data: updated, error } = await admin
     .from('podcast_shows')
-    .update(patch)
+    .update(columns)
     .eq('id', show_id)
     .select('id');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
