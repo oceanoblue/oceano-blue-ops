@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { fmtDateTime, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
+import { BookingLinkButton } from '@/components/BookingLinkButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,9 +41,12 @@ export default async function DashboardHome() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-ocean-950">Overview</h1>
-        <p className="text-sm text-slate-600">What's moving through the pipeline today.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-ocean-950">Overview</h1>
+          <p className="text-sm text-slate-600">What's moving through the pipeline today.</p>
+        </div>
+        <BookingLinkButton />
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
