@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Camera, Loader2 } from 'lucide-react';
 import type { BracketGroup } from '@/lib/photos/bracket-grouping';
 import { isRawFilename } from '@/lib/photos/bracket-grouping';
@@ -29,6 +29,9 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
   // file itself.
   const [rawPreviewUrl, setRawPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  // Guard so we attempt the preview exactly once per frame — a failed fetch
+  // must NOT re-fire (that loop was hammering the endpoint and spinning forever).
+  const previewTriedRef = useRef<string | null>(null);
 
   const allRaw = bracket.photos.every((p) => isRawFilename(p.filename));
   const middleFrame = bracket.photos[Math.floor(bracket.photos.length / 2)] ?? bracket.photos[0];
@@ -46,14 +49,19 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
   }, [bracket.photos, urls, setUrls]);
 
   // For all-RAW brackets, lazy-load the embedded-JPEG preview of the middle
-  // frame. The endpoint hits the worker which uses dcraw_emu -e (fast — no
-  // demosaicing). One request per bracket. Browser caches via worker's
-  // Cache-Control header.
+  // frame from the RAW worker. If the worker isn't reachable/configured in
+  // this deployment, give up after a short timeout and fall back to the RAW
+  // placeholder rather than spinning until the route's 60s limit.
   useEffect(() => {
-    if (!allRaw || rawPreviewUrl || previewLoading) return;
+    if (!allRaw) return;
+    // Only one attempt per middle frame, regardless of re-renders.
+    if (previewTriedRef.current === middleFrame.id) return;
+    previewTriedRef.current = middleFrame.id;
     let cancelled = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
     setPreviewLoading(true);
-    fetch(`/api/photos/raw-preview?photo_id=${middleFrame.id}`)
+    fetch(`/api/photos/raw-preview?photo_id=${middleFrame.id}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.blob() : null))
       .then((blob) => {
         if (cancelled || !blob) return;
@@ -61,12 +69,15 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
       })
       .catch(() => {})
       .finally(() => {
+        clearTimeout(timeout);
         if (!cancelled) setPreviewLoading(false);
       });
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
+      controller.abort();
     };
-  }, [allRaw, middleFrame.id, rawPreviewUrl, previewLoading]);
+  }, [allRaw, middleFrame.id]);
 
   // Release the object URL when the component unmounts.
   useEffect(() => {
