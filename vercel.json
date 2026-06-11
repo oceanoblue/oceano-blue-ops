@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
+      "path": "/api/cron/run-pending-jobs",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/cleanup-raws",
       "schedule": "0 4 * * *"
     }
