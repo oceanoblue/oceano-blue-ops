@@ -350,7 +350,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         const jpegIds = await Promise.all(
           b.photos.map(async (p) => {
             if (!isRawFilename(p.filename)) return p.id;
-            const r = await fetch('/api/photos/convert', {
+            const r = await fetch('/api/raw-convert', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify({ photo_id: p.id }),
@@ -1161,7 +1161,7 @@ function SingleThumb({
     setConverting(true);
     setConvertError(null);
     try {
-      const r = await fetch('/api/photos/convert', {
+      const r = await fetch('/api/raw-convert', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ photo_id: photo.id }),
