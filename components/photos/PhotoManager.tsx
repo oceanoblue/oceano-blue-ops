@@ -55,6 +55,18 @@ type AiProvider =
   | 'oceano-enhance'
   | 'auto';
 
+// Fotello-style listing preferences that shape the enhance prompt.
+type SkyStyle = 'original' | 'sunny_puffs' | 'loaded_puffs' | 'crisp_streaks' | 'clear_fade';
+type EnhancementStyle = 'signature' | 'natural';
+
+const SKY_OPTIONS: Array<{ value: SkyStyle; label: string }> = [
+  { value: 'original', label: 'Original (keep sky)' },
+  { value: 'sunny_puffs', label: 'Sunny puffs' },
+  { value: 'loaded_puffs', label: 'Loaded puffs' },
+  { value: 'crisp_streaks', label: 'Crisp streaks' },
+  { value: 'clear_fade', label: 'Clear fade' },
+];
+
 const STAGE_TITLES: Record<Stage, string> = {
   1: 'Sort & Merge',
   2: 'AI Enhance',
@@ -81,6 +93,14 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   const [aiProvider, setAiProvider] = useState<AiProvider>('openai-gpt-image');
   const [autoDetect, setAutoDetect] = useState(true);
   const [stage2Selection, setStage2Selection] = useState<Set<string>>(new Set());
+
+  // Stage 2 enhance preferences (Fotello-style rail). Defaults match the
+  // signature luxury finish: full-strength edit, keep the real sky unless a
+  // preset is chosen, recover blown windows, straighten verticals.
+  const [enhancementStyle, setEnhancementStyle] = useState<EnhancementStyle>('signature');
+  const [skyStyle, setSkyStyle] = useState<SkyStyle>('original');
+  const [windowPull, setWindowPull] = useState(true);
+  const [perspectiveCorrection, setPerspectiveCorrection] = useState(true);
 
   // Stage 3 — open lightbox
   const refresh = useCallback(async () => {
@@ -383,6 +403,10 @@ export function PhotoManager({ orderId }: { orderId: string }) {
             provider: aiProvider,
             photo_ids: [p.id],
             auto_chain_fixes: autoDetect,
+            enhancement_style: enhancementStyle,
+            sky_style: skyStyle,
+            window_pull: windowPull,
+            perspective_correction: perspectiveCorrection,
           }),
         });
         if (!r.ok) {
@@ -519,6 +543,14 @@ export function PhotoManager({ orderId }: { orderId: string }) {
           onProviderChange={setAiProvider}
           autoDetect={autoDetect}
           onAutoDetectChange={setAutoDetect}
+          enhancementStyle={enhancementStyle}
+          onEnhancementStyleChange={setEnhancementStyle}
+          skyStyle={skyStyle}
+          onSkyStyleChange={setSkyStyle}
+          windowPull={windowPull}
+          onWindowPullChange={setWindowPull}
+          perspectiveCorrection={perspectiveCorrection}
+          onPerspectiveCorrectionChange={setPerspectiveCorrection}
           running={running}
           onRun={runStage2Enhance}
           onBack={() => setStage(1)}
@@ -766,6 +798,14 @@ function Stage2({
   onProviderChange,
   autoDetect,
   onAutoDetectChange,
+  enhancementStyle,
+  onEnhancementStyleChange,
+  skyStyle,
+  onSkyStyleChange,
+  windowPull,
+  onWindowPullChange,
+  perspectiveCorrection,
+  onPerspectiveCorrectionChange,
   running,
   onRun,
   onBack,
@@ -779,6 +819,14 @@ function Stage2({
   onProviderChange: (p: AiProvider) => void;
   autoDetect: boolean;
   onAutoDetectChange: (b: boolean) => void;
+  enhancementStyle: EnhancementStyle;
+  onEnhancementStyleChange: (s: EnhancementStyle) => void;
+  skyStyle: SkyStyle;
+  onSkyStyleChange: (s: SkyStyle) => void;
+  windowPull: boolean;
+  onWindowPullChange: (b: boolean) => void;
+  perspectiveCorrection: boolean;
+  onPerspectiveCorrectionChange: (b: boolean) => void;
   running: boolean;
   onRun: () => void;
   onBack: () => void;
@@ -828,6 +876,66 @@ function Stage2({
             </p>
           </section>
 
+          <section className="card p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-700">Enhance preferences</h3>
+              <span className="text-[11px] text-slate-400">Applied to this run</span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Enhancement style
+                </label>
+                <select
+                  className="input mt-1"
+                  value={enhancementStyle}
+                  onChange={(e) => onEnhancementStyleChange(e.target.value as EnhancementStyle)}
+                >
+                  <option value="signature">Signature (full luxury finish)</option>
+                  <option value="natural">Natural (restrained)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Sky style
+                </label>
+                <select
+                  className="input mt-1"
+                  value={skyStyle}
+                  onChange={(e) => onSkyStyleChange(e.target.value as SkyStyle)}
+                >
+                  {SKY_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer sm:mt-5">
+                <input
+                  type="checkbox"
+                  checked={windowPull}
+                  onChange={(e) => onWindowPullChange(e.target.checked)}
+                  className="h-4 w-4 rounded accent-ocean-600"
+                />
+                <span className="text-sm text-slate-700">Window pulls</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer sm:mt-5">
+                <input
+                  type="checkbox"
+                  checked={perspectiveCorrection}
+                  onChange={(e) => onPerspectiveCorrectionChange(e.target.checked)}
+                  className="h-4 w-4 rounded accent-ocean-600"
+                />
+                <span className="text-sm text-slate-700">Perspective correction</span>
+              </label>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Whites stay neutral and the scene is preserved — colors enhanced to the lux signature
+              look. Sky replacement only runs on exteriors when a preset is chosen.
+            </p>
+          </section>
+
           <section className="card p-4 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
             <div>
               <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -871,7 +979,7 @@ function Stage2({
               ) : (
                 <Wand2 className="h-4 w-4" />
               )}
-              Run AI on {targetCount} {targetCount === 1 ? 'photo' : 'photos'}
+              Enhance {targetCount} {targetCount === 1 ? 'photo' : 'photos'}
             </button>
           </section>
         </>
