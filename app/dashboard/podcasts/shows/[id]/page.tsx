@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { ShowForm } from '@/components/podcasts/ShowForm';
 import { NewEpisodeForm } from '@/components/podcasts/NewEpisodeForm';
+import { PublishingSetup } from '@/components/podcasts/PublishingSetup';
 import { EPISODE_STATUS_STYLE } from '@/lib/podcasts/constants';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,7 @@ export default async function ShowDetailPage({ params }: { params: { id: string 
   const [{ data: show }, { data: clients }] = await Promise.all([
     supabase
       .from('podcast_shows')
-      .select('id, name, slug, client_id, hosts, description, default_language, tagline, mood, tone, brand_color, logo_url, publishing_platforms, transistor_show_id, clients(full_name)')
+      .select('id, name, slug, client_id, hosts, description, default_language, tagline, mood, tone, brand_color, logo_url, publishing_platforms, transistor_show_id, make_youtube_connection_id, routes_provisioned_at, clients(full_name)')
       .eq('id', params.id)
       .maybeSingle(),
     supabase.from('clients').select('id, full_name').order('full_name'),
@@ -86,7 +87,14 @@ export default async function ShowDetailPage({ params }: { params: { id: string 
           </p>
         </section>
 
-        <section className="card p-5 lg:col-span-3">
+        <div className="space-y-4 lg:col-span-3">
+          <PublishingSetup
+            showId={s.id}
+            provisioned={Boolean(s.routes_provisioned_at)}
+            currentConnectionId={s.make_youtube_connection_id ?? null}
+          />
+
+          <section className="card p-5">
           <h2 className="mb-3 font-semibold text-slate-900">Episodes</h2>
           <div className="mb-4">
             <NewEpisodeForm showId={s.id} />
@@ -112,7 +120,8 @@ export default async function ShowDetailPage({ params }: { params: { id: string 
               ))}
             </ul>
           )}
-        </section>
+          </section>
+        </div>
       </div>
     </div>
   );
