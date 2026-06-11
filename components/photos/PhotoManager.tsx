@@ -106,6 +106,10 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   const [runError, setRunError] = useState<string | null>(null);
 
   const [stage, setStage] = useState<Stage>(1);
+  // Live progress for the Approve & Merge step (RAW conversion can be slow).
+  const [mergeProgress, setMergeProgress] = useState<
+    { phase: 'convert' | 'merge'; done: number; total: number; brackets: number } | null
+  >(null);
 
   // Stage 1 selection
   const [selectedBrackets, setSelectedBrackets] = useState<Set<string>>(new Set());
@@ -363,8 +367,19 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   async function runStage1ApproveMerge() {
     setRunning(true);
     setRunError(null);
+    const approvedBrackets = brackets.filter((b) => selectedBrackets.has(b.id));
+    const totalRaw = approvedBrackets.reduce(
+      (n, b) => n + b.photos.filter((p) => isRawFilename(p.filename)).length,
+      0
+    );
+    let convertedCount = 0;
+    setMergeProgress(
+      totalRaw > 0
+        ? { phase: 'convert', done: 0, total: totalRaw, brackets: approvedBrackets.length }
+        : { phase: 'merge', done: 0, total: approvedBrackets.length, brackets: approvedBrackets.length }
+    );
     try {
-      const approvedBrackets = brackets.filter((b) => selectedBrackets.has(b.id));
+      let bracketIdx = 0;
       for (const b of approvedBrackets) {
         // Phase 1 — ensure every frame is JPEG. Convert RAW frames in
         // parallel; the worker serializes internally with concurrency=1, but
@@ -372,21 +387,32 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         const jpegIds = await Promise.all(
           b.photos.map(async (p) => {
             if (!isRawFilename(p.filename)) return p.id;
-            const r = await fetch('/api/raw-convert', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ photo_id: p.id }),
-            });
-            if (!r.ok) {
+            // The worker occasionally throws a transient 500 on a single frame —
+            // retry once before failing the whole bracket.
+            let lastErr = '';
+            for (let attempt = 0; attempt < 2; attempt++) {
+              const r = await fetch('/api/raw-convert', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ photo_id: p.id }),
+              });
+              if (r.ok) {
+                const data = await r.json();
+                convertedCount += 1;
+                setMergeProgress({ phase: 'convert', done: convertedCount, total: totalRaw, brackets: approvedBrackets.length });
+                return data.photo_id as string;
+              }
               const j = await r.json().catch(() => ({}));
-              throw new Error(j.error || `convert_failed_${r.status}`);
+              lastErr = j.error || `convert_failed_${r.status}`;
+              if (attempt === 0) await new Promise((res) => setTimeout(res, 1500));
             }
-            const data = await r.json();
-            return data.photo_id as string;
+            throw new Error(lastErr);
           })
         );
 
         // Phase 2 — merge those JPEGs.
+        bracketIdx += 1;
+        setMergeProgress({ phase: 'merge', done: bracketIdx, total: approvedBrackets.length, brackets: approvedBrackets.length });
         const r = await fetch('/api/ai/process', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -409,6 +435,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
       setRunError(err?.message || 'failed');
     } finally {
       setRunning(false);
+      setMergeProgress(null);
     }
   }
 
@@ -531,6 +558,35 @@ export function PhotoManager({ orderId }: { orderId: string }) {
           3: stage3Photos.length,
         }}
       />
+
+      {/* Approve & Merge progress (RAW conversion is the slow part) */}
+      {mergeProgress && (
+        <div className="card p-3 space-y-2">
+          <div className="flex items-center gap-2 text-sm text-slate-700">
+            <Loader2 className="h-4 w-4 animate-spin text-ocean-600" />
+            {mergeProgress.phase === 'convert' ? (
+              <span>
+                Converting RAW frames to JPEG — {mergeProgress.done}/{mergeProgress.total}
+                <span className="text-slate-400"> · each ARW is a full decode on the worker (~5–15s)</span>
+              </span>
+            ) : (
+              <span>
+                Merging brackets — {mergeProgress.done}/{mergeProgress.total}
+              </span>
+            )}
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-ocean-500 transition-all"
+              style={{
+                width: `${Math.round(
+                  (mergeProgress.total ? mergeProgress.done / mergeProgress.total : 0) * 100
+                )}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* In-flight progress */}
       {inFlightJobs.length > 0 && (
