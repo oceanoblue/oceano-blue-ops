@@ -387,10 +387,12 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         const jpegIds = await Promise.all(
           b.photos.map(async (p) => {
             if (!isRawFilename(p.filename)) return p.id;
-            // The worker occasionally throws a transient 500 on a single frame —
-            // retry once before failing the whole bracket.
+            // A gateway 504 just means the worker is still decoding — it keeps
+            // going in the background and the route is idempotent, so retries
+            // pick up the finished JPEG. Retry with growing waits before failing.
             let lastErr = '';
-            for (let attempt = 0; attempt < 2; attempt++) {
+            const waits = [4000, 8000, 12000];
+            for (let attempt = 0; attempt <= waits.length; attempt++) {
               const r = await fetch('/api/raw-convert', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
@@ -404,7 +406,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
               }
               const j = await r.json().catch(() => ({}));
               lastErr = j.error || `convert_failed_${r.status}`;
-              if (attempt === 0) await new Promise((res) => setTimeout(res, 1500));
+              if (attempt < waits.length) await new Promise((res) => setTimeout(res, waits[attempt]));
             }
             throw new Error(lastErr);
           })
