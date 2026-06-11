@@ -46,14 +46,16 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
   }, [bracket.photos, urls, setUrls]);
 
   // For all-RAW brackets, lazy-load the embedded-JPEG preview of the middle
-  // frame. The endpoint hits the worker which uses dcraw_emu -e (fast — no
-  // demosaicing). One request per bracket. Browser caches via worker's
-  // Cache-Control header.
+  // frame from the RAW worker. If the worker isn't reachable/configured in
+  // this deployment, give up after a short timeout and fall back to the RAW
+  // placeholder rather than spinning until the route's 60s limit.
   useEffect(() => {
     if (!allRaw || rawPreviewUrl || previewLoading) return;
     let cancelled = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
     setPreviewLoading(true);
-    fetch(`/api/photos/raw-preview?photo_id=${middleFrame.id}`)
+    fetch(`/api/photos/raw-preview?photo_id=${middleFrame.id}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.blob() : null))
       .then((blob) => {
         if (cancelled || !blob) return;
@@ -61,10 +63,13 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
       })
       .catch(() => {})
       .finally(() => {
+        clearTimeout(timeout);
         if (!cancelled) setPreviewLoading(false);
       });
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
+      controller.abort();
     };
   }, [allRaw, middleFrame.id, rawPreviewUrl, previewLoading]);
 
