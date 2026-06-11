@@ -67,7 +67,7 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
     // time we retry, the refresh has settled and the cookie is valid again.
     (async () => {
       const get = () =>
-        fetch(`/api/photos/raw-preview?photo_id=${middleFrame.id}`, { signal: controller.signal });
+        fetch(`/api/raw-thumb?photo_id=${middleFrame.id}`, { signal: controller.signal });
       let r = await get();
       if (r.status === 401) {
         await new Promise((res) => setTimeout(res, 1000));
