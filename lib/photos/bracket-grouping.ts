@@ -38,32 +38,53 @@ function parseSequence(filename: string): { base: string; num: number } | null {
   return { base: match[1], num: parseInt(match[2], 10) };
 }
 
-/**
- * Returns the largest bracket size (7, 5, or 3) that the next photos form a
- * sequential run of. Returns 0 if no valid bracket starts here.
- */
-function detectBracketAt(sorted: Photo[], index: number): 0 | 3 | 5 | 7 {
-  for (const size of [7, 5, 3] as const) {
-    if (index + size > sorted.length) continue;
-
-    const head = parseSequence(sorted[index].filename);
-    if (!head) continue;
-
-    let sequential = true;
-    for (let k = 1; k < size; k++) {
-      const next = parseSequence(sorted[index + k].filename);
-      if (!next || next.base !== head.base || next.num !== head.num + k) {
-        sequential = false;
-        break;
-      }
+/** Split a sorted array into maximal runs of consecutive (same-base, +1) frames. */
+function consecutiveRuns(sorted: Photo[]): Photo[][] {
+  const runs: Photo[][] = [];
+  let run: Photo[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (run.length === 0) {
+      run = [sorted[i]];
+      continue;
     }
-
-    if (sequential) return size;
+    const prev = parseSequence(sorted[i - 1].filename);
+    const cur = parseSequence(sorted[i].filename);
+    if (prev && cur && cur.base === prev.base && cur.num === prev.num + 1) {
+      run.push(sorted[i]);
+    } else {
+      runs.push(run);
+      run = [sorted[i]];
+    }
   }
+  if (run.length) runs.push(run);
+  return runs;
+}
+
+/**
+ * Pick the bracket size to chunk a run of `len` consecutive frames by.
+ * Prefer a size that divides the run evenly (so 6 → 3+3, 10 → 5+5, 14 → 7+7),
+ * smallest-first since 3-shot AEB is the real-estate default. Falls back to the
+ * largest size that fits when nothing divides evenly (e.g. 4 → 3 + 1 single).
+ */
+function pickAutoSize(len: number): 0 | 3 | 5 | 7 {
+  for (const s of BRACKET_SIZES) if (len % s === 0) return s;
+  for (const s of [7, 5, 3] as const) if (len >= s) return s;
   return 0;
 }
 
-export function groupPhotosIntoBrackets(photos: Photo[]): GroupingResult {
+export interface GroupingOptions {
+  /**
+   * Force a fixed bracket size (Fotello "Count" method). When set, every
+   * consecutive run is chunked into groups of exactly this many frames; any
+   * remainder becomes singles. When omitted, sizes are auto-detected per run.
+   */
+  fixedSize?: 3 | 5 | 7;
+}
+
+export function groupPhotosIntoBrackets(
+  photos: Photo[],
+  opts?: GroupingOptions
+): GroupingResult {
   // Sort by (base, num) so consecutive shots cluster together.
   const sortable: Array<{ photo: Photo; seq: ReturnType<typeof parseSequence> }> =
     photos.map((p) => ({ photo: p, seq: parseSequence(p.filename) }));
@@ -78,19 +99,29 @@ export function groupPhotosIntoBrackets(photos: Photo[]): GroupingResult {
   const brackets: BracketGroup[] = [];
   const singles: Photo[] = [];
 
-  let i = 0;
-  while (i < sorted.length) {
-    const size = detectBracketAt(sorted, i);
-    if (size > 0) {
-      brackets.push({
-        id: `bracket-${sorted[i].id}`,
-        photos: sorted.slice(i, i + size),
-        detectedSize: size,
-      });
-      i += size;
-    } else {
-      singles.push(sorted[i]);
-      i++;
+  // Process each maximal consecutive run independently so a run of N frames is
+  // split into uniform brackets (3+3) instead of a greedy largest-run grab
+  // (5+1). A fixed Count overrides the per-run heuristic entirely.
+  for (const run of consecutiveRuns(sorted)) {
+    let j = 0;
+    while (j < run.length) {
+      const remaining = run.length - j;
+      const size: 0 | 3 | 5 | 7 = opts?.fixedSize
+        ? remaining >= opts.fixedSize
+          ? opts.fixedSize
+          : 0
+        : pickAutoSize(remaining);
+      if (size !== 0) {
+        brackets.push({
+          id: `bracket-${run[j].id}`,
+          photos: run.slice(j, j + size),
+          detectedSize: size,
+        });
+        j += size;
+      } else {
+        singles.push(run[j]);
+        j++;
+      }
     }
   }
 

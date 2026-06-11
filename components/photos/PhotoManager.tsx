@@ -88,6 +88,8 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   // Stage 1 selection
   const [selectedBrackets, setSelectedBrackets] = useState<Set<string>>(new Set());
   const [selectedSingles, setSelectedSingles] = useState<Set<string>>(new Set());
+  // Fotello "Bracketing" method: Auto-detect, or force a fixed Count (3/5/7).
+  const [bracketCount, setBracketCount] = useState<'auto' | 3 | 5 | 7>('auto');
 
   // Stage 2 config
   const [aiProvider, setAiProvider] = useState<AiProvider>('openai-gpt-image');
@@ -176,9 +178,13 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   const [exifByPhoto, setExifByPhoto] = useState<Record<string, ExifSnapshot>>({});
 
   const { brackets, singles } = useMemo(() => {
+    // A fixed Count is authoritative — chunk runs by N and skip the EXIF guess.
+    if (bracketCount !== 'auto') {
+      return groupPhotosIntoBrackets(rawPhotos, { fixedSize: bracketCount });
+    }
     const base = groupPhotosIntoBrackets(rawPhotos);
     return applyExifGrouping(base, exifByPhoto);
-  }, [rawPhotos, exifByPhoto]);
+  }, [rawPhotos, exifByPhoto, bracketCount]);
 
   // Lazy EXIF reads for the secondary bracket pass.
   useEffect(() => {
@@ -531,6 +537,8 @@ export function PhotoManager({ orderId }: { orderId: string }) {
           onApproveMerge={runStage1ApproveMerge}
           canSkipToStage2={stage2Inputs.length > 0}
           onSkip={() => setStage(2)}
+          bracketCount={bracketCount}
+          onBracketCountChange={setBracketCount}
         />
       )}
 
@@ -669,6 +677,8 @@ function Stage1({
   onApproveMerge,
   canSkipToStage2,
   onSkip,
+  bracketCount,
+  onBracketCountChange,
 }: {
   brackets: ReturnType<typeof groupPhotosIntoBrackets>['brackets'];
   singles: Photo[];
@@ -687,6 +697,8 @@ function Stage1({
   onApproveMerge: () => void;
   canSkipToStage2: boolean;
   onSkip: () => void;
+  bracketCount: 'auto' | 3 | 5 | 7;
+  onBracketCountChange: (c: 'auto' | 3 | 5 | 7) => void;
 }) {
   const hasContent = brackets.length > 0 || singles.length > 0;
   return (
@@ -699,17 +711,34 @@ function Stage1({
             Singles get carried over automatically.
           </p>
         </div>
-        {hasContent && (
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <button onClick={onSelectAll} className="text-ocean-700 hover:text-ocean-900 font-medium">
-              Select all brackets
-            </button>
-            <span>·</span>
-            <button onClick={onClear} className="hover:text-slate-700">
-              Clear
-            </button>
-          </div>
-        )}
+        <div className="flex flex-col items-end gap-2">
+          <label className="flex items-center gap-2 text-xs text-slate-500">
+            <span className="font-medium uppercase tracking-wide">Bracketing</span>
+            <select
+              className="input py-1 text-sm"
+              value={String(bracketCount)}
+              onChange={(e) =>
+                onBracketCountChange(e.target.value === 'auto' ? 'auto' : (Number(e.target.value) as 3 | 5 | 7))
+              }
+            >
+              <option value="auto">Auto-detect</option>
+              <option value="3">Count: 3-shot</option>
+              <option value="5">Count: 5-shot</option>
+              <option value="7">Count: 7-shot</option>
+            </select>
+          </label>
+          {hasContent && (
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <button onClick={onSelectAll} className="text-ocean-700 hover:text-ocean-900 font-medium">
+                Select all brackets
+              </button>
+              <span>·</span>
+              <button onClick={onClear} className="hover:text-slate-700">
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {brackets.length > 0 && (
