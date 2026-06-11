@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Camera, Loader2 } from 'lucide-react';
 import type { BracketGroup } from '@/lib/photos/bracket-grouping';
 import { isRawFilename } from '@/lib/photos/bracket-grouping';
@@ -29,6 +29,9 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
   // file itself.
   const [rawPreviewUrl, setRawPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  // Guard so we attempt the preview exactly once per frame — a failed fetch
+  // must NOT re-fire (that loop was hammering the endpoint and spinning forever).
+  const previewTriedRef = useRef<string | null>(null);
 
   const allRaw = bracket.photos.every((p) => isRawFilename(p.filename));
   const middleFrame = bracket.photos[Math.floor(bracket.photos.length / 2)] ?? bracket.photos[0];
@@ -50,7 +53,10 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
   // this deployment, give up after a short timeout and fall back to the RAW
   // placeholder rather than spinning until the route's 60s limit.
   useEffect(() => {
-    if (!allRaw || rawPreviewUrl || previewLoading) return;
+    if (!allRaw) return;
+    // Only one attempt per middle frame, regardless of re-renders.
+    if (previewTriedRef.current === middleFrame.id) return;
+    previewTriedRef.current = middleFrame.id;
     let cancelled = false;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
@@ -71,7 +77,7 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [allRaw, middleFrame.id, rawPreviewUrl, previewLoading]);
+  }, [allRaw, middleFrame.id]);
 
   // Release the object URL when the component unmounts.
   useEffect(() => {
