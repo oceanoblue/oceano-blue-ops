@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createShowFolder } from '@/lib/integrations/dropbox';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,13 +77,18 @@ export async function POST(request: Request) {
     .single();
   if (error || !show) return NextResponse.json({ error: error?.message ?? 'create_failed' }, { status: 500 });
 
+  // Phase B: best-effort auto-create the show's Dropbox folder. Never blocks
+  // show creation — reports status so the UI can tell the producer.
+  const dropbox = await createShowFolder(parsed.data.slug);
+
   await admin.from('production_events').insert({
     actor_type: 'user',
     actor_id: user.id,
     event_type: 'podcast_show_created',
     summary: `Created show "${parsed.data.name}" (${parsed.data.slug})`,
+    details: { dropbox },
   });
-  return NextResponse.json({ ok: true, show_id: show.id });
+  return NextResponse.json({ ok: true, show_id: show.id, dropbox });
 }
 
 export async function PATCH(request: Request) {

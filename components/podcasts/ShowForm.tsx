@@ -69,6 +69,7 @@ export function ShowForm({
   const [busy, setBusy] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   function set<K extends keyof ShowValues>(key: K, value: ShowValues[K]) {
     setV((p) => ({ ...p, [key]: value }));
@@ -100,6 +101,14 @@ export function ShowForm({
       if (!res.ok) {
         setError(json.error === 'slug_taken' ? 'That slug is already in use.' : `Failed: ${json.error ?? res.status}`);
         return;
+      }
+      // Surface the Dropbox auto-folder result on create (Phase B).
+      const dbx = json.dropbox;
+      if (!editing && dbx) {
+        if (dbx.status === 'created') setInfo(`Dropbox folder created: ${dbx.path}`);
+        else if (dbx.status === 'exists') setInfo(`Dropbox folder already existed: ${dbx.path}`);
+        else if (dbx.status === 'failed') setInfo('Show created, but the Dropbox folder could not be created — make it manually.');
+        // 'not_configured' → stay silent (integration not set up yet)
       }
       if (!editing) setV(EMPTY);
       onDone?.();
@@ -147,6 +156,11 @@ export function ShowForm({
       {error && (
         <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">
           {error}
+        </div>
+      )}
+      {info && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800" role="status">
+          {info}
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
