@@ -11,7 +11,7 @@
     { "name": "Bracket grouping", "step_type": "worker_task", "config": { "task_type": "detect_brackets" } },
     { "name": "Confirm uncertain groups", "step_type": "review", "config": { "review_required": true } },
     { "name": "Contact sheet", "step_type": "worker_task", "config": { "task_type": "generate_thumbnails" } },
-    { "name": "Processing / edit", "step_type": "mcp_tool", "config": { "tool": "fotello_edit" } },
+    { "name": "Processing / edit", "step_type": "mcp_tool", "config": { "tool": "oceano_enhance" } },
     { "name": "QC", "step_type": "qc", "config": { "qc_type": "real_estate_photo_qc" } },
     { "name": "Export", "step_type": "worker_task", "config": { "task_type": "render_export" } },
     { "name": "Delivery", "step_type": "delivery", "config": { "delivery_type": "photo_gallery" } }

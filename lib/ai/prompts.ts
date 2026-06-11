@@ -170,9 +170,9 @@ color, or fixtures.`,
 };
 
 /**
- * Sky presets mirrored from the Fotello workflow. Each maps to a concrete,
- * conservative description so output stays believable for the property's
- * lighting and time of day.
+ * Sky presets for the enhance workflow. Each maps to a concrete, conservative
+ * description so output stays believable for the property's lighting and time
+ * of day.
  */
 export type SkyStyle =
   | 'original'
@@ -192,7 +192,7 @@ const SKY_DIRECTIONS: Record<Exclude<SkyStyle, 'original'>, string> = {
     'an almost-clear blue sky that fades to a soft lighter blue near the horizon',
 };
 
-/** Enhancement strength, mirroring Fotello's Signature vs Natural. */
+/** Enhancement strength: Signature (full luxury finish) vs Natural (restrained). */
 export type EnhancementStyle = 'signature' | 'natural';
 
 export interface EnhanceDirectives {

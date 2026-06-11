@@ -32,7 +32,7 @@ const Body = z.object({
     .default('auto'),
   photo_ids: z.array(z.string().uuid()).optional(), // explicit selection
   prompt_extra: z.string().optional(),
-  // Fotello-style listing preferences that shape the enhance prompt.
+  // Listing enhance preferences that shape the enhance prompt.
   sky_style: z.enum(['original', 'sunny_puffs', 'loaded_puffs', 'crisp_streaks', 'clear_fade']).optional(),
   enhancement_style: z.enum(['signature', 'natural']).optional(),
   window_pull: z.boolean().optional(),

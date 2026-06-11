@@ -74,7 +74,7 @@ create table if not exists workflow_steps (
 -- integration/worker/external action gets a row. Make.com scenario runs
 -- are tracked here too.
 -- tool_type: ai_model | mcp_tool | local_worker | resolve_script
---   | lightroom_export | imagen_job | evoto_job | fotello_job
+--   | lightroom_export | imagen_job | evoto_job | oceano_enhance_job
 --   | higgsfield_generation | make_scenario | notion_sync | dropbox_upload
 --   | google_drive_upload | frame_io_review | vimeo_upload
 --   | pixieset_delivery | email_send | manual_action
