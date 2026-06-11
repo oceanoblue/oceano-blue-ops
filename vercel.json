@@ -1,11 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "app/api/photos/convert/route.ts": { "maxDuration": 300 },
-    "app/api/photos/raw-preview/route.ts": { "maxDuration": 60 },
-    "app/api/photos/adjust/route.ts": { "maxDuration": 60 },
-    "app/api/re-photo/classify/route.ts": { "maxDuration": 60 }
-  },
   "crons": [
     {
       "path": "/api/cron/run-pending-jobs",

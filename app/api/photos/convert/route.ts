@@ -22,8 +22,18 @@ export async function POST(request: Request) {
   const supabase = createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  if (!user) {
+    const { cookies } = await import('next/headers');
+    const all = cookies().getAll();
+    console.error('[convert] unauthorized', {
+      authError: authError?.message ?? null,
+      totalCookies: all.length,
+      sbCookies: all.map((c) => c.name).filter((n) => n.startsWith('sb-')),
+    });
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
 
   const parsed = Body.safeParse(await request.json());
   if (!parsed.success) {
