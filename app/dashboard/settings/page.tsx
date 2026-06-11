@@ -53,6 +53,7 @@ export default async function SettingsPage() {
         <ul className="text-sm space-y-1">
           <li><code className="text-xs bg-slate-100 px-1 rounded">OPENAI_API_KEY</code> — required for GPT Image 2.0 (default enhance engine)</li>
           <li><code className="text-xs bg-slate-100 px-1 rounded">OPENAI_IMAGE_MODEL</code> — optional, defaults to gpt-image-2</li>
+          <li><code className="text-xs bg-slate-100 px-1 rounded">OPENAI_IMAGE_SIZE</code> — optional output size; defaults to orientation-matched ~3.5MP (2304×1536). Set higher for more resolution, e.g. <code>3072x2048</code> (~6MP 3:2) or <code>3840x2160</code> (4K 16:9)</li>
           <li><code className="text-xs bg-slate-100 px-1 rounded">GEMINI_API_KEY</code> — required for Nano Banana 2 + Pro (secondary engines)</li>
           <li><code className="text-xs bg-slate-100 px-1 rounded">GEMINI_NANO_BANANA_2_MODEL</code> — optional, defaults to gemini-3.1-flash-image</li>
           <li><code className="text-xs bg-slate-100 px-1 rounded">GEMINI_IMAGE_MODEL</code> — optional, Nano Banana Pro model, defaults to gemini-3-pro-image</li>

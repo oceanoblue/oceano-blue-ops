@@ -61,12 +61,22 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
     setPreviewLoading(true);
-    fetch(`/api/photos/raw-preview?photo_id=${middleFrame.id}`, { signal: controller.signal })
-      .then((r) => (r.ok ? r.blob() : null))
-      .then((blob) => {
-        if (cancelled || !blob) return;
-        setRawPreviewUrl(URL.createObjectURL(blob));
-      })
+    // Fetch the preview, retrying once on a 401. Two bracket cards fire their
+    // previews at the same time; on an aging session that pair of concurrent
+    // requests can race Supabase's token refresh and one comes back 401. By the
+    // time we retry, the refresh has settled and the cookie is valid again.
+    (async () => {
+      const get = () =>
+        fetch(`/api/photos/raw-preview?photo_id=${middleFrame.id}`, { signal: controller.signal });
+      let r = await get();
+      if (r.status === 401) {
+        await new Promise((res) => setTimeout(res, 1000));
+        if (!cancelled) r = await get();
+      }
+      const blob = r.ok ? await r.blob() : null;
+      if (cancelled || !blob) return;
+      setRawPreviewUrl(URL.createObjectURL(blob));
+    })()
       .catch(() => {})
       .finally(() => {
         clearTimeout(timeout);
