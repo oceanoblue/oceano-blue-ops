@@ -4,7 +4,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { detectBrackets } from '@/lib/ai/bracket-detect';
 import { runAiJob } from '@/lib/ai/runner';
 import { getProvider } from '@/lib/ai';
-import { buildPrompt } from '@/lib/ai/prompts';
+import { buildPrompt, type EnhanceDirectives } from '@/lib/ai/prompts';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
 
 const Body = z.object({
@@ -24,12 +24,19 @@ const Body = z.object({
       'oceano-enhance',
       'autoenhance',
       'openai-gpt-image',
-      'gemini-banana-pro',
+      'gemini-nano-banana-2',
+      'gemini-nano-banana-pro',
+      'gemini-banana-pro', // legacy alias → Nano Banana Pro
       'auto',
     ])
     .default('auto'),
   photo_ids: z.array(z.string().uuid()).optional(), // explicit selection
   prompt_extra: z.string().optional(),
+  // Fotello-style listing preferences that shape the enhance prompt.
+  sky_style: z.enum(['original', 'sunny_puffs', 'loaded_puffs', 'crisp_streaks', 'clear_fade']).optional(),
+  enhancement_style: z.enum(['signature', 'natural']).optional(),
+  window_pull: z.boolean().optional(),
+  perspective_correction: z.boolean().optional(),
   // When true, after the main job completes the runner inspects the output
   // and enqueues follow-up sky_replace / window_pull / lawn / declutter
   // jobs if vision analysis flags them. Used by Stage 2's "Run AI" button.
@@ -46,13 +53,45 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'validation_failed', issues: parsed.error.issues }, { status: 400 });
   }
-  const { order_id, job_type, provider, photo_ids, prompt_extra, run_inline, auto_chain_fixes } = parsed.data;
+  const {
+    order_id,
+    job_type,
+    provider,
+    photo_ids,
+    prompt_extra,
+    run_inline,
+    auto_chain_fixes,
+    sky_style,
+    enhancement_style,
+    window_pull,
+    perspective_correction,
+  } = parsed.data;
 
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  // Fail fast with a clear message if the chosen engine has no API key, rather
+  // than enqueuing jobs that error mid-run. Deterministic providers are always
+  // configured.
+  const resolved = getProvider(provider, job_type as AiJobType);
+  if (!resolved.isConfigured()) {
+    return NextResponse.json(
+      {
+        error: 'not_configured',
+        provider: resolved.id,
+        hint:
+          resolved.id === 'openai-gpt-image'
+            ? 'Set OPENAI_API_KEY in the environment to use GPT Image 2.0.'
+            : resolved.id.startsWith('gemini')
+              ? 'Set GEMINI_API_KEY in the environment to use Nano Banana.'
+              : `Provider ${resolved.id} is missing its API key.`,
+      },
+      { status: 400 }
+    );
+  }
 
   const admin = createAdminClient();
 
@@ -102,8 +141,22 @@ export async function POST(request: Request) {
   }
 
   // Create one ai_jobs row per input group
-  const resolvedProvider = getProvider(provider, job_type as AiJobType).id;
-  const promptText = buildPrompt(job_type as AiJobType, prompt_extra);
+  const resolvedProvider = resolved.id;
+  const hasDirectives =
+    sky_style !== undefined ||
+    enhancement_style !== undefined ||
+    window_pull !== undefined ||
+    perspective_correction !== undefined;
+  const directives: EnhanceDirectives | string | undefined = hasDirectives
+    ? {
+        extra: prompt_extra,
+        skyStyle: sky_style,
+        enhancementStyle: enhancement_style,
+        windowPull: window_pull,
+        perspectiveCorrection: perspective_correction,
+      }
+    : prompt_extra;
+  const promptText = buildPrompt(job_type as AiJobType, directives);
 
   const { data: jobs, error: jobErr } = await admin
     .from('ai_jobs')

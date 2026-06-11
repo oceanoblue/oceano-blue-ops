@@ -34,6 +34,17 @@ CRITICAL COLOR & WHITE BALANCE RULES
 - Preserve texture and detail in white walls, ceilings, fabrics, and cabinetry.
 - Respect the natural lighting environment of the property.
 
+COLOR (ENHANCED BUT TRUE-TO-LIFE)
+Deliver rich, premium, magazine-grade color depth: deep natural greens in
+foliage and lawns, clean believable blue skies, honest warm wood tones, and
+saturated-yet-realistic accent colors. Add color vibrance and tonal
+separation so the image reads high-end — but NEVER at the expense of white
+balance. Whites, ceilings, trim, and cabinetry stay perfectly neutral; only
+genuinely non-neutral surfaces gain saturation. No global warm/amber or
+cool/blue cast, no oversaturation, no neon, no teal-and-orange grading.
+This is the luxury signature look: bright, clean, color-accurate, with
+whites that are truly white.
+
 TRUE-TO-LIFE EDITING PRIORITY
 The final image should feel as if the room was photographed perfectly in
 camera, natural daylight is illuminating the space, and the viewer is
@@ -158,9 +169,99 @@ shadows. Do not change the architecture, flooring, walls, windows, paint
 color, or fixtures.`,
 };
 
-export function buildPrompt(jobType: AiJobType, extra?: string): string {
+/**
+ * Sky presets mirrored from the Fotello workflow. Each maps to a concrete,
+ * conservative description so output stays believable for the property's
+ * lighting and time of day.
+ */
+export type SkyStyle =
+  | 'original'
+  | 'sunny_puffs'
+  | 'loaded_puffs'
+  | 'crisp_streaks'
+  | 'clear_fade';
+
+const SKY_DIRECTIONS: Record<Exclude<SkyStyle, 'original'>, string> = {
+  sunny_puffs:
+    'a clean blue sky with a few soft, scattered fair-weather cumulus puffs',
+  loaded_puffs:
+    'a blue sky with fuller, evenly distributed white cumulus clouds (still bright, never stormy)',
+  crisp_streaks:
+    'a crisp blue sky with light high cirrus streaks',
+  clear_fade:
+    'an almost-clear blue sky that fades to a soft lighter blue near the horizon',
+};
+
+/** Enhancement strength, mirroring Fotello's Signature vs Natural. */
+export type EnhancementStyle = 'signature' | 'natural';
+
+export interface EnhanceDirectives {
+  /** Free-form editor note (e.g. lightbox AI revision prompt). */
+  extra?: string;
+  /** Sky preset; 'original' (or omitted) means do not replace the sky. */
+  skyStyle?: SkyStyle;
+  /** Pull blown-out window exteriors back in when true. */
+  windowPull?: boolean;
+  /** Straighten verticals / correct perspective when true. */
+  perspectiveCorrection?: boolean;
+  /** Overall edit strength. */
+  enhancementStyle?: EnhancementStyle;
+}
+
+/**
+ * Turn structured listing preferences into an extra prompt block. Keeps the
+ * base luxury prompt untouched and appends only the toggled capabilities, so
+ * "consistent with everything, enhanced" stays the default and sky/window
+ * pulls are opt-in.
+ */
+export function composeEnhanceDirections(d: EnhanceDirectives): string {
+  const lines: string[] = [];
+
+  if (d.enhancementStyle === 'natural') {
+    lines.push(
+      'STRENGTH: Natural — apply a restrained, true-to-camera edit. Subtle color and tone only.'
+    );
+  } else if (d.enhancementStyle === 'signature') {
+    lines.push(
+      'STRENGTH: Signature — apply the full luxury finish: clean bright whites, rich true-to-life color, balanced HDR-grade tone. Never overprocessed.'
+    );
+  }
+
+  if (d.skyStyle && d.skyStyle !== 'original') {
+    lines.push(
+      `SKY: Replace any blown-out or unflattering exterior sky with ${SKY_DIRECTIONS[d.skyStyle]}. Match the lighting direction and time of day, relight the foreground subtly to suit, and preserve the building, landscaping, and all foreground elements exactly.`
+    );
+  }
+
+  if (d.windowPull) {
+    lines.push(
+      'WINDOW PULLS: Where windows are blown out, recover realistic exterior visibility through the glass with a natural indoor/outdoor brightness ratio. Avoid the fake dark-glass look; preserve frames, mullions, reflections, curtains, and blinds.'
+    );
+  }
+
+  if (d.perspectiveCorrection) {
+    lines.push(
+      'PERSPECTIVE: Straighten verticals and correct lens/perspective distortion while preserving realistic room proportions. Do not crop away important content.'
+    );
+  }
+
+  if (d.extra && d.extra.trim()) {
+    lines.push(`EDITOR NOTE: ${d.extra.trim()}`);
+  }
+
+  return lines.join('\n\n');
+}
+
+/**
+ * Build the final prompt for a job. Accepts either a plain editor note (legacy
+ * callers) or a structured set of listing directives.
+ */
+export function buildPrompt(jobType: AiJobType, extra?: string | EnhanceDirectives): string {
   const base = PROMPTS[jobType];
-  return extra ? `${base}\n\nAdditional direction from the editor: ${extra}` : base;
+  if (!extra) return base;
+  const block =
+    typeof extra === 'string' ? `Additional direction from the editor: ${extra}` : composeEnhanceDirections(extra);
+  return block ? `${base}\n\n${block}` : base;
 }
 
 /**

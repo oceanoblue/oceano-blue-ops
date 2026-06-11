@@ -114,13 +114,9 @@ export async function runAiJob(jobId: string): Promise<{
         byte_size: out.bytes.byteLength,
         is_hdr: job.job_type === 'hdr_merge',
         processing_status: 'complete',
-        ai_provider: resp.model.startsWith('oceano-enhance')
-          ? 'oceano-enhance'
-          : resp.model.startsWith('autoenhance')
-            ? 'autoenhance'
-            : resp.model.startsWith('gpt')
-              ? 'openai-gpt-image'
-              : 'gemini-banana-pro',
+        // Record the concrete provider that ran. ai_jobs.provider is already
+        // resolved to a concrete id at enqueue time (never 'auto').
+        ai_provider: job.provider ?? 'oceano-enhance',
         ai_prompt: resp.rawPromptUsed,
         ai_cost_cents: resp.costCents,
       });

@@ -125,6 +125,11 @@ export const autoenhance: AiProvider = {
     'twilight_convert',
   ],
 
+  isConfigured() {
+    // hdr_merge falls back to Oceano internally, but the API path needs a key.
+    return Boolean(process.env.AUTOENHANCE_API_KEY);
+  },
+
   estimatedCostCents() {
     // Approximate credit cost across plans ≈ €0.10–0.20 / image depending on
     // plan tier. Use 10¢ as a planning number.

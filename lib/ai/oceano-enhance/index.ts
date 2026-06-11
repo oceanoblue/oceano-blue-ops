@@ -45,6 +45,13 @@ export const oceanoEnhance: AiProvider = {
     'virtual_stage',
   ],
 
+  // Deterministic core is always available. Generative delegations (sky /
+  // window / twilight / staging) still need the relevant API key at run time,
+  // but the provider itself is always selectable.
+  isConfigured() {
+    return true;
+  },
+
   estimatedCostCents(req) {
     // Deterministic jobs are free (just our compute). enhance_single uses
     // Smart Enhance which runs a $0.0001 vision analysis and may chain one
