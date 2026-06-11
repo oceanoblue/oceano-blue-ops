@@ -49,6 +49,11 @@ const PRESETS: Record<string, Partial<AdjustOptions>> = {
     exposure: 0, contrast: 0.4, temp: 0.05, saturation: -0.05,
     highlights: 0.5, shadows: 0.45, whites: 0.05, blacks: 0.1, sharpening: 0.55,
   },
+  // Deliberate golden-hour warmth — the one preset where a warm cast is the point.
+  gold: {
+    exposure: 0.15, contrast: 0.1, temp: 0.25, saturation: 0.15,
+    highlights: 0.35, shadows: 0.5, whites: 0, blacks: -0.05, sharpening: 0.3,
+  },
 };
 
 const ZERO: AdjustOptions = {
@@ -450,8 +455,8 @@ export function PhotoViewer({
           <div className="p-4 space-y-5">
             {/* Presets */}
             <SidebarSection title="Profiles">
-              <div className="grid grid-cols-4 gap-2">
-                {(['signature', 'natural', 'airy', 'crisp'] as const).map((name) => (
+              <div className="grid grid-cols-5 gap-1.5">
+                {(['signature', 'natural', 'airy', 'crisp', 'gold'] as const).map((name) => (
                   <button
                     key={name}
                     onClick={() => applyPreset(name)}

@@ -19,6 +19,9 @@ export default async function ListingsPage() {
           <h1 className="text-2xl font-semibold text-ocean-950">Listings</h1>
           <p className="text-sm text-slate-600">Every property the team has photographed or scheduled.</p>
         </div>
+        <Link href="/dashboard/listings/new" className="btn-primary">
+          New listing
+        </Link>
       </div>
 
       <div className="card overflow-hidden">

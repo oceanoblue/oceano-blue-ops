@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { MapPin, Home, User, Calendar, Camera } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { fmtAddress, fmtCents, fmtDateTime, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
+import { NewOrderButton } from '@/components/listings/NewOrderButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,14 +57,17 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
         <Link href="/dashboard/listings" className="text-sm text-slate-500 hover:underline">
           ← Listings
         </Link>
-        <div className="mt-1 flex items-start gap-3">
-          <div className="h-10 w-10 rounded-lg bg-ocean-100 text-ocean-700 grid place-items-center shrink-0">
-            <Home className="h-5 w-5" />
+        <div className="mt-1 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-lg bg-ocean-100 text-ocean-700 grid place-items-center shrink-0">
+              <Home className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-ocean-950">{fmtAddress(l)}</h1>
+              <p className="text-sm text-slate-600 capitalize">{l.status?.replace('_', ' ')}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-ocean-950">{fmtAddress(l)}</h1>
-            <p className="text-sm text-slate-600 capitalize">{l.status?.replace('_', ' ')}</p>
-          </div>
+          <NewOrderButton listingId={l.id} />
         </div>
       </div>
 
