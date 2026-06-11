@@ -217,8 +217,8 @@ app.post('/convert', async (req, res) => {
 /**
  * Fast embedded-JPEG preview extraction. Every camera writes a small JPEG
  * preview (typically 1600-2400px) inside the ARW/CR3/etc for instant review
- * on the camera back. We extract that JPEG with `dcraw_emu -e` and stream it
- * back — no demosaicing, no encoding, much faster than the full /convert.
+ * on the camera back. We extract that JPEG with exiftool and stream it back —
+ * no demosaicing, no encoding, much faster than the full /convert.
  *
  * Used by the bracket-card UI so the photographer can see what they're about
  * to approve without waiting for the full conversion pipeline.
@@ -259,36 +259,27 @@ app.post('/preview', async (req, res) => {
     await fs.writeFile(tmp, rawBuf);
     log('extracting_preview', { bytes: rawBuf.byteLength });
 
-    // dcraw_emu -e writes the embedded JPEG next to the input as
-    // <input>.thumb.jpg (or .ppm if there's no JPEG preview, but every
-    // modern camera produces JPEG previews).
-    await new Promise((resolve, reject) => {
-      const proc = spawn('dcraw_emu', ['-e', tmp]);
-      const errChunks = [];
-      proc.stderr.on('data', (c) => errChunks.push(c));
-      proc.on('error', reject);
-      proc.on('close', (code) => {
-        if (code !== 0) {
-          reject(new Error(`dcraw_emu -e exited ${code}: ${Buffer.concat(errChunks).toString().slice(0, 500)}`));
-        } else {
-          resolve();
-        }
+    // Extract the embedded JPEG preview with exiftool. The libraw-bin build of
+    // dcraw_emu in this image rejects `-e` ("Unknown option -e"), and exiftool
+    // is the most reliable way to pull the camera preview across RAW formats.
+    // Sony ARW stores it under PreviewImage; other bodies use JpgFromRaw or
+    // ThumbnailImage. `-b` streams the raw bytes to stdout.
+    const extractTag = (tag) =>
+      new Promise((resolve, reject) => {
+        const proc = spawn('exiftool', ['-b', `-${tag}`, tmp]);
+        const chunks = [];
+        proc.stdout.on('data', (c) => chunks.push(c));
+        proc.on('error', reject);
+        proc.on('close', () => {
+          const buf = Buffer.concat(chunks);
+          resolve(buf.length > 0 ? buf : null);
+        });
       });
-    });
 
-    // Try common output paths produced by dcraw_emu -e.
-    const candidates = [`${tmp}.thumb.jpg`, `${tmp}.jpg`, `${tmp}.thumb.tiff`, `${tmp}.thumb.ppm`];
-    let thumbBytes = null;
-    let pickedPath = null;
-    for (const p of candidates) {
-      try {
-        thumbBytes = await fs.readFile(p);
-        pickedPath = p;
-        break;
-      } catch {
-        // try next candidate
-      }
-    }
+    const thumbBytes =
+      (await extractTag('PreviewImage')) ||
+      (await extractTag('JpgFromRaw')) ||
+      (await extractTag('ThumbnailImage'));
     if (!thumbBytes) throw new Error('no_preview_extracted');
 
     // Resize to a sane preview size for the UI.
@@ -298,9 +289,8 @@ app.post('/preview', async (req, res) => {
       .jpeg({ quality: 82, mozjpeg: true })
       .toBuffer();
 
-    // Cleanup
+    // Cleanup (exiftool streams to stdout, so only the input temp file exists).
     fs.unlink(tmp).catch(() => {});
-    if (pickedPath) fs.unlink(pickedPath).catch(() => {});
 
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'public, max-age=3600');

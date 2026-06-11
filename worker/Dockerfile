@@ -9,10 +9,14 @@
 
 FROM node:22-slim
 
-# LibRaw provides dcraw_emu. We also install Sharp's native dependencies.
+# LibRaw provides dcraw_emu (full RAW decode for /convert).
+# exiftool (libimage-exiftool-perl) extracts the embedded camera JPEG for the
+# fast /preview path — this libraw-bin build of dcraw_emu doesn't support `-e`.
+# We also install Sharp's native dependencies.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
        libraw-bin \
+       libimage-exiftool-perl \
        libvips42 \
        ca-certificates \
        curl \
