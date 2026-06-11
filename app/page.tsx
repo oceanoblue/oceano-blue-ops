@@ -4,24 +4,37 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-ocean-50 to-white">
       <div className="mx-auto max-w-5xl px-6 py-24">
-        <p className="text-sm font-semibold uppercase tracking-wide text-ocean-700">Oceano Blue</p>
+        <p className="text-sm font-semibold uppercase tracking-wide text-ocean-700">Oceano Blue Media</p>
         <h1 className="mt-2 text-4xl font-bold text-ocean-950 sm:text-5xl">
-          Real estate photography, end to end.
+          The Production OS.
         </h1>
         <p className="mt-6 max-w-2xl text-lg text-slate-700">
-          Book a shoot, schedule, shoot, process with AI, and deliver — all in one workflow built
-          for the Oceano Blue team.
+          One platform to run the whole studio — bookings and scheduling, AI photo and video
+          production, podcasts, client delivery, and the automations that tie it all together.
         </p>
         <div className="mt-10 flex flex-wrap gap-3">
-          <Link href="/book" className="btn-primary">Book a shoot</Link>
-          <Link href="/login" className="btn-secondary">Team sign in</Link>
+          <Link href="/login" className="btn-primary">Team sign in</Link>
+          <Link href="/book" className="btn-secondary">Book a shoot</Link>
         </div>
 
         <div className="mt-20 grid gap-6 md:grid-cols-3">
-          <Feature title="Booking + scheduling" body="Agents request shoots, the team accepts, and the calendar updates instantly." />
-          <Feature title="AI photo processing" body="HDR merge, sky replacement, window pulls, and more — powered by GPT Image and Banana Pro." />
-          <Feature title="Branded delivery" body="Token-protected galleries with full-size downloads, view tracking, and expirations." />
+          <Feature
+            title="Production pipeline"
+            body="Listings, orders, and jobs move from booking → shoot → AI production → review → delivery, with live progress at every step."
+          />
+          <Feature
+            title="AI media processing"
+            body="HDR merge, signature enhance, sky replacement, and window pulls — GPT Image 2.0 with Nano Banana as a secondary engine."
+          />
+          <Feature
+            title="Podcasts & delivery"
+            body="Per-client podcast production and publishing, plus token-protected client galleries with web and full-size downloads."
+          />
         </div>
+
+        <p className="mt-16 text-xs text-slate-400">
+          Internal platform for the Oceano Blue Media team. Clients book a shoot above.
+        </p>
       </div>
     </div>
   );
