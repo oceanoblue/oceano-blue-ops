@@ -1,7 +1,8 @@
 # Oceano Blue — Real Estate Photography Platform
 
-A replacement for Fotello, built on Next.js 14 + Supabase + Vercel, with AI photo
-processing wired up to OpenAI GPT Image and Google Gemini "Banana Pro".
+An AI-powered real estate photo production platform, built on Next.js 14 +
+Supabase + Vercel, with enhancement wired up to OpenAI GPT Image and Google
+Gemini (Nano Banana).
 
 ## What's in here
 

@@ -74,7 +74,7 @@ function pickAutoSize(len: number): 0 | 3 | 5 | 7 {
 
 export interface GroupingOptions {
   /**
-   * Force a fixed bracket size (Fotello "Count" method). When set, every
+   * Force a fixed bracket size (the "Count" bracketing method). When set, every
    * consecutive run is chunked into groups of exactly this many frames; any
    * remainder becomes singles. When omitted, sizes are auto-detected per run.
    */

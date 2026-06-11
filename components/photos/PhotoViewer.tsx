@@ -66,7 +66,7 @@ interface PhotoViewerProps {
 }
 
 /**
- * Fotello-style fullscreen editor: large preview area with prev/next, a
+ * Fullscreen editor: large preview area with prev/next, a
  * permanent right sidebar with sectioned sliders + preset profiles + aspect
  * ratio, a bottom filmstrip for quick navigation, and an AI revision input
  * along the bottom of the preview area.
@@ -416,7 +416,7 @@ export function PhotoViewer({
             </div>
           )}
 
-          {/* AI revision prompt — Fotello-style anchored bottom */}
+          {/* AI revision prompt — anchored bottom */}
           <div className="absolute inset-x-6 bottom-4 flex items-center gap-2 bg-white rounded-full shadow-lg px-3 py-1.5 z-10">
             <button
               onClick={() => setAiPrompt('')}

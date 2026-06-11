@@ -1,8 +1,7 @@
 -- =============================================================
 -- Seed Oceano Blue's actual product catalog
 -- =============================================================
--- Pulled from the existing Fotello catalog. Adjust prices/durations
--- in the Supabase Table Editor as needed.
+-- Adjust prices/durations in the Supabase Table Editor as needed.
 -- =============================================================
 
 with new_products as (
@@ -77,7 +76,7 @@ with new_products as (
       15000, 30, true, 110)
   returning id, slug
 )
--- Sqft-bracketed pricing for the photo service (mirrors Fotello tiers).
+-- Sqft-bracketed pricing for the photo service.
 insert into pricing_tiers (product_id, min_sqft, max_sqft, price_cents)
 select id, null,   1500, 22500 from new_products where slug = 'interior_exterior_photo' union all
 select id, 1501,   2500, 25000 from new_products where slug = 'interior_exterior_photo' union all

@@ -189,7 +189,7 @@ Minimal RE-photo job creator (job_type `real_estate_photo`). Returns
 
 ## 7. What was intentionally NOT built (per scope)
 
-- No photo editing / enhancement (Lightroom/Imagen/Evoto/Fotello triggers).
+- No photo editing / enhancement (Lightroom/Imagen/Evoto triggers).
 - No DaVinci automation.
 - No full UI redesign.
 - No thumbnails/proxies yet: originals stay local, so review shows filenames +
@@ -233,7 +233,7 @@ Minimal RE-photo job creator (job_type `real_estate_photo`). Returns
    to tag interior/exterior/twilight on the base frame; store on
    `assets.metadata.scene`; surface in review + QC.
 3. **Processing route → edit.** Wire approved brackets into `tool_runs`
-   (imagen/evoto/fotello) and `edit_recipes`; gate paid tools behind
+   (imagen/evoto/oceano_enhance) and `edit_recipes`; gate paid tools behind
    `approval_policies`/`approvals`.
 4. **Delivery.** On QC pass, create a `delivery_versions` row (photo_gallery)
    and a `review_sessions`/`external_links` (Pixieset) record.

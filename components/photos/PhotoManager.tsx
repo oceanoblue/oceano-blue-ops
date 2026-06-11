@@ -55,7 +55,7 @@ type AiProvider =
   | 'oceano-enhance'
   | 'auto';
 
-// Fotello-style listing preferences that shape the enhance prompt.
+// Listing enhance preferences that shape the enhance prompt.
 type SkyStyle = 'original' | 'sunny_puffs' | 'loaded_puffs' | 'crisp_streaks' | 'clear_fade';
 type EnhancementStyle = 'signature' | 'natural';
 
@@ -88,7 +88,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   // Stage 1 selection
   const [selectedBrackets, setSelectedBrackets] = useState<Set<string>>(new Set());
   const [selectedSingles, setSelectedSingles] = useState<Set<string>>(new Set());
-  // Fotello "Bracketing" method: Auto-detect, or force a fixed Count (3/5/7).
+  // Bracketing method: Auto-detect, or force a fixed Count (3/5/7).
   const [bracketCount, setBracketCount] = useState<'auto' | 3 | 5 | 7>('auto');
 
   // Stage 2 config
@@ -96,7 +96,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   const [autoDetect, setAutoDetect] = useState(true);
   const [stage2Selection, setStage2Selection] = useState<Set<string>>(new Set());
 
-  // Stage 2 enhance preferences (Fotello-style rail). Defaults match the
+  // Stage 2 enhance preferences. Defaults match the
   // signature luxury finish: full-strength edit, keep the real sky unless a
   // preset is chosen, recover blown windows, straighten verticals.
   const [enhancementStyle, setEnhancementStyle] = useState<EnhancementStyle>('signature');

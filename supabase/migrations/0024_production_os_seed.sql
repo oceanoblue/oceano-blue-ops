@@ -87,7 +87,7 @@ insert into tools (key, name, tool_type, risk_level, requires_approval, descript
   ('transcription',      'Transcription',         'local_worker',          'low',      false, 'Transcribe audio/video.'),
   ('imagen_enhance',     'Imagen AI Enhance',     'imagen_job',            'medium',   false, 'Imagen AI photo enhancement.'),
   ('evoto_edit',         'Evoto Edit',            'evoto_job',             'medium',   false, 'Evoto photo editing.'),
-  ('fotello_edit',       'Fotello Edit',          'fotello_job',           'medium',   false, 'Fotello photo editing.'),
+  ('oceano_enhance',     'Oceano Enhance',        'oceano_enhance_job',    'medium',   false, 'In-platform AI photo enhancement (GPT Image 2.0 default; Nano Banana 2/Pro).'),
   ('higgsfield_gen',     'Higgsfield Generation', 'higgsfield_generation', 'medium',   false, 'Generative media via Higgsfield.'),
   ('make_scenario',      'Make.com Scenario',     'make_scenario',         'medium',   false, 'Run a Make.com automation scenario.'),
   ('frame_io_review',    'Frame.io Review',       'frame_io_review',       'medium',   false, 'Create a Frame.io review link.'),
@@ -112,7 +112,6 @@ insert into integrations (provider, name) values
   ('higgsfield',      'Higgsfield'),
   ('imagen',          'Imagen AI'),
   ('evoto',           'Evoto'),
-  ('fotello',         'Fotello'),
   ('davinci_resolve', 'DaVinci Resolve'),
   ('lightroom',       'Lightroom')
 on conflict (provider) do nothing;
