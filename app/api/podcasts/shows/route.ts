@@ -30,6 +30,9 @@ const CreateBody = z.object({
   audio_style: z.string().max(2000).optional(),
   intro_rules: z.string().max(2000).optional(),
   outro_rules: z.string().max(2000).optional(),
+  // Distribution: which channels this show publishes to + Transistor mapping.
+  publishing_platforms: z.array(z.enum(['youtube', 'audio'])).optional(),
+  transistor_show_id: z.string().max(100).optional().or(z.literal('')),
 });
 
 const UpdateBody = CreateBody.partial().extend({ show_id: z.string().uuid() });
@@ -43,6 +46,8 @@ function brandingColumns(src: Record<string, any>) {
   ]) {
     if (src[k] !== undefined) out[k] = src[k] === '' ? null : src[k];
   }
+  if (src.publishing_platforms !== undefined) out.publishing_platforms = src.publishing_platforms;
+  if (src.transistor_show_id !== undefined) out.transistor_show_id = src.transistor_show_id || null;
   if (src.brand_color !== undefined) {
     out.brand_color = src.brand_color ? `#${String(src.brand_color).replace('#', '')}` : null;
   }

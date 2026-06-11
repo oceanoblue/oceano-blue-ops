@@ -14,7 +14,7 @@ export default async function ShowDetailPage({ params }: { params: { id: string 
   const [{ data: show }, { data: clients }] = await Promise.all([
     supabase
       .from('podcast_shows')
-      .select('id, name, slug, client_id, hosts, description, default_language, tagline, mood, tone, brand_color, logo_url, clients(full_name)')
+      .select('id, name, slug, client_id, hosts, description, default_language, tagline, mood, tone, brand_color, logo_url, publishing_platforms, transistor_show_id, clients(full_name)')
       .eq('id', params.id)
       .maybeSingle(),
     supabase.from('clients').select('id, full_name').order('full_name'),
@@ -76,6 +76,8 @@ export default async function ShowDetailPage({ params }: { params: { id: string 
               tone: s.tone ?? '',
               brand_color: s.brand_color ?? '',
               logo_url: s.logo_url ?? null,
+              publishing_platforms: (s.publishing_platforms ?? ['youtube']) as string[],
+              transistor_show_id: s.transistor_show_id ?? '',
             }}
           />
           <p className="mt-3 text-xs text-slate-400">
