@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Plus, Save, ImagePlus } from 'lucide-react';
 
@@ -19,11 +19,14 @@ export type ShowValues = {
   tone: string;
   brand_color: string;
   logo_url: string | null;
+  publishing_platforms: string[];
+  transistor_show_id: string;
 };
 
 const EMPTY: ShowValues = {
   name: '', slug: '', client_id: null, hosts: '', description: '', default_language: 'en',
   tagline: '', mood: '', tone: '', brand_color: '', logo_url: null,
+  publishing_platforms: ['youtube'], transistor_show_id: '',
 };
 
 function slugify(name: string) {
@@ -70,6 +73,25 @@ export function ShowForm({
   const [logoBusy, setLogoBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [transistorShows, setTransistorShows] = useState<Array<{ id: string; title: string }> | null>(null);
+
+  const audioEnabled = v.publishing_platforms.includes('audio');
+  useEffect(() => {
+    if (!audioEnabled || transistorShows !== null) return;
+    fetch('/api/podcasts/transistor/shows')
+      .then((r) => r.json())
+      .then((d) => setTransistorShows(d.shows ?? []))
+      .catch(() => setTransistorShows([]));
+  }, [audioEnabled, transistorShows]);
+
+  function togglePlatform(key: 'youtube' | 'audio') {
+    setV((p) => ({
+      ...p,
+      publishing_platforms: p.publishing_platforms.includes(key)
+        ? p.publishing_platforms.filter((x) => x !== key)
+        : [...p.publishing_platforms, key],
+    }));
+  }
 
   function set<K extends keyof ShowValues>(key: K, value: ShowValues[K]) {
     setV((p) => ({ ...p, [key]: value }));
@@ -95,6 +117,8 @@ export function ShowForm({
           mood: v.mood || undefined,
           tone: v.tone || undefined,
           brand_color: v.brand_color || '',
+          publishing_platforms: v.publishing_platforms as any,
+          transistor_show_id: v.transistor_show_id || '',
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -289,6 +313,41 @@ export function ShowForm({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Distribution — which channels publishing fans out to on approval */}
+      <div className="rounded-md border border-slate-200 p-3">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Distribution</div>
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={v.publishing_platforms.includes('youtube')} disabled={busy} onChange={() => togglePlatform('youtube')} />
+            YouTube (video)
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={audioEnabled} disabled={busy} onChange={() => togglePlatform('audio')} />
+            Audio podcast (Transistor → Spotify + Apple)
+          </label>
+        </div>
+        {audioEnabled && (
+          <div className="mt-3">
+            <label className="label">Transistor show</label>
+            {transistorShows === null ? (
+              <p className="text-xs text-slate-400">Loading Transistor shows…</p>
+            ) : transistorShows.length > 0 ? (
+              <select className="input" value={v.transistor_show_id} disabled={busy} onChange={(e) => set('transistor_show_id', e.target.value)}>
+                <option value="">— pick the Transistor show —</option>
+                {transistorShows.map((t) => (
+                  <option key={t.id} value={t.id}>{t.title}</option>
+                ))}
+              </select>
+            ) : (
+              <input className="input font-mono text-xs" value={v.transistor_show_id} disabled={busy} placeholder="Transistor show ID" onChange={(e) => set('transistor_show_id', e.target.value)} />
+            )}
+            <p className="mt-1 text-xs text-slate-400">
+              Create the show in Transistor first (their wizard submits to Spotify/Apple once), then pick it here.
+            </p>
+          </div>
+        )}
       </div>
 
       <div>

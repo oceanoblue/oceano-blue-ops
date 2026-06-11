@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { publishTransistorEpisode } from '@/lib/integrations/transistor';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
 
   const { data: ep } = await admin
     .from('podcast_episodes')
-    .select('id, job_id, podcast_shows(slug)')
+    .select('id, job_id, metadata, podcast_shows(slug)')
     .eq('id', episode_id)
     .maybeSingle();
   if (!ep) return NextResponse.json({ error: 'episode_not_found' }, { status: 404 });
@@ -134,7 +135,29 @@ export async function POST(request: Request) {
       publish = 'no_youtube';
     }
 
-    return NextResponse.json({ ok: true, publish });
+    // Audio fan-out: publish the Transistor draft if the pipeline created one.
+    let audio: string = 'none';
+    const transistorEpisodeId = (ep.metadata as any)?.transistor_episode_id;
+    if (transistorEpisodeId) {
+      const r = await publishTransistorEpisode(String(transistorEpisodeId));
+      audio = r.status;
+      if (r.status === 'published') {
+        await admin
+          .from('podcast_deliverables')
+          .update({ status: 'published' })
+          .eq('episode_id', ep.id)
+          .eq('deliverable_type', 'full_episode_audio');
+        await admin.from('production_events').insert({
+          job_id: ep.job_id,
+          actor_type: 'user',
+          actor_id: user.id,
+          event_type: 'transistor_published',
+          summary: 'Audio episode published on Transistor (Spotify/Apple via RSS)',
+        });
+      }
+    }
+
+    return NextResponse.json({ ok: true, publish, audio });
   } else {
     if (appr) {
       await admin.from('approvals').update({ status: 'rejected', decided_by: user.id, decided_at: now, notes: notes ?? null }).eq('id', appr.id);

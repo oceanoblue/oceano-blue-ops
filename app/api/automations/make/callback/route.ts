@@ -35,6 +35,7 @@ const Body = z.object({
     'copy.generated',
     'youtube.uploaded',
     'youtube.published', // Phase 2: Make confirms the video was flipped public
+    'transistor.uploaded', // audio draft created on Transistor (awaiting approval)
     'delivered',
     'scenario.failed',
   ]),
@@ -153,7 +154,7 @@ export async function POST(request: Request) {
 
         // Upsert the show by slug (registry lives in POS). Shows created in the
         // dashboard carry client + language + branding; auto-created get defaults.
-        const SHOW_COLS = 'id, name, client_id, default_language, mood, tone, tagline, hosts, description';
+        const SHOW_COLS = 'id, name, client_id, default_language, mood, tone, tagline, hosts, description, publishing_platforms, transistor_show_id';
         let show = (await admin
           .from('podcast_shows')
           .select(SHOW_COLS)
@@ -244,6 +245,12 @@ export async function POST(request: Request) {
           asset_id: asset.id,
           parent_tool_run_id: tr.id,
           already_uploaded: false, // brand-new episode — pipeline should upload
+          // Distribution flags so the pipeline knows which branches to run.
+          distribution: {
+            youtube: (show.publishing_platforms ?? []).includes('youtube') || (show.publishing_platforms ?? []).length === 0,
+            audio: (show.publishing_platforms ?? []).includes('audio'),
+            transistor_show_id: show.transistor_show_id ?? null,
+          },
           // Branding for the AI copy step (Make passes these into the Claude prompt).
           show: {
             name: show.name ?? show_slug,
@@ -406,6 +413,38 @@ export async function POST(request: Request) {
           .eq('tool_type', 'make_publish');
         await logEvent(ep.job_id, 'make', 'youtube_published', 'YouTube video flipped to public', {
           youtube_url: output.youtube_url ?? null,
+        });
+        return NextResponse.json({ ok: true, episode_id: ep.id });
+      }
+
+      case 'transistor.uploaded': {
+        // Audio draft created on Transistor by the pipeline — record it and
+        // keep it gated behind the same approval as YouTube.
+        const ep = await resolveEpisode(parsed.data.episode_id);
+        if (!ep) return NextResponse.json({ error: 'episode_not_found' }, { status: 404 });
+
+        const transistorEpisodeId = String(output.transistor_episode_id ?? '');
+        if (!transistorEpisodeId) return NextResponse.json({ error: 'transistor_episode_id_required' }, { status: 400 });
+
+        const meta = { ...(ep.metadata ?? {}), transistor_episode_id: transistorEpisodeId };
+        await admin.from('podcast_episodes').update({ metadata: meta }).eq('id', ep.id);
+
+        const { data: existingAudio } = await admin
+          .from('podcast_deliverables')
+          .select('id')
+          .eq('episode_id', ep.id)
+          .eq('deliverable_type', 'full_episode_audio')
+          .maybeSingle();
+        if (!existingAudio) {
+          await admin.from('podcast_deliverables').insert({
+            episode_id: ep.id,
+            deliverable_type: 'full_episode_audio',
+            status: 'internal_review',
+            external_url: output.transistor_url ?? null,
+          });
+        }
+        await logEvent(ep.job_id, 'make', 'transistor_uploaded', 'Audio draft created on Transistor — awaiting approval', {
+          transistor_episode_id: transistorEpisodeId,
         });
         return NextResponse.json({ ok: true, episode_id: ep.id });
       }
