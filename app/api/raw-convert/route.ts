@@ -14,8 +14,21 @@ import { createClient } from '@/lib/supabase/server';
  *
  * Authenticates the user, then proxies to the ARW worker with the shared secret.
  * The 401 carries a cookie diagnostic so we can see if auth cookies arrive.
+ *
+ * Idempotent: if a converted JPEG sibling already exists (e.g. the gateway
+ * timed out but the worker finished in the background), it's returned
+ * immediately — so client retries always converge.
  */
 const Body = z.object({ photo_id: z.string().uuid() });
+
+const RAW_EXT = /\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i;
+
+// A full ARW round trip (download from storage + dcraw decode + encode +
+// upload) can take well over the default function timeout — the gateway was
+// returning 504 mid-conversion. This is a freshly-built function, so this is
+// also the clean test of whether maxDuration itself ever broke cookie auth
+// (the old 401s are now attributed to a stale function build).
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const supabase = createClient();
@@ -34,7 +47,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const parsed = Body.safeParse(await request.json());
+  const parsed0 = Body.safeParse(await request.json());
+  if (parsed0.success) {
+    // Already converted (possibly by a previous attempt that the gateway cut
+    // off)? Return the JPEG sibling without re-running the worker.
+    const { data: siblings } = await (supabase.from('photos') as any)
+      .select('id, filename')
+      .eq('parent_photo_id', parsed0.data.photo_id)
+      .eq('kind', 'raw')
+      .limit(10);
+    const jpeg = (siblings ?? []).find((s: any) => !RAW_EXT.test(s.filename));
+    if (jpeg) return NextResponse.json({ photo_id: jpeg.id, already_converted: true });
+  }
+  const parsed = parsed0;
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'validation_failed', issues: parsed.error.issues },
