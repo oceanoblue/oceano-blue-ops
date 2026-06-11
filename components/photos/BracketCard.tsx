@@ -14,14 +14,11 @@ interface BracketCardProps {
 }
 
 /**
- * Visual representation of a detected HDR bracket. Shows up to 3 mini
- * thumbnails stacked horizontally inside one card.
- *
- * For RAW brackets we can't render the ARW bytes directly in the browser,
- * so we fetch the embedded camera-JPEG preview from the worker for the
- * MIDDLE (0 EV) frame and display it across all three thumbnail slots. The
- * other frames stay as placeholder camera icons — the middle frame is the
- * one the photographer cares about for triage anyway.
+ * Visual representation of a detected HDR bracket: ONE hero thumbnail (the
+ * middle / 0 EV frame — the one that matters for triage) with an "N frames"
+ * count badge. Consistent for RAW and JPEG brackets:
+ *   - JPEG middle frame → regular signed URL
+ *   - RAW middle frame  → embedded camera-JPEG preview from the worker
  */
 export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: BracketCardProps) {
   // RAW preview state — separate from the JPEG `urls` cache because the
@@ -35,25 +32,23 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
 
   const allRaw = bracket.photos.every((p) => isRawFilename(p.filename));
   const middleFrame = bracket.photos[Math.floor(bracket.photos.length / 2)] ?? bracket.photos[0];
+  const middleIsRaw = isRawFilename(middleFrame.filename);
 
-  // For non-RAW frames in the bracket, pre-fetch the regular signed URLs.
+  // JPEG middle frame → fetch its regular signed URL.
   useEffect(() => {
-    for (const p of bracket.photos.slice(0, 3)) {
-      if (isRawFilename(p.filename)) continue;
-      if (urls[p.id] !== undefined) continue;
-      fetch(`/api/photo-url?photo_id=${p.id}`)
-        .then((r) => r.json())
-        .then((d) => setUrls((u) => ({ ...u, [p.id]: d.url ?? null })))
-        .catch(() => setUrls((u) => ({ ...u, [p.id]: null })));
-    }
-  }, [bracket.photos, urls, setUrls]);
+    if (middleIsRaw) return;
+    if (urls[middleFrame.id] !== undefined) return;
+    fetch(`/api/photo-url?photo_id=${middleFrame.id}`)
+      .then((r) => r.json())
+      .then((d) => setUrls((u) => ({ ...u, [middleFrame.id]: d.url ?? null })))
+      .catch(() => setUrls((u) => ({ ...u, [middleFrame.id]: null })));
+  }, [middleFrame.id, middleIsRaw, urls, setUrls]);
 
-  // For all-RAW brackets, lazy-load the embedded-JPEG preview of the middle
-  // frame from the RAW worker. If the worker isn't reachable/configured in
-  // this deployment, give up after a short timeout and fall back to the RAW
-  // placeholder rather than spinning until the route's 60s limit.
+  // RAW middle frame → lazy-load the embedded-JPEG preview from the worker.
+  // If the worker isn't reachable/configured, give up after a short timeout
+  // and fall back to the camera placeholder rather than spinning forever.
   useEffect(() => {
-    if (!allRaw) return;
+    if (!middleIsRaw) return;
     // Only one attempt per middle frame, regardless of re-renders.
     if (previewTriedRef.current === middleFrame.id) return;
     previewTriedRef.current = middleFrame.id;
@@ -87,7 +82,7 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [allRaw, middleFrame.id]);
+  }, [middleIsRaw, middleFrame.id]);
 
   // Release the object URL when the component unmounts.
   useEffect(() => {
@@ -106,9 +101,9 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
   const rangeLabel =
     bracket.photos.length > 1 ? `${stripExt(first.filename)}–${stripExt(last.filename)}` : stripExt(first.filename);
 
-  // If we have a RAW preview, render it once spanning the full strip area
-  // so it actually reads as a photo. If not, fall back to per-frame tiles.
-  const showFullPreview = allRaw && rawPreviewUrl;
+  // One consistent hero thumbnail for every bracket: the middle (0 EV) frame.
+  const heroUrl = middleIsRaw ? rawPreviewUrl : urls[middleFrame.id] ?? null;
+  const heroLoading = middleIsRaw ? previewLoading : urls[middleFrame.id] === undefined;
 
   return (
     <div
@@ -117,47 +112,24 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
         selected ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'
       }`}
     >
-      {/* Thumbnail strip */}
-      {showFullPreview ? (
-        <div className="relative aspect-[3/2] bg-slate-800 overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={rawPreviewUrl!}
-            alt={middleFrame.filename}
-            className="h-full w-full object-cover"
-          />
-          {/* Frame count badge top-right */}
-          <div className="absolute bottom-1 right-1 text-[10px] font-mono bg-black/60 text-white px-1.5 py-0.5 rounded">
-            {bracket.photos.length} frames
+      {/* Hero thumbnail + frame-count badge */}
+      <div className="relative aspect-[3/2] bg-slate-800 overflow-hidden">
+        {heroUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={heroUrl} alt={middleFrame.filename} className="h-full w-full object-cover" />
+        ) : (
+          <div className="h-full w-full grid place-items-center text-slate-500">
+            {heroLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+            ) : (
+              <Camera className="h-6 w-6" strokeWidth={1.5} />
+            )}
           </div>
+        )}
+        <div className="absolute bottom-1.5 right-1.5 text-[10px] font-mono bg-black/60 text-white px-1.5 py-0.5 rounded">
+          {bracket.photos.length} frames
         </div>
-      ) : (
-        <div className="flex gap-px bg-slate-900">
-          {bracket.photos.slice(0, 3).map((p) => {
-            const url = urls[p.id];
-            const raw = isRawFilename(p.filename);
-            return (
-              <div
-                key={p.id}
-                className="flex-1 aspect-square bg-slate-800 grid place-items-center overflow-hidden"
-              >
-                {raw ? (
-                  previewLoading ? (
-                    <Loader2 className="h-5 w-5 text-slate-400 animate-spin" />
-                  ) : (
-                    <Camera className="h-5 w-5 text-slate-500" strokeWidth={1.5} />
-                  )
-                ) : url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={url} alt={p.filename} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="text-[10px] text-slate-500">…</div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      </div>
 
       {/* Footer with bracket info */}
       <div className="px-3 py-2.5 bg-slate-50">
