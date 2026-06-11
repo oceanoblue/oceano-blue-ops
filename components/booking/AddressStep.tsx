@@ -8,6 +8,7 @@ declare global {
   interface Window {
     google: any;
     initGooglePlaces?: () => void;
+    gm_authFailure?: () => void;
   }
 }
 
@@ -54,6 +55,15 @@ export function AddressStep({
   );
 
   useEffect(() => {
+    // Google calls this global when the Maps key is rejected (invalid key,
+    // referrer not allowed, billing off, or Places API not enabled). The script
+    // still "loads", so without this hook the input would just sit there broken
+    // — fall back to manual entry so a client can always finish booking.
+    window.gm_authFailure = () => {
+      setError(null);
+      setLoading(false);
+      setKeyMissing(true);
+    };
     if (!GMAPS_KEY) {
       setLoading(false);
       setKeyMissing(true);
