@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import {
   Upload,
@@ -199,6 +199,54 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   function isMerePassthrough(p: Photo): boolean {
     return p.is_hdr === true && p.ai_provider === 'oceano-enhance';
   }
+
+  // ─── Eager RAW conversion ──────────────────────────────────────────────
+  // Convert ARW/DNG frames to JPEG in the background as soon as they exist,
+  // instead of making Approve & Merge pay the slow, serialized conversion
+  // cost. /api/raw-convert is idempotent, so the merge step later just picks
+  // up the finished JPEGs instantly.
+  const [bgConvert, setBgConvert] = useState<{ done: number; total: number } | null>(null);
+  const bgAttempted = useRef<Set<string>>(new Set());
+  const bgRunning = useRef(false);
+
+  useEffect(() => {
+    if (uploading || bgRunning.current) return;
+    // rawPhotos already excludes ARWs that have a converted JPEG sibling.
+    const targets = rawPhotos.filter(
+      (p) => isRawFilename(p.filename) && !bgAttempted.current.has(p.id)
+    );
+    if (targets.length === 0) return;
+    bgRunning.current = true;
+    targets.forEach((p) => bgAttempted.current.add(p.id));
+    let done = 0;
+    setBgConvert({ done: 0, total: targets.length });
+
+    const queue = targets.slice();
+    async function bgWorker() {
+      while (queue.length) {
+        const p = queue.shift();
+        if (!p) return;
+        try {
+          await fetch('/api/raw-convert', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ photo_id: p.id }),
+          });
+        } catch {
+          // Background pass — Approve & Merge retries with real error surfacing.
+        }
+        done += 1;
+        setBgConvert({ done, total: targets.length });
+        refresh(); // swap each ARW card for its JPEG as it lands
+      }
+    }
+    // Two lanes: keeps one request queued at the worker without dog-piling it.
+    Promise.all([bgWorker(), bgWorker()]).finally(() => {
+      bgRunning.current = false;
+      setBgConvert(null);
+      refresh();
+    });
+  }, [rawPhotos, uploading, refresh]);
 
   // EXIF cache for filename-only bracket detection fallback.
   const [exifByPhoto, setExifByPhoto] = useState<Record<string, ExifSnapshot>>({});
@@ -560,6 +608,25 @@ export function PhotoManager({ orderId }: { orderId: string }) {
           3: stage3Photos.length,
         }}
       />
+
+      {/* Background RAW preparation */}
+      {bgConvert && !mergeProgress && (
+        <div className="card p-3 space-y-2">
+          <div className="flex items-center gap-2 text-sm text-slate-700">
+            <Loader2 className="h-4 w-4 animate-spin text-ocean-600" />
+            <span>
+              Preparing RAW files — {bgConvert.done}/{bgConvert.total} converted to JPEG in the background.
+              <span className="text-slate-400"> Keep sorting; Approve &amp; Merge will be fast once this finishes.</span>
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-ocean-500 transition-all"
+              style={{ width: `${Math.round((bgConvert.total ? bgConvert.done / bgConvert.total : 0) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Approve & Merge progress (RAW conversion is the slow part) */}
       {mergeProgress && (
