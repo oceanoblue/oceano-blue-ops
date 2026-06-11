@@ -21,9 +21,11 @@ processing wired up to OpenAI GPT Image and Google Gemini "Banana Pro".
 - `/gallery/<token>` branded download gallery for clients
 
 **AI processing pipeline**
-- Provider abstraction with two implementations:
-  - `openai-gpt-image` (gpt-image-1 via the `images.edit` endpoint)
-  - `gemini-banana-pro` (Gemini 2.5 Flash Image / Banana Pro / Nano Banana)
+- Provider abstraction with a default + selectable secondaries:
+  - `openai-gpt-image` — **GPT Image 2.0** (`gpt-image-2`), the default enhance engine
+  - `gemini-nano-banana-2` — Nano Banana 2 (`gemini-3.1-flash-image`)
+  - `gemini-nano-banana-pro` — Nano Banana Pro (`gemini-3-pro-image`)
+  - `oceano-enhance` — internal deterministic Sharp pipeline (HDR merge, lawn)
 - Real-estate-tuned prompts for HDR merge, single-shot enhance, sky replace,
   window pull, lawn enhance, declutter, twilight convert, virtual stage
 - Sharp preprocessing (auto-rotate, downscale, JPEG re-encode) before each call

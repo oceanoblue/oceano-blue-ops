@@ -48,7 +48,12 @@ interface JobView {
 }
 
 type Stage = 1 | 2 | 3;
-type AiProvider = 'openai-gpt-image' | 'gemini-banana-pro' | 'oceano-enhance' | 'auto';
+type AiProvider =
+  | 'openai-gpt-image'
+  | 'gemini-nano-banana-2'
+  | 'gemini-nano-banana-pro'
+  | 'oceano-enhance'
+  | 'auto';
 
 const STAGE_TITLES: Record<Stage, string> = {
   1: 'Sort & Merge',
@@ -833,8 +838,9 @@ function Stage2({
                 value={provider}
                 onChange={(e) => onProviderChange(e.target.value as AiProvider)}
               >
-                <option value="openai-gpt-image">GPT Image 2 (recommended)</option>
-                <option value="gemini-banana-pro">Nano Banana Pro (Gemini)</option>
+                <option value="openai-gpt-image">GPT Image 2.0 (default)</option>
+                <option value="gemini-nano-banana-2">Nano Banana 2 (Gemini)</option>
+                <option value="gemini-nano-banana-pro">Nano Banana Pro (Gemini)</option>
                 <option value="oceano-enhance">Oceano Smart Enhance</option>
                 <option value="auto">Auto pick</option>
               </select>

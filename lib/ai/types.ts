@@ -2,6 +2,10 @@ import type { AiJobType } from '@/lib/supabase/database.types';
 
 export type AiProviderId =
   | 'openai-gpt-image'
+  | 'gemini-nano-banana-2'
+  | 'gemini-nano-banana-pro'
+  // Legacy alias kept so historical ai_jobs.provider rows + older callers still
+  // resolve. Points at Nano Banana Pro.
   | 'gemini-banana-pro'
   | 'oceano-enhance'
   | 'autoenhance';
@@ -46,6 +50,12 @@ export interface AiProvider {
   displayName: string;
   /** Which job types this provider is best at. */
   supports: AiJobType[];
+  /**
+   * True when the provider's required API key(s) are present. Lets the API
+   * layer return a clear `not_configured` instead of failing a job mid-run.
+   * Deterministic providers (Oceano Enhance) are always configured.
+   */
+  isConfigured(): boolean;
   /** Estimated price in cents per image output. */
   estimatedCostCents(req: AiRequest): number;
   process(req: AiRequest): Promise<AiResponse>;

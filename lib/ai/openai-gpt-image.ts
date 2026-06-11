@@ -24,6 +24,10 @@ export const openaiGptImage: AiProvider = {
     'virtual_stage',
   ],
 
+  isConfigured() {
+    return Boolean(process.env.OPENAI_API_KEY);
+  },
+
   estimatedCostCents(req) {
     // gpt-image-2 native 2K ≈ $0.12/image; 4K upscale ≈ $0.24/image.
     // We default to 2K — editors can re-run a final select set at 4K.

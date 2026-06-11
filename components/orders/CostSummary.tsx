@@ -11,8 +11,10 @@ interface AiJobLite {
 const PROVIDER_LABEL: Record<string, string> = {
   'oceano-enhance': 'Oceano Enhance',
   'autoenhance': 'Autoenhance.ai',
-  'openai-gpt-image': 'GPT Image 2',
-  'gemini-banana-pro': 'Nano Banana',
+  'openai-gpt-image': 'GPT Image 2.0',
+  'gemini-nano-banana-2': 'Nano Banana 2',
+  'gemini-nano-banana-pro': 'Nano Banana Pro',
+  'gemini-banana-pro': 'Nano Banana Pro', // legacy rows
 };
 
 /**

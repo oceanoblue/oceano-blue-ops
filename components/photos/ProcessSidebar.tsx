@@ -12,7 +12,13 @@ export type EditKind =
   | 'twilight_convert'
   | 'declutter';
 
-export type ProviderId = 'auto' | 'oceano-enhance' | 'autoenhance' | 'openai-gpt-image' | 'gemini-banana-pro';
+export type ProviderId =
+  | 'auto'
+  | 'oceano-enhance'
+  | 'autoenhance'
+  | 'openai-gpt-image'
+  | 'gemini-nano-banana-2'
+  | 'gemini-nano-banana-pro';
 
 /**
  * Sticky right-side panel that owns the "what to do with the selected photos"
@@ -181,11 +187,12 @@ export function ProcessSidebar({
           value={provider}
           onChange={(e) => onProviderChange(e.target.value as ProviderId)}
         >
-          <option value="auto">Auto (Smart Enhance)</option>
+          <option value="openai-gpt-image">GPT Image 2.0 (default)</option>
+          <option value="gemini-nano-banana-2">Nano Banana 2</option>
+          <option value="gemini-nano-banana-pro">Nano Banana Pro</option>
           <option value="oceano-enhance">Oceano Enhance (no AI)</option>
           <option value="autoenhance">Autoenhance.ai</option>
-          <option value="openai-gpt-image">GPT Image 2</option>
-          <option value="gemini-banana-pro">Nano Banana Pro</option>
+          <option value="auto">Auto (best per job)</option>
         </select>
       </div>
 
