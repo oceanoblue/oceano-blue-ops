@@ -25,14 +25,17 @@ export async function POST(request: Request) {
     error: authError,
   } = await supabase.auth.getUser();
   if (!user) {
+    // Temporary diagnostic surfaced in the response so the badge shows it
+    // directly (Vercel log search has been unreliable). Tells us whether the
+    // handler is even receiving the auth cookies.
     const { cookies } = await import('next/headers');
     const all = cookies().getAll();
-    console.error('[convert] unauthorized', {
-      authError: authError?.message ?? null,
-      totalCookies: all.length,
-      sbCookies: all.map((c) => c.name).filter((n) => n.startsWith('sb-')),
-    });
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    const sb = all.filter((c) => c.name.startsWith('sb-')).length;
+    const err = authError?.message ? ` ${authError.message}` : '';
+    return NextResponse.json(
+      { error: `unauthorized [cookies:${all.length} sb:${sb}]${err}` },
+      { status: 401 }
+    );
   }
 
   const parsed = Body.safeParse(await request.json());
