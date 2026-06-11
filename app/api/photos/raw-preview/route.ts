@@ -13,9 +13,11 @@ import { createClient } from '@/lib/supabase/server';
  *
  * The route streams the JPEG bytes directly from the worker — no
  * persistence. The browser caches via the worker's Cache-Control header.
+ *
+ * Timeout is set in vercel.json (`functions`), not via `export const
+ * maxDuration` — that route-segment config makes the handler receive an empty
+ * cookie store here, so getUser() returns null and the route 401s.
  */
-export const maxDuration = 60;
-
 export async function GET(request: Request) {
   const supabase = createClient();
   const {
