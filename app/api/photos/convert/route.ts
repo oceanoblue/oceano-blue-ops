@@ -13,16 +13,30 @@ const Body = z.object({
 
 // Fly cold-start (2-3s) + 50-100MB ARW download from Supabase (~3-5s) +
 // dcraw decode (3-8s) + Sharp encode (~1s) + JPEG upload back (~2s) — full
-// round trip can easily hit 60s. Bump to 300 (Vercel Pro max) so we don't
-// false-fail conversions that would have completed.
-export const maxDuration = 300;
+// round trip can easily hit 60s. The 300s timeout is set in vercel.json
+// (`functions`), NOT via `export const maxDuration` — that route-segment config
+// makes the handler receive an empty cookie store on this Next/Vercel setup, so
+// getUser() returns null and the route 401s.
 
 export async function POST(request: Request) {
   const supabase = createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  if (!user) {
+    const { cookies } = await import('next/headers');
+    const sbCookies = cookies()
+      .getAll()
+      .map((c) => c.name)
+      .filter((n) => n.startsWith('sb-'));
+    console.error('[convert] unauthorized', {
+      authError: authError?.message ?? null,
+      authStatus: (authError as any)?.status ?? null,
+      sbCookies,
+    });
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
 
   const parsed = Body.safeParse(await request.json());
   if (!parsed.success) {

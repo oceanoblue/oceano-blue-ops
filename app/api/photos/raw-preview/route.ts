@@ -13,15 +13,28 @@ import { createClient } from '@/lib/supabase/server';
  *
  * The route streams the JPEG bytes directly from the worker — no
  * persistence. The browser caches via the worker's Cache-Control header.
+ *
+ * Timeout is set in vercel.json (`functions`), not via `export const
+ * maxDuration` — that route-segment config makes the handler receive an empty
+ * cookie store here, so getUser() returns null and the route 401s.
  */
-export const maxDuration = 60;
-
 export async function GET(request: Request) {
   const supabase = createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
   if (!user) {
+    const { cookies } = await import('next/headers');
+    const sbCookies = cookies()
+      .getAll()
+      .map((c) => c.name)
+      .filter((n) => n.startsWith('sb-'));
+    console.error('[raw-preview] unauthorized', {
+      authError: authError?.message ?? null,
+      authStatus: (authError as any)?.status ?? null,
+      sbCookies,
+    });
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

@@ -4,7 +4,8 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { classifyScene } from '@/lib/photos/scene-classify';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+// Timeout set in vercel.json (`functions`) — `export const maxDuration` makes
+// the handler receive an empty cookie store here, breaking getUser() auth.
 
 /**
  * Real Estate Photo Rescue v2 — AI scene classification (foundation).

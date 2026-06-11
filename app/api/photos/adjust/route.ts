@@ -38,7 +38,8 @@ const Body = z.object({
   }),
 });
 
-export const maxDuration = 60;
+// Timeout set in vercel.json (`functions`) — `export const maxDuration` makes
+// the handler receive an empty cookie store here, breaking getUser() auth.
 
 export async function POST(request: Request) {
   const supabase = createClient();
