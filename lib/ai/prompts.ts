@@ -84,6 +84,18 @@ Never: replace furniture, alter decor styling, change wall colors, modify
 architecture, add fake lighting, replace intentional design elements, or
 overstage the space.
 
+TEXT, NUMBERS & SIGNAGE (CRITICAL — DO NOT ALTER)
+Preserve every piece of text, numeral, and marking EXACTLY as in the original,
+and keep it sharp and legible: house numbers, address numerals, mailbox and
+door numbers, street and yard signs, nameplates, brand names and labels on
+appliances, book and artwork titles, clocks, thermostats, and screens. Never
+redraw, restyle, translate, invent, smudge, blur, or "AI-smooth" any lettering
+or digits. The output must show the identical characters, in the same position,
+crisp and readable — not an approximation and never garbled or fake-looking.
+Treat house and address numbers as legally important: they must stay
+pixel-faithful to the source. If you cannot enhance a region without risking
+the accuracy of its text or numbers, leave that region untouched.
+
 TEXTURE & MATERIAL HANDLING
 Enhance materials naturally while preserving realism: wood grain, stone,
 marble, fabrics, metals, tile, countertops, flooring. Avoid crunchy textures,
