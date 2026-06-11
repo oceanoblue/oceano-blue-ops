@@ -51,7 +51,11 @@ app.get('/health', (_req, res) => res.json({ ok: true, active: activeConverts, w
 // In-process concurrency limit. Each ARW decode peaks at ~400-600 MB of RAM,
 // so we let only one convert run at a time on this size machine. Additional
 // requests wait their turn instead of dog-piling the kernel into OOM kills.
-const MAX_CONCURRENT = 1;
+// Env-tunable: each ARW decode peaks at ~400-600 MB RAM, so keep this at 1 on
+// the 256 MB free tier. After scaling the Fly machine (e.g.
+// `fly scale vm shared-cpu-2x --memory 2048`), set WORKER_CONCURRENCY=3 to
+// triple throughput.
+const MAX_CONCURRENT = Math.max(1, parseInt(process.env.WORKER_CONCURRENCY || '1', 10) || 1);
 let activeConverts = 0;
 const convertQueue = [];
 
