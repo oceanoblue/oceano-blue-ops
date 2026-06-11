@@ -62,13 +62,24 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
               {data.listing ? `${data.listing.address_line1}, ${data.listing.city}` : `Order #${data.order.order_number}`}
             </h1>
           </div>
-          <a
-            href={`/api/delivery/${params.token}/download`}
-            className="btn-primary"
-            download
-          >
-            <Download className="h-4 w-4" /> Download all ({data.photos.length})
-          </a>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/api/delivery/${params.token}/download?size=web`}
+              className="btn-secondary"
+              download
+              title="2048px JPEGs sized for MLS / web portals"
+            >
+              <Download className="h-4 w-4" /> Download for Web
+            </a>
+            <a
+              href={`/api/delivery/${params.token}/download`}
+              className="btn-primary"
+              download
+              title="Full-resolution originals"
+            >
+              <Download className="h-4 w-4" /> Download all ({data.photos.length})
+            </a>
+          </div>
         </div>
       </header>
 

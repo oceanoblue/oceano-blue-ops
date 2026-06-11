@@ -45,7 +45,29 @@ interface JobView {
   cost_cents: number | null;
   duration_ms: number | null;
   error_message: string | null;
+  created_at?: string;
 }
+
+// Friendly labels for the in-flight placeholder cards in Review & Edit.
+const JOB_LABEL: Record<string, string> = {
+  enhance_single: 'Enhancing',
+  hdr_merge: 'Merging brackets',
+  sky_replace: 'Replacing sky',
+  window_pull: 'Pulling windows',
+  twilight_convert: 'Twilight convert',
+  lawn_enhance: 'Greening lawn',
+  virtual_stage: 'Staging',
+  declutter: 'Decluttering',
+};
+
+const PROVIDER_SHORT: Record<string, string> = {
+  'openai-gpt-image': 'GPT Image 2.0',
+  'gemini-nano-banana-2': 'Nano Banana 2',
+  'gemini-nano-banana-pro': 'Nano Banana Pro',
+  'gemini-banana-pro': 'Nano Banana Pro',
+  'oceano-enhance': 'Oceano Enhance',
+  autoenhance: 'Autoenhance.ai',
+};
 
 type Stage = 1 | 2 | 3;
 type AiProvider =
@@ -469,6 +491,15 @@ export function PhotoManager({ orderId }: { orderId: string }) {
     [jobs]
   );
 
+  // Failures from the last 30 minutes — surfaced in Review & Edit so a job that
+  // errors doesn't just silently never appear.
+  const recentFailedJobs = useMemo(() => {
+    const cutoff = Date.now() - 30 * 60 * 1000;
+    return jobs.filter(
+      (j) => j.status === 'failed' && j.created_at && new Date(j.created_at).getTime() > cutoff
+    );
+  }, [jobs]);
+
   return (
     <div className="space-y-6">
       {/* Upload zone */}
@@ -506,7 +537,8 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         <div className="card p-3 flex items-center justify-between text-sm">
           <div className="flex items-center gap-2 text-slate-700">
             <Loader2 className="h-4 w-4 animate-spin text-ocean-600" />
-            {inFlightJobs.length} job{inFlightJobs.length === 1 ? '' : 's'} processing in the background.
+            {inFlightJobs.length} photo{inFlightJobs.length === 1 ? '' : 's'} processing — results land in
+            Review &amp; Edit as each finishes (~30–60s per photo).
           </div>
           <button
             onClick={refresh}
@@ -570,6 +602,8 @@ export function PhotoManager({ orderId }: { orderId: string }) {
       {stage === 3 && (
         <Stage3
           photos={stage3Photos}
+          processingJobs={inFlightJobs}
+          failedJobs={recentFailedJobs}
           photoUrls={photoUrls}
           setPhotoUrls={setPhotoUrls}
           openViewer={(idx) => setViewer({ list: 'processed', index: idx })}
@@ -1073,6 +1107,8 @@ function Stage2Thumb({
 // ─── Stage 3: Review & Edit ──────────────────────────────────────────────────
 function Stage3({
   photos,
+  processingJobs,
+  failedJobs,
   photoUrls,
   setPhotoUrls,
   openViewer,
@@ -1080,6 +1116,8 @@ function Stage3({
   onBack,
 }: {
   photos: Photo[];
+  processingJobs: JobView[];
+  failedJobs: JobView[];
   photoUrls: Record<string, string | null>;
   setPhotoUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
   openViewer: (idx: number) => void;
@@ -1090,7 +1128,15 @@ function Stage3({
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-ocean-900">Review & Edit</h2>
+          <h2 className="text-lg font-semibold text-ocean-900">
+            Review & Edit
+            {processingJobs.length > 0 && (
+              <span className="ml-2 inline-flex items-center gap-1.5 align-middle rounded-full bg-ocean-50 px-2.5 py-0.5 text-xs font-medium text-ocean-800 ring-1 ring-ocean-200">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {processingJobs.length} enhancing
+              </span>
+            )}
+          </h2>
           <p className="text-sm text-slate-500">
             Approve your final picks. Hover any photo for extra edits like sky, window,
             twilight, virtual furniture, or object removal.
@@ -1101,12 +1147,44 @@ function Stage3({
         </button>
       </header>
 
-      {photos.length === 0 ? (
+      {failedJobs.length > 0 && (
+        <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          <div className="font-medium mb-1">
+            {failedJobs.length} job{failedJobs.length === 1 ? '' : 's'} failed — re-run from AI Enhance
+          </div>
+          <ul className="space-y-0.5 text-xs text-rose-700">
+            {failedJobs.slice(0, 4).map((j) => (
+              <li key={j.id} className="truncate">
+                {JOB_LABEL[j.job_type] ?? j.job_type}: {j.error_message ?? 'unknown error'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {photos.length === 0 && processingJobs.length === 0 ? (
         <div className="card p-8 text-center text-sm text-slate-500">
           Nothing AI-processed yet. Run Stage 2 first.
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {processingJobs.map((j) => (
+            <div
+              key={j.id}
+              className="relative aspect-[3/2] overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200"
+            >
+              <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-slate-100 via-slate-200 to-slate-100" />
+              <div className="relative h-full w-full flex flex-col items-center justify-center gap-1.5 text-slate-500">
+                <Loader2 className="h-5 w-5 animate-spin text-ocean-600" />
+                <span className="text-xs font-medium">
+                  {JOB_LABEL[j.job_type] ?? 'Processing'}…
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {PROVIDER_SHORT[j.provider] ?? j.provider}
+                </span>
+              </div>
+            </div>
+          ))}
           {photos.map((p, i) => (
             <ProcessedCard
               key={p.id}

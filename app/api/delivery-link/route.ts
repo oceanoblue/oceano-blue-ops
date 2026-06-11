@@ -36,6 +36,16 @@ export async function POST(request: Request) {
   await supabase.from('orders').update({ status: 'delivered', delivered_at: new Date().toISOString() })
     .eq('id', parsed.data.order_id);
 
+  // Advance the listing too, so the listing-first view reflects delivery.
+  const { data: ord } = await supabase
+    .from('orders')
+    .select('listing_id')
+    .eq('id', parsed.data.order_id)
+    .maybeSingle();
+  if ((ord as any)?.listing_id) {
+    await (supabase.from('listings') as any).update({ status: 'delivered' }).eq('id', (ord as any).listing_id);
+  }
+
   const base = process.env.NEXT_PUBLIC_APP_URL ?? '';
   return NextResponse.json({ id: data.id, token: data.token, url: `${base}/gallery/${data.token}` });
 }
