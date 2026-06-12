@@ -6,6 +6,14 @@ import { analyzePhoto, planEdits } from './vision-analyze';
 import type { AiJob, Photo } from '@/lib/supabase/database.types';
 import type { SourceImage } from './types';
 
+// Delivery target long edge. Enhance outputs are upscaled to this size with a
+// high-quality kernel so finals are ~4K without re-rendering any detail.
+// Override with DELIVERY_LONG_EDGE (e.g. 3072 for 6MP, 0 to disable upscaling).
+const DELIVERY_LONG_EDGE = (() => {
+  const v = parseInt(process.env.DELIVERY_LONG_EDGE || '3840', 10);
+  return Number.isFinite(v) ? v : 3840;
+})();
+
 /**
  * Runs a single ai_jobs row end-to-end:
  *   1. Mark job + input photos as running
@@ -89,17 +97,47 @@ export async function runAiJob(jobId: string): Promise<{
     // 4. Upload outputs and create photo rows
     const outputPhotoIds: string[] = [];
     for (const out of resp.outputs) {
+      // Faithful 4K: deterministically upscale enhance outputs to the delivery
+      // long edge (default 3840) with a high-quality kernel. This is pure
+      // interpolation — it NEVER re-renders content, so house numbers, signage,
+      // and fine text stay exactly as the model preserved them. HDR-merge
+      // passthroughs are intermediates (re-enhanced later), so they're left as-is.
+      let bytes = out.bytes;
+      let mimeType = out.mimeType;
+      let filename = out.filename;
+      if (job.job_type !== 'hdr_merge') {
+        try {
+          const src = await sharp(out.bytes).metadata();
+          const longEdge = Math.max(src.width ?? 0, src.height ?? 0);
+          if (longEdge > 0 && longEdge < DELIVERY_LONG_EDGE) {
+            const scale = DELIVERY_LONG_EDGE / longEdge;
+            bytes = await sharp(out.bytes)
+              .resize({
+                width: Math.round((src.width ?? 0) * scale),
+                height: Math.round((src.height ?? 0) * scale),
+                kernel: 'lanczos3',
+              })
+              .jpeg({ quality: 90, mozjpeg: true })
+              .toBuffer();
+            mimeType = 'image/jpeg';
+            filename = out.filename.replace(/\.[^.]+$/, '') + '.jpg';
+          }
+        } catch {
+          bytes = out.bytes; // any sharp hiccup → ship the model output as-is
+        }
+      }
+
       const photoId = uuidv4();
-      const storagePath = `${job.order_id}/${photoId}-${out.filename}`;
+      const storagePath = `${job.order_id}/${photoId}-${filename}`;
       const { error: upErr } = await supabase.storage
         .from('processed-photos')
-        .upload(storagePath, out.bytes, {
-          contentType: out.mimeType,
+        .upload(storagePath, bytes, {
+          contentType: mimeType,
           upsert: false,
         });
       if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
 
-      const meta = await sharp(out.bytes).metadata();
+      const meta = await sharp(bytes).metadata();
       const { error: insErr } = await supabase.from('photos').insert({
         id: photoId,
         order_id: job.order_id,
@@ -107,11 +145,11 @@ export async function runAiJob(jobId: string): Promise<{
         parent_photo_id: inputs[0]?.id,
         storage_path: storagePath,
         bucket: 'processed-photos',
-        filename: out.filename,
-        mime_type: out.mimeType,
+        filename,
+        mime_type: mimeType,
         width: meta.width,
         height: meta.height,
-        byte_size: out.bytes.byteLength,
+        byte_size: bytes.byteLength,
         is_hdr: job.job_type === 'hdr_merge',
         processing_status: 'complete',
         // Record the concrete provider that ran. ai_jobs.provider is already
