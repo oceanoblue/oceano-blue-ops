@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Download, Image as ImageIcon, ChevronDown } from 'lucide-react';
+import { Download, Image as ImageIcon, ChevronDown, LayoutGrid, Rows3 } from 'lucide-react';
+import { groupByRoom } from '@/lib/photos/rooms';
 
 type DeliverySize = 'full' | 'print' | 'web';
 
@@ -17,6 +18,7 @@ interface GalleryPhoto {
   filename: string;
   width: number | null;
   height: number | null;
+  room_type: string | null;
   url: string | null;
 }
 
@@ -32,6 +34,7 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null);
   const [size, setSize] = useState<DeliverySize>('full');
   const [sizeOpen, setSizeOpen] = useState(false);
+  const [byRoom, setByRoom] = useState(false);
 
   useEffect(() => {
     fetch(`/api/delivery/${params.token}`)
@@ -62,6 +65,22 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
     return <div className="min-h-screen grid place-items-center text-slate-500">Loading…</div>;
   }
 
+  const hasRooms = data.photos.some((p) => p.room_type);
+  const roomGroups = groupByRoom(data.photos);
+
+  const PhotoTile = (p: GalleryPhoto) => (
+    <button
+      key={p.id}
+      onClick={() => setLightbox(p)}
+      className="group relative aspect-[3/2] overflow-hidden rounded-lg ring-1 ring-slate-200 shadow-soft transition-all duration-300 ease-swift hover:-translate-y-0.5 hover:shadow-lift hover:ring-ocean-400"
+    >
+      {p.url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={p.url} alt={p.filename} className="h-full w-full object-cover transition-transform duration-500 ease-swift group-hover:scale-[1.04]" loading="lazy" />
+      )}
+    </button>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
@@ -73,6 +92,17 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {hasRooms && (
+              <button
+                type="button"
+                onClick={() => setByRoom((v) => !v)}
+                className="btn-secondary"
+                title={byRoom ? 'Show all photos in one grid' : 'Group photos by room'}
+              >
+                {byRoom ? <LayoutGrid className="h-4 w-4" /> : <Rows3 className="h-4 w-4" />}
+                {byRoom ? 'All photos' : 'By room'}
+              </button>
+            )}
             {/* Resolution selector — clients pick full / print / web */}
             <div className="relative">
               <button
@@ -124,20 +154,25 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
             <ImageIcon className="mx-auto h-8 w-8 opacity-40" />
             <p className="mt-2">No photos delivered yet.</p>
           </div>
+        ) : byRoom && hasRooms ? (
+          <div className="space-y-10">
+            {roomGroups.map((g) => (
+              <section key={g.label}>
+                <h2 className="mb-3 flex items-baseline gap-2 border-b border-slate-200 pb-2">
+                  <span className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-ocean-700">
+                    {g.label}
+                  </span>
+                  <span className="text-xs text-slate-400">{g.photos.length}</span>
+                </h2>
+                <div className="stagger grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {g.photos.map(PhotoTile)}
+                </div>
+              </section>
+            ))}
+          </div>
         ) : (
           <div className="stagger grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {data.photos.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setLightbox(p)}
-                className="group relative aspect-[3/2] overflow-hidden rounded-lg ring-1 ring-slate-200 shadow-soft transition-all duration-300 ease-swift hover:-translate-y-0.5 hover:shadow-lift hover:ring-ocean-400"
-              >
-                {p.url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.url} alt={p.filename} className="h-full w-full object-cover transition-transform duration-500 ease-swift group-hover:scale-[1.04]" loading="lazy" />
-                )}
-              </button>
-            ))}
+            {data.photos.map(PhotoTile)}
           </div>
         )}
       </main>

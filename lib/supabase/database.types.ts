@@ -1,8 +1,3 @@
-// AUTO-GENERATED from the live Supabase schema (project hcxqqbnoextequclrvff).
-// Regenerate with: supabase gen types typescript --project-id hcxqqbnoextequclrvff
-// (or the MCP generate_typescript_types tool), then re-append the named aliases
-// at the bottom of this file.
-
 export type Json =
   | string
   | number
@@ -1752,6 +1747,8 @@ export type Database = {
           order_id: string
           parent_photo_id: string | null
           processing_status: Database["public"]["Enums"]["processing_status"]
+          room_confidence: number | null
+          room_type: string | null
           sort_order: number | null
           storage_path: string
           updated_at: string
@@ -1778,6 +1775,8 @@ export type Database = {
           order_id: string
           parent_photo_id?: string | null
           processing_status?: Database["public"]["Enums"]["processing_status"]
+          room_confidence?: number | null
+          room_type?: string | null
           sort_order?: number | null
           storage_path: string
           updated_at?: string
@@ -1804,6 +1803,8 @@ export type Database = {
           order_id?: string
           parent_photo_id?: string | null
           processing_status?: Database["public"]["Enums"]["processing_status"]
+          room_confidence?: number | null
+          room_type?: string | null
           sort_order?: number | null
           storage_path?: string
           updated_at?: string
@@ -3596,6 +3597,7 @@ export const Constants = {
     },
   },
 } as const
+
 // ─────────────────────────────────────────────────────────────────────────
 // Named aliases the app imports. Derived from the generated Database so they
 // always track the live schema.

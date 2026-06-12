@@ -36,6 +36,7 @@ import {
   applyExifGrouping,
   type ExifSnapshot,
 } from '@/lib/photos/bracket-grouping';
+import { groupByRoom } from '@/lib/photos/rooms';
 
 interface JobView {
   id: string;
@@ -734,6 +735,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
 
       {stage === 3 && (
         <Stage3
+          orderId={orderId}
           photos={stage3Photos}
           processingJobs={inFlightJobs}
           failedJobs={recentFailedJobs}
@@ -1266,6 +1268,7 @@ function Stage2Thumb({
 
 // ─── Stage 3: Review & Edit ──────────────────────────────────────────────────
 function Stage3({
+  orderId,
   photos,
   processingJobs,
   failedJobs,
@@ -1275,6 +1278,7 @@ function Stage3({
   onChange,
   onBack,
 }: {
+  orderId: string;
   photos: Photo[];
   processingJobs: JobView[];
   failedJobs: JobView[];
@@ -1284,6 +1288,44 @@ function Stage3({
   onChange: () => void;
   onBack: () => void;
 }) {
+  const [organizing, setOrganizing] = useState(false);
+  const [organizeError, setOrganizeError] = useState<string | null>(null);
+  const [byRoom, setByRoom] = useState(false);
+
+  const hasRooms = photos.some((p) => (p as any).room_type);
+  const roomGroups = useMemo(() => groupByRoom(photos as any[]), [photos]);
+
+  async function organizeByRoom() {
+    setOrganizing(true);
+    setOrganizeError(null);
+    try {
+      const r = await fetch('/api/photos/classify-rooms', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setOrganizeError(data.error || `error_${r.status}`);
+      } else {
+        setByRoom(true);
+        onChange();
+      }
+    } catch (err: any) {
+      setOrganizeError(err?.message || 'network_error');
+    } finally {
+      setOrganizing(false);
+    }
+  }
+
+  // Map each photo to its flat index so grouped cards still open the right
+  // lightbox slide (the viewer iterates the flat stage3Photos array).
+  const indexById = useMemo(() => {
+    const m = new Map<string, number>();
+    photos.forEach((p, i) => m.set(p.id, i));
+    return m;
+  }, [photos]);
+
   return (
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-4">
@@ -1302,10 +1344,44 @@ function Stage3({
             twilight, virtual furniture, or object removal.
           </p>
         </div>
-        <button onClick={onBack} className="text-xs text-slate-500 hover:text-slate-700">
-          ← Back to AI Enhance
-        </button>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            {hasRooms && (
+              <button
+                onClick={() => setByRoom((v) => !v)}
+                className="text-xs font-medium px-2.5 py-1.5 rounded-md ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50"
+              >
+                {byRoom ? 'Flat grid' : 'Group by room'}
+              </button>
+            )}
+            <button
+              onClick={organizeByRoom}
+              disabled={organizing || photos.length === 0}
+              className="text-xs font-medium px-2.5 py-1.5 rounded-md bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-60 inline-flex items-center gap-1.5"
+              title="Use AI to tag each photo by area (living room, kitchen, primary bedroom, …)"
+            >
+              {organizing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Organizing…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3.5 w-3.5" /> {hasRooms ? 'Re-scan rooms' : 'Organize by room'}
+                </>
+              )}
+            </button>
+          </div>
+          <button onClick={onBack} className="text-xs text-slate-500 hover:text-slate-700">
+            ← Back to AI Enhance
+          </button>
+        </div>
       </header>
+
+      {organizeError && (
+        <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          Couldn&apos;t organize by room: {organizeError}
+        </div>
+      )}
 
       {failedJobs.length > 0 && (
         <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
@@ -1326,24 +1402,42 @@ function Stage3({
         <div className="card p-8 text-center text-sm text-slate-500">
           Nothing AI-processed yet. Run Stage 2 first.
         </div>
+      ) : byRoom && hasRooms ? (
+        <div className="space-y-8">
+          {processingJobs.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {processingJobs.map((j) => (
+                <ProcessingTile key={j.id} job={j} />
+              ))}
+            </div>
+          )}
+          {roomGroups.map((g) => (
+            <section key={g.label}>
+              <h3 className="mb-2 flex items-baseline gap-2 border-b border-slate-100 pb-1.5">
+                <span className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-ocean-700">
+                  {g.label}
+                </span>
+                <span className="text-xs text-slate-400">{g.photos.length}</span>
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {(g.photos as Photo[]).map((p) => (
+                  <ProcessedCard
+                    key={p.id}
+                    photo={p}
+                    onOpen={() => openViewer(indexById.get(p.id) ?? 0)}
+                    urls={photoUrls}
+                    setUrls={setPhotoUrls}
+                    onChange={onChange}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {processingJobs.map((j) => (
-            <div
-              key={j.id}
-              className="relative aspect-[3/2] overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200"
-            >
-              <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-slate-100 via-slate-200 to-slate-100" />
-              <div className="relative h-full w-full flex flex-col items-center justify-center gap-1.5 text-slate-500">
-                <Loader2 className="h-5 w-5 animate-spin text-ocean-600" />
-                <span className="text-xs font-medium">
-                  {JOB_LABEL[j.job_type] ?? 'Processing'}…
-                </span>
-                <span className="text-[10px] text-slate-400">
-                  {PROVIDER_SHORT[j.provider] ?? j.provider}
-                </span>
-              </div>
-            </div>
+            <ProcessingTile key={j.id} job={j} />
           ))}
           {photos.map((p, i) => (
             <ProcessedCard
@@ -1357,6 +1451,22 @@ function Stage3({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── In-flight job placeholder (Stage 3) ────────────────────────────────────
+function ProcessingTile({ job }: { job: JobView }) {
+  return (
+    <div className="relative aspect-[3/2] overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200">
+      <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-slate-100 via-slate-200 to-slate-100" />
+      <div className="relative h-full w-full flex flex-col items-center justify-center gap-1.5 text-slate-500">
+        <Loader2 className="h-5 w-5 animate-spin text-ocean-600" />
+        <span className="text-xs font-medium">{JOB_LABEL[job.job_type] ?? 'Processing'}…</span>
+        <span className="text-[10px] text-slate-400">
+          {PROVIDER_SHORT[job.provider] ?? job.provider}
+        </span>
+      </div>
     </div>
   );
 }
