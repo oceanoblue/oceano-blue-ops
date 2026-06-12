@@ -1,3 +1,19 @@
+# POST-MORTEM (RESOLVED): `/api/photos/convert` & `raw-preview` 401s
+
+> **Status: RESOLVED.** Root cause was a **stale Vercel function build** of the
+> auth-gated routes (they had carried a custom `maxDuration`), so handler fixes
+> never took effect and the routes returned a frozen 401. Fix: the logic was
+> **re-homed to fresh routes `POST /api/raw-convert` and `GET /api/raw-thumb`**
+> (idempotent, `maxDuration=300`, self-healing retries); the old
+> `/api/photos/convert` + `/api/photos/raw-preview` routes have been deleted.
+> A separate, larger bug was also found and fixed: merged (`kind='processed'`)
+> photos were excluded from `/api/ai/process` eligibility and never enhanced.
+>
+> Kept as a record of the investigation. The diagnostic routes referenced below
+> (`/api/photos/diag`, the convert cookie-diagnostic) have since been removed.
+
+---
+
 # Handoff: `/api/photos/convert` & `/api/photos/raw-preview` return 401 for an authenticated user
 
 **Owner:** Gustavo (gustavo@oceanoblue.net) · **App:** Oceano Blue Production OS

@@ -14,7 +14,7 @@ Photographer uploads house.ARW (60 MB)
        photos table
          │
          ▼  user clicks "Convert RAW" in PhotoManager
-   /api/photos/convert  (Next.js route, auth check)
+   /api/raw-convert     (Next.js route, auth check)
          │
          ▼  POST /convert {photo_id}, x-worker-secret
    Worker on Fly.io
