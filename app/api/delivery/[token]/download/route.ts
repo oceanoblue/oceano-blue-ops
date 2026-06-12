@@ -1,6 +1,7 @@
 import archiver from 'archiver';
 import sharp from 'sharp';
 import { createAdminClient } from '@/lib/supabase/server';
+import { isDeliverable } from '@/lib/photos/deliverable';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +32,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
 
   const { data: photos } = await supabase
     .from('photos')
-    .select('filename, bucket, storage_path')
+    .select('filename, bucket, storage_path, is_hdr, ai_provider')
     .eq('order_id', link.order_id)
     .in('kind', ['processed', 'delivered'])
     .eq('is_selected', true)
@@ -49,7 +50,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       archive.on('end', () => controller.close());
       archive.on('error', (e) => controller.error(e));
 
-      for (const p of (photos ?? []) as any[]) {
+      for (const p of ((photos ?? []) as any[]).filter(isDeliverable)) {
         const { data } = await supabase.storage.from(p.bucket).download(p.storage_path);
         if (!data) continue;
         let bytes: Buffer = Buffer.from(await data.arrayBuffer());
