@@ -13,8 +13,14 @@ export function Topbar({ userEmail }: { userEmail?: string | null }) {
     router.refresh();
   }
   return (
-    <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
-      <div className="text-sm text-slate-500">Welcome back{userEmail ? `, ${userEmail}` : ''}</div>
+    <header className="glass sticky top-0 z-20 flex h-14 items-center justify-between border-b border-ink-100/80 px-6">
+      <div className="text-sm text-slate-500">
+        Welcome back{userEmail ? (
+          <>
+            , <span className="font-mono text-[12px] text-ink-700">{userEmail}</span>
+          </>
+        ) : ''}
+      </div>
       <button onClick={signOut} className="btn-ghost text-sm">
         <LogOut className="h-4 w-4" />
         Sign out
