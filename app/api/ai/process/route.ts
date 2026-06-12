@@ -37,6 +37,8 @@ const Body = z.object({
   enhancement_style: z.enum(['signature', 'natural']).optional(),
   window_pull: z.boolean().optional(),
   perspective_correction: z.boolean().optional(),
+  remove_reflections: z.boolean().optional(),
+  blur_faces: z.boolean().optional(),
   // When true, after the main job completes the runner inspects the output
   // and enqueues follow-up sky_replace / window_pull / lawn / declutter
   // jobs if vision analysis flags them. Used by Stage 2's "Run AI" button.
@@ -65,6 +67,8 @@ export async function POST(request: Request) {
     enhancement_style,
     window_pull,
     perspective_correction,
+    remove_reflections,
+    blur_faces,
   } = parsed.data;
 
   const supabase = createClient();
@@ -157,7 +161,9 @@ export async function POST(request: Request) {
     sky_style !== undefined ||
     enhancement_style !== undefined ||
     window_pull !== undefined ||
-    perspective_correction !== undefined;
+    perspective_correction !== undefined ||
+    remove_reflections !== undefined ||
+    blur_faces !== undefined;
   const directives: EnhanceDirectives | string | undefined = hasDirectives
     ? {
         extra: prompt_extra,
@@ -165,6 +171,8 @@ export async function POST(request: Request) {
         enhancementStyle: enhancement_style,
         windowPull: window_pull,
         perspectiveCorrection: perspective_correction,
+        removeReflections: remove_reflections,
+        blurFaces: blur_faces,
       }
     : prompt_extra;
   const promptText = buildPrompt(job_type as AiJobType, directives);

@@ -129,6 +129,8 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   const [skyStyle, setSkyStyle] = useState<SkyStyle>('original');
   const [windowPull, setWindowPull] = useState(true);
   const [perspectiveCorrection, setPerspectiveCorrection] = useState(true);
+  const [removeReflections, setRemoveReflections] = useState(true);
+  const [blurFaces, setBlurFaces] = useState(false);
 
   // Stage 3 — open lightbox
   const refresh = useCallback(async () => {
@@ -512,6 +514,8 @@ export function PhotoManager({ orderId }: { orderId: string }) {
             sky_style: skyStyle,
             window_pull: windowPull,
             perspective_correction: perspectiveCorrection,
+            remove_reflections: removeReflections,
+            blur_faces: blurFaces,
           }),
         });
         if (!r.ok) {
@@ -716,6 +720,10 @@ export function PhotoManager({ orderId }: { orderId: string }) {
           onWindowPullChange={setWindowPull}
           perspectiveCorrection={perspectiveCorrection}
           onPerspectiveCorrectionChange={setPerspectiveCorrection}
+          removeReflections={removeReflections}
+          onRemoveReflectionsChange={setRemoveReflections}
+          blurFaces={blurFaces}
+          onBlurFacesChange={setBlurFaces}
           running={running}
           onRun={runStage2Enhance}
           onBack={() => setStage(1)}
@@ -994,6 +1002,10 @@ function Stage2({
   onWindowPullChange,
   perspectiveCorrection,
   onPerspectiveCorrectionChange,
+  removeReflections,
+  onRemoveReflectionsChange,
+  blurFaces,
+  onBlurFacesChange,
   running,
   onRun,
   onBack,
@@ -1015,6 +1027,10 @@ function Stage2({
   onWindowPullChange: (b: boolean) => void;
   perspectiveCorrection: boolean;
   onPerspectiveCorrectionChange: (b: boolean) => void;
+  removeReflections: boolean;
+  onRemoveReflectionsChange: (b: boolean) => void;
+  blurFaces: boolean;
+  onBlurFacesChange: (b: boolean) => void;
   running: boolean;
   onRun: () => void;
   onBack: () => void;
@@ -1117,10 +1133,29 @@ function Stage2({
                 />
                 <span className="text-sm text-slate-700">Perspective correction</span>
               </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={removeReflections}
+                  onChange={(e) => onRemoveReflectionsChange(e.target.checked)}
+                  className="h-4 w-4 rounded accent-ocean-600"
+                />
+                <span className="text-sm text-slate-700">Remove camera reflections</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={blurFaces}
+                  onChange={(e) => onBlurFacesChange(e.target.checked)}
+                  className="h-4 w-4 rounded accent-ocean-600"
+                />
+                <span className="text-sm text-slate-700">Blur faces in personal photos</span>
+              </label>
             </div>
             <p className="text-[11px] text-slate-400">
-              Whites stay neutral and the scene is preserved — colors enhanced to the lux signature
-              look. Sky replacement only runs on exteriors when a preset is chosen.
+              Whites stay neutral, the property is preserved exactly (MLS-accurate), and color is
+              enhanced to the lux signature look. Reflection &amp; face-blur edits only affect those
+              elements; sky replacement only runs on exteriors when a preset is chosen.
             </p>
           </section>
 
