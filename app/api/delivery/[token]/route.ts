@@ -40,7 +40,7 @@ export async function GET(_req: Request, { params }: { params: { token: string }
 
   const { data: photos } = await supabase
     .from('photos')
-    .select('id, filename, bucket, storage_path, width, height, sort_order, is_hdr, ai_provider')
+    .select('id, filename, bucket, storage_path, width, height, sort_order, room_type, is_hdr, ai_provider')
     .eq('order_id', order.id)
     .in('kind', ['processed', 'delivered'])
     .eq('is_selected', true)
@@ -57,6 +57,7 @@ export async function GET(_req: Request, { params }: { params: { token: string }
         filename: p.filename,
         width: p.width,
         height: p.height,
+        room_type: p.room_type ?? null,
         url: data?.signedUrl ?? null,
       };
     })
