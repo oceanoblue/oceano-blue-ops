@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { isDeliverable } from '@/lib/photos/deliverable';
 
 /** Returns gallery metadata + signed URLs for the token. Public endpoint. */
 export async function GET(_req: Request, { params }: { params: { token: string } }) {
@@ -39,14 +40,15 @@ export async function GET(_req: Request, { params }: { params: { token: string }
 
   const { data: photos } = await supabase
     .from('photos')
-    .select('id, filename, bucket, storage_path, width, height, sort_order')
+    .select('id, filename, bucket, storage_path, width, height, sort_order, is_hdr, ai_provider')
     .eq('order_id', order.id)
     .in('kind', ['processed', 'delivered'])
     .eq('is_selected', true)
     .order('sort_order', { ascending: true });
 
+  const deliverable = (photos ?? []).filter((p: any) => isDeliverable(p));
   const signed = await Promise.all(
-    (photos ?? []).map(async (p) => {
+    deliverable.map(async (p: any) => {
       const { data } = await supabase.storage
         .from(p.bucket)
         .createSignedUrl(p.storage_path, 3600);

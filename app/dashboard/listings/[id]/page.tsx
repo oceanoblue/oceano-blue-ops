@@ -4,6 +4,7 @@ import { MapPin, Home, User, Calendar, Camera } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { fmtAddress, fmtCents, fmtDateTime, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
 import { NewOrderButton } from '@/components/listings/NewOrderButton';
+import { isDeliverable } from '@/lib/photos/deliverable';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,13 +35,13 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
   if (orderIds.length) {
     const { data } = await supabase
       .from('photos')
-      .select('id, filename, bucket, storage_path, width, height, is_selected, kind')
+      .select('id, filename, bucket, storage_path, width, height, is_selected, kind, is_hdr, ai_provider')
       .in('order_id', orderIds)
       .in('kind', ['processed', 'delivered'])
       .eq('is_selected', true)
       .order('sort_order', { ascending: true })
       .limit(40);
-    photos = data ?? [];
+    photos = (data ?? []).filter((p: any) => isDeliverable(p));
   }
 
   // Sign photo URLs server-side

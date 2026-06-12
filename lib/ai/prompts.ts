@@ -114,8 +114,24 @@ photographed, color accurate, true to life. Ready for Zillow, MLS, luxury
 brochures, architectural portfolios, resort marketing, premium real estate
 websites, and social media campaigns.
 
-Most important rule: maintain realism, neutrality, and authenticity above
-everything else.
+MLS COMPLIANCE & ACCURACY (NON-NEGOTIABLE)
+The image must be a truthful, accurate representation of the property as
+photographed — fit for MLS rules. Therefore:
+- Do NOT add, remove, move, or alter any permanent or structural feature:
+  rooms, walls, windows, doors, ceilings, flooring, cabinetry, countertops,
+  built-ins, fixtures, appliances, landscaping, hardscape, or the building
+  exterior.
+- Do NOT virtually stage, add, or remove furniture, rugs, or decor unless an
+  explicit instruction says to.
+- Do NOT invent views, square footage, or finishes that aren't present.
+- Allowed corrections are limited to: lighting, exposure, white balance, color,
+  lens/perspective straightening, HDR balance, blown-sky/window recovery, and
+  the privacy/cleanup edits explicitly requested below (photographer
+  reflections, personal-photo faces). These do not change the property itself.
+- No people, pets, brand/agent logos, watermarks, or text overlays.
+
+Most important rule: maintain realism, neutrality, MLS-accurate authenticity,
+and the property's true condition above everything else.
 `.trim();
 
 export const PROMPTS: Record<AiJobType, string> = {
@@ -216,6 +232,10 @@ export interface EnhanceDirectives {
   windowPull?: boolean;
   /** Straighten verticals / correct perspective when true. */
   perspectiveCorrection?: boolean;
+  /** Remove photographer/camera/tripod reflections in mirrors, TVs, glass. */
+  removeReflections?: boolean;
+  /** Blur/obscure human faces in personal photos & portraits on walls. */
+  blurFaces?: boolean;
   /** Overall edit strength. */
   enhancementStyle?: EnhancementStyle;
 }
@@ -254,6 +274,18 @@ export function composeEnhanceDirections(d: EnhanceDirectives): string {
   if (d.perspectiveCorrection) {
     lines.push(
       'PERSPECTIVE: Straighten verticals and correct lens/perspective distortion while preserving realistic room proportions. Do not crop away important content.'
+    );
+  }
+
+  if (d.removeReflections) {
+    lines.push(
+      'REFLECTIONS: Remove the photographer, camera, tripod, lights, and any crew/equipment reflections wherever they appear — in mirrors, TV and monitor screens, glass, polished appliances, and windows. Reconstruct what should plausibly be behind the reflection (room continuation or a neutral off/dark screen) so it looks naturally clean. Do not alter the mirror/TV/glass itself or anything else in the scene.'
+    );
+  }
+
+  if (d.blurFaces) {
+    lines.push(
+      "PRIVACY: Softly blur or obscure any recognizable human faces that appear in personal photographs, portraits, and framed pictures on walls, shelves, desks, and surfaces — enough that individuals are not identifiable. Keep the frames, glass, and artwork intact; only the faces inside personal photos are obscured. Do not blur faces in generic decorative art that depicts no real, identifiable person."
     );
   }
 
