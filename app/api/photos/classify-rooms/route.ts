@@ -66,8 +66,9 @@ export async function POST(request: Request) {
         failed++;
         continue;
       }
-      // room_type / room_confidence land in database.types after 0035 is applied
-      // + types regenerated; cast keeps the baseline clean until then.
+      // Cast dodges the supabase-js admin-client `.update()` never-overload
+      // quirk (same as other admin writes in the baseline); room_type is now a
+      // real column on Photo after 0035.
       const { error: upErr } = await (admin.from('photos') as any)
         .update({ room_type: result.roomType, room_confidence: result.confidence })
         .eq('id', p.id);
