@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Download, Image as ImageIcon } from 'lucide-react';
+import { Download, Image as ImageIcon, ChevronDown } from 'lucide-react';
+
+type DeliverySize = 'full' | 'print' | 'web';
+
+const SIZE_OPTIONS: { value: DeliverySize; label: string; hint: string }[] = [
+  { value: 'full', label: 'Full resolution', hint: 'Original 4K finals — archival & large print' },
+  { value: 'print', label: 'Print resolution', hint: '3000px — flyers, brochures, standard prints' },
+  { value: 'web', label: 'Web resolution', hint: '2048px — MLS & web portals' },
+];
 
 interface GalleryPhoto {
   id: string;
@@ -22,6 +30,8 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<GalleryData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null);
+  const [size, setSize] = useState<DeliverySize>('full');
+  const [sizeOpen, setSizeOpen] = useState(false);
 
   useEffect(() => {
     fetch(`/api/delivery/${params.token}`)
@@ -63,19 +73,44 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* Resolution selector — clients pick full / print / web */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setSizeOpen((o) => !o)}
+                onBlur={() => setTimeout(() => setSizeOpen(false), 150)}
+                className="btn-secondary"
+                title="Choose download resolution"
+              >
+                {SIZE_OPTIONS.find((o) => o.value === size)?.label}
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              {sizeOpen && (
+                <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lift">
+                  {SIZE_OPTIONS.map((o) => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => {
+                        setSize(o.value);
+                        setSizeOpen(false);
+                      }}
+                      className={`block w-full px-4 py-2.5 text-left transition-colors hover:bg-slate-50 ${
+                        o.value === size ? 'bg-ocean-50' : ''
+                      }`}
+                    >
+                      <div className="text-sm font-medium text-ocean-950">{o.label}</div>
+                      <div className="text-xs text-slate-500">{o.hint}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <a
-              href={`/api/delivery/${params.token}/download?size=web`}
-              className="btn-secondary"
-              download
-              title="2048px JPEGs sized for MLS / web portals"
-            >
-              <Download className="h-4 w-4" /> Download for Web
-            </a>
-            <a
-              href={`/api/delivery/${params.token}/download`}
+              href={`/api/delivery/${params.token}/download${size === 'full' ? '' : `?size=${size}`}`}
               className="btn-primary"
               download
-              title="Full-resolution originals"
+              title={SIZE_OPTIONS.find((o) => o.value === size)?.hint}
             >
               <Download className="h-4 w-4" /> Download all ({data.photos.length})
             </a>

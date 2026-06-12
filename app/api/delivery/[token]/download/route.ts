@@ -5,20 +5,29 @@ import { isDeliverable } from '@/lib/photos/deliverable';
 
 export const dynamic = 'force-dynamic';
 
-// "Download for Web" size: MLS/portal-friendly long edge + quality.
-const WEB_LONG_EDGE = 2048;
-const WEB_QUALITY = 85;
+// Client-selectable delivery resolutions. "full" ships the original finals
+// untouched; "print" and "web" are resized derivatives generated on the fly.
+const SIZE_PRESETS: Record<string, { longEdge: number; quality: number; suffix: string }> = {
+  // Print: large long edge at high quality — good for flyers, brochures, large
+  // prints. Roughly 3000px keeps it sharp at A4/letter without shipping the
+  // full-res master.
+  print: { longEdge: 3000, quality: 92, suffix: '-print' },
+  // Web: MLS / portal-friendly long edge + quality.
+  web: { longEdge: 2048, quality: 85, suffix: '-web' },
+};
 
 /**
  * Streams a zip of all selected delivered photos for the order.
- *   ?size=web → each photo resized to 2048px long edge JPEG q85 (MLS upload)
- *   default   → full-size originals
+ *   ?size=print → each photo resized to 3000px long edge JPEG q92 (print)
+ *   ?size=web   → each photo resized to 2048px long edge JPEG q85 (MLS upload)
+ *   default     → full-resolution originals
  *
  * For very large galleries you'll want to pre-build the zip and serve via
  * signed URL instead; this works fine for the typical 30-50 photo listing.
  */
 export async function GET(req: Request, { params }: { params: { token: string } }) {
-  const wantsWeb = new URL(req.url).searchParams.get('size') === 'web';
+  const sizeParam = new URL(req.url).searchParams.get('size') ?? '';
+  const preset = SIZE_PRESETS[sizeParam];
   const supabase = createAdminClient();
   const { data: link } = await supabase
     .from('delivery_links')
@@ -55,14 +64,14 @@ export async function GET(req: Request, { params }: { params: { token: string } 
         if (!data) continue;
         let bytes: Buffer = Buffer.from(await data.arrayBuffer());
         let name = p.filename;
-        if (wantsWeb) {
+        if (preset) {
           try {
             bytes = await sharp(bytes)
               .rotate()
-              .resize({ width: WEB_LONG_EDGE, height: WEB_LONG_EDGE, fit: 'inside', withoutEnlargement: true })
-              .jpeg({ quality: WEB_QUALITY, mozjpeg: true })
+              .resize({ width: preset.longEdge, height: preset.longEdge, fit: 'inside', withoutEnlargement: true })
+              .jpeg({ quality: preset.quality, mozjpeg: true })
               .toBuffer();
-            name = p.filename.replace(/\.[^.]+$/, '') + '-web.jpg';
+            name = p.filename.replace(/\.[^.]+$/, '') + preset.suffix + '.jpg';
           } catch {
             // Fall back to the original bytes rather than dropping the photo.
           }
@@ -76,7 +85,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
   return new Response(stream, {
     headers: {
       'content-type': 'application/zip',
-      'content-disposition': `attachment; filename="oceanoblue-${params.token}${wantsWeb ? '-web' : ''}.zip"`,
+      'content-disposition': `attachment; filename="oceanoblue-${params.token}${preset ? preset.suffix : ''}.zip"`,
     },
   });
 }
