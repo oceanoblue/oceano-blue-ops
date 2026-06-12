@@ -57,7 +57,7 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-5 flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-wide text-ocean-700">Oceano Blue</div>
+            <div className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-ocean-700">Oceano Blue</div>
             <h1 className="text-xl font-semibold text-ocean-950">
               {data.listing ? `${data.listing.address_line1}, ${data.listing.city}` : `Order #${data.order.order_number}`}
             </h1>
@@ -90,16 +90,16 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
             <p className="mt-2">No photos delivered yet.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="stagger grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {data.photos.map((p) => (
               <button
                 key={p.id}
                 onClick={() => setLightbox(p)}
-                className="relative aspect-[3/2] overflow-hidden rounded-md ring-1 ring-slate-200 hover:ring-ocean-400"
+                className="group relative aspect-[3/2] overflow-hidden rounded-lg ring-1 ring-slate-200 shadow-soft transition-all duration-300 ease-swift hover:-translate-y-0.5 hover:shadow-lift hover:ring-ocean-400"
               >
                 {p.url && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.url} alt={p.filename} className="h-full w-full object-cover" loading="lazy" />
+                  <img src={p.url} alt={p.filename} className="h-full w-full object-cover transition-transform duration-500 ease-swift group-hover:scale-[1.04]" loading="lazy" />
                 )}
               </button>
             ))}
@@ -109,12 +109,12 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
 
       {lightbox && (
         <div
-          className="fixed inset-0 bg-black/90 z-50 grid place-items-center p-4"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/90 p-4 backdrop-blur-sm animate-fade-in"
           onClick={() => setLightbox(null)}
         >
           <div className="relative max-w-6xl max-h-full">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={lightbox.url!} alt={lightbox.filename} className="max-w-full max-h-[90vh] object-contain" />
+            <img src={lightbox.url!} alt={lightbox.filename} className="max-w-full max-h-[90vh] object-contain animate-scale-in rounded-md" />
             <a
               href={lightbox.url!}
               download={lightbox.filename}
