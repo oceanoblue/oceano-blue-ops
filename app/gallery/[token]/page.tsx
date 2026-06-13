@@ -34,7 +34,10 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null);
   const [size, setSize] = useState<DeliverySize>('full');
   const [sizeOpen, setSizeOpen] = useState(false);
-  const [byRoom, setByRoom] = useState(false);
+  // Default to the room-organized view when the photos have been classified;
+  // clients can switch to a single flat grid via the toggle. (No effect when
+  // nothing is classified — hasRooms gates the grouped render below.)
+  const [byRoom, setByRoom] = useState(true);
 
   useEffect(() => {
     fetch(`/api/delivery/${params.token}`)
