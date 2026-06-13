@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Download, Image as ImageIcon, ChevronDown, LayoutGrid, Rows3 } from 'lucide-react';
-import { groupByRoom } from '@/lib/photos/rooms';
+import { Download, Image as ImageIcon, ChevronDown, LayoutGrid, Rows3, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { groupByRoom, roomLabel } from '@/lib/photos/rooms';
 
 type DeliverySize = 'full' | 'print' | 'web';
 
@@ -49,6 +49,39 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
       .catch((e) => setErr(String(e)));
   }, [params.token]);
 
+  // The flat photo order as currently displayed (grouped-by-room or flat), so
+  // lightbox prev/next walks the same sequence the client sees.
+  const orderedPhotos = useCallback((): GalleryPhoto[] => {
+    if (!data) return [];
+    const grouped = byRoom && data.photos.some((p) => p.room_type);
+    return grouped ? groupByRoom(data.photos).flatMap((g) => g.photos) : data.photos;
+  }, [data, byRoom]);
+
+  const step = useCallback(
+    (delta: number) => {
+      setLightbox((cur) => {
+        if (!cur) return cur;
+        const order = orderedPhotos();
+        const i = order.findIndex((p) => p.id === cur.id);
+        if (i === -1) return cur;
+        return order[(i + delta + order.length) % order.length] ?? cur;
+      });
+    },
+    [orderedPhotos]
+  );
+
+  // Keyboard control while the lightbox is open: Esc closes, arrows navigate.
+  useEffect(() => {
+    if (!lightbox) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setLightbox(null);
+      else if (e.key === 'ArrowRight') step(1);
+      else if (e.key === 'ArrowLeft') step(-1);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox, step]);
+
   if (err) {
     return (
       <div className="min-h-screen grid place-items-center bg-slate-50 px-6">
@@ -65,7 +98,23 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
   }
 
   if (!data) {
-    return <div className="min-h-screen grid place-items-center text-slate-500">Loading…</div>;
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <header className="border-b border-slate-200 bg-white">
+          <div className="mx-auto max-w-6xl px-6 py-5">
+            <div className="h-3 w-24 rounded bg-slate-200 animate-pulse" />
+            <div className="mt-2 h-6 w-72 max-w-full rounded bg-slate-200 animate-pulse" />
+          </div>
+        </header>
+        <main className="mx-auto max-w-6xl px-6 py-8">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="aspect-[3/2] rounded-lg bg-slate-200 animate-pulse" />
+            ))}
+          </div>
+        </main>
+      </div>
+    );
   }
 
   const hasRooms = data.photos.some((p) => p.room_type);
@@ -180,25 +229,69 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
         )}
       </main>
 
-      {lightbox && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/90 p-4 backdrop-blur-sm animate-fade-in"
-          onClick={() => setLightbox(null)}
-        >
-          <div className="relative max-w-6xl max-h-full">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={lightbox.url!} alt={lightbox.filename} className="max-w-full max-h-[90vh] object-contain animate-scale-in rounded-md" />
-            <a
-              href={lightbox.url!}
-              download={lightbox.filename}
+      {lightbox && (() => {
+        const order = orderedPhotos();
+        const idx = order.findIndex((p) => p.id === lightbox.id);
+        const many = order.length > 1;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm animate-fade-in"
+            onClick={() => setLightbox(null)}
+          >
+            <div
+              className="flex items-center justify-between px-4 py-3 text-white/90"
               onClick={(e) => e.stopPropagation()}
-              className="absolute top-3 right-3 btn-primary"
             >
-              <Download className="h-4 w-4" /> Save
-            </a>
+              <span className="font-mono text-xs tracking-wider">
+                {idx >= 0 ? `${idx + 1} / ${order.length}` : ''}
+                {lightbox.room_type && (
+                  <span className="ml-3 text-white/50">{roomLabel(lightbox.room_type)}</span>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                <a href={lightbox.url!} download={lightbox.filename} className="btn-primary">
+                  <Download className="h-4 w-4" /> Save
+                </a>
+                <button
+                  onClick={() => setLightbox(null)}
+                  className="rounded-md p-2 text-white hover:bg-white/10"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="relative grid min-h-0 flex-1 place-items-center px-4 pb-4">
+              {many && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); step(-1); }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 sm:left-4"
+                  aria-label="Previous photo"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </button>
+              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lightbox.url!}
+                alt={lightbox.filename}
+                onClick={(e) => e.stopPropagation()}
+                className="max-h-full max-w-full object-contain animate-scale-in rounded-md"
+              />
+              {many && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); step(1); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 sm:right-4"
+                  aria-label="Next photo"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
