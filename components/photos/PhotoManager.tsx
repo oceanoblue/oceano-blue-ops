@@ -23,6 +23,7 @@ import {
   Sofa,
   Eraser,
   ChevronRight,
+  Copy,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
@@ -1291,6 +1292,9 @@ function Stage3({
   const [organizing, setOrganizing] = useState(false);
   const [organizeError, setOrganizeError] = useState<string | null>(null);
   const [byRoom, setByRoom] = useState(false);
+  const [deduping, setDeduping] = useState(false);
+  const [dedupeResult, setDedupeResult] = useState<{ sets: number; deselected: number } | null>(null);
+  const [dedupeError, setDedupeError] = useState<string | null>(null);
 
   const hasRooms = photos.some((p) => (p as any).room_type);
   const roomGroups = useMemo(() => groupByRoom(photos as any[]), [photos]);
@@ -1315,6 +1319,30 @@ function Stage3({
       setOrganizeError(err?.message || 'network_error');
     } finally {
       setOrganizing(false);
+    }
+  }
+
+  async function findDuplicates() {
+    setDeduping(true);
+    setDedupeError(null);
+    setDedupeResult(null);
+    try {
+      const r = await fetch('/api/photos/dedupe', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setDedupeError(data.error || `error_${r.status}`);
+      } else {
+        setDedupeResult({ sets: data.duplicate_sets ?? 0, deselected: data.deselected ?? 0 });
+        onChange();
+      }
+    } catch (err: any) {
+      setDedupeError(err?.message || 'network_error');
+    } finally {
+      setDeduping(false);
     }
   }
 
@@ -1355,6 +1383,22 @@ function Stage3({
               </button>
             )}
             <button
+              onClick={findDuplicates}
+              disabled={deduping || photos.length < 2}
+              className="text-xs font-medium px-2.5 py-1.5 rounded-md ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-60 inline-flex items-center gap-1.5"
+              title="Detect near-identical frames and keep only the sharpest of each"
+            >
+              {deduping ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" /> Find duplicates
+                </>
+              )}
+            </button>
+            <button
               onClick={organizeByRoom}
               disabled={organizing || photos.length === 0}
               className="text-xs font-medium px-2.5 py-1.5 rounded-md bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-60 inline-flex items-center gap-1.5"
@@ -1380,6 +1424,26 @@ function Stage3({
       {organizeError && (
         <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
           Couldn&apos;t organize by room: {organizeError}
+        </div>
+      )}
+
+      {dedupeError && (
+        <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          Duplicate scan failed: {dedupeError}
+        </div>
+      )}
+
+      {dedupeResult && (
+        <div className="card border-ocean-200 bg-ocean-50 p-3 text-sm text-ocean-900">
+          {dedupeResult.sets === 0 ? (
+            'No near-duplicate frames found — every photo looks unique.'
+          ) : (
+            <>
+              Found {dedupeResult.sets} duplicate set{dedupeResult.sets === 1 ? '' : 's'} — kept
+              the sharpest in each and deselected {dedupeResult.deselected} copy
+              {dedupeResult.deselected === 1 ? '' : 'ies'} (dimmed below). Approve any to override.
+            </>
+          )}
         </div>
       )}
 
