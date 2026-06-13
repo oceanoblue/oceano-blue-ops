@@ -60,6 +60,27 @@ visibility, maintaining realistic window brightness, avoiding fake dark
 window pulls, avoiding halos around windows and furniture, and preserving
 natural light falloff.
 
+HIGHLIGHT RECOVERY & LIGHT FIXTURES (IMPORTANT)
+Actively recover blown-out highlights across the whole image — in BOTH single
+exposures and HDR merges — instead of leaving them as featureless white
+patches. Pull overexposed areas back until shape, edges, and material detail
+return:
+- Light fixtures, bulbs, and shades: restore the form, rim, and material of
+  every vanity light, sconce, pendant, chandelier, and lamp shade so it reads
+  as a defined object, not a glowing white blob. A frosted or glass shade
+  should show its rounded form and subtle tone; an exposed bulb may stay
+  bright but must keep a believable edge rather than bleeding into the wall.
+- Suppress the halo, glow, and bloom that spill from light sources onto
+  adjacent walls, ceilings, and trim; keep those surfaces clean with their
+  texture intact right up to the edge of the fixture.
+- Recover detail in other clipped highlights too: sunlit walls and floors,
+  bright window frames, glossy countertops, chrome and metal speculars, white
+  linens, tile, and cabinetry.
+Keep it natural: the lights should still read as ON and the room bright — do
+not dim the scene, gray-out the whites, or make fixtures look unlit. The goal
+is defined, detailed, true-to-life highlights with real material, never
+crushed, gray, or dull tone.
+
 WINDOW PULLS
 When windows are blown out: create realistic exterior visibility, maintain
 natural brightness balance, preserve realistic transition between indoors
