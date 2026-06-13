@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, addMonths, format, isSameDay, isSameMonth, startOfMonth, startOfWeek, endOfMonth, endOfWeek } from 'date-fns';
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import type { ScheduleData, AvailabilitySlot } from '@/lib/booking/types';
@@ -26,6 +26,7 @@ export function ScheduleStep({
   const [selectedDay, setSelectedDay] = useState<Date | null>(s.scheduled_at ? new Date(s.scheduled_at) : null);
   const [slots, setSlots] = useState<AvailabilitySlot[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const [hour24, setHour24] = useState(false);
 
   const days = useMemo(() => {
@@ -40,16 +41,28 @@ export function ScheduleStep({
     return arr;
   }, [monthCursor]);
 
-  useEffect(() => {
+  const loadSlots = useCallback(() => {
     if (!selectedDay) return;
     setLoading(true);
+    setError(false);
     // Send the date as YYYY-MM-DD in the TEAM timezone, not browser-local
     fetch(`/api/availability?date=${fmtDateInTz(selectedDay, s.timezone, 'iso')}&duration=${s.duration_minutes}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`status_${r.status}`);
+        return r.json();
+      })
       .then((d) => setSlots(d.slots ?? []))
+      .catch(() => {
+        setSlots(null);
+        setError(true);
+      })
       .finally(() => setLoading(false));
-  // re-run when the date changes or the picked duration changes
-  }, [selectedDay, s.duration_minutes]);
+  // re-run when the date changes, the picked duration, or the timezone changes
+  }, [selectedDay, s.duration_minutes, s.timezone]);
+
+  useEffect(() => {
+    loadSlots();
+  }, [loadSlots]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -166,6 +179,13 @@ export function ScheduleStep({
               <p className="text-sm text-slate-500">Select a date to see times</p>
             ) : loading ? (
               <p className="text-sm text-slate-500">Loading slots…</p>
+            ) : error ? (
+              <div className="text-sm text-slate-500">
+                <p>Couldn&apos;t load available times.</p>
+                <button onClick={loadSlots} className="btn-secondary mt-2">
+                  Try again
+                </button>
+              </div>
             ) : (slots?.length ?? 0) === 0 ? (
               <p className="text-sm text-slate-500">No slots available — try another day.</p>
             ) : (
