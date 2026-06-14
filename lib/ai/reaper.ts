@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server';
+import { captureError, logEvent } from '@/lib/observability/report';
 
 /**
  * Recover orphaned AI jobs stuck in 'running' (function timeout / OOM / hung
@@ -26,10 +27,18 @@ export async function reapStaleAiJobs(): Promise<{
       p_stale_seconds: STALE_SECONDS,
       p_max_attempts: MAX_ATTEMPTS,
     } as any);
-    if (error) return { requeued: 0, failed: 0, error: error.message };
+    if (error) {
+      captureError('ai.reaper', error);
+      return { requeued: 0, failed: 0, error: error.message };
+    }
     const row = Array.isArray(data) ? data[0] : data;
-    return { requeued: (row as any)?.requeued ?? 0, failed: (row as any)?.failed ?? 0 };
+    const result = { requeued: (row as any)?.requeued ?? 0, failed: (row as any)?.failed ?? 0 };
+    if (result.failed > 0 || result.requeued > 0) {
+      logEvent('ai.reaper', 'reaped', result);
+    }
+    return result;
   } catch (e: any) {
+    captureError('ai.reaper', e);
     return { requeued: 0, failed: 0, error: e?.message || String(e) };
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { runAiJob } from '@/lib/ai/runner';
 import { reapStaleAiJobs } from '@/lib/ai/reaper';
+import { captureError } from '@/lib/observability/report';
 
 /**
  * Background AI job processor.
@@ -43,14 +44,15 @@ async function handle(request: Request) {
   // picked up below) or failed once they exhaust attempts.
   const reaped = await reapStaleAiJobs();
 
-  const { data: pending } = await admin
+  const { data: pendingRaw } = await admin
     .from('ai_jobs')
     .select('id')
     .in('status', ['pending', 'queued'])
     .order('created_at', { ascending: true })
     .limit(BATCH);
+  const pending = (pendingRaw ?? []) as { id: string }[];
 
-  if (!pending?.length) {
+  if (!pending.length) {
     return NextResponse.json({ processed: 0, reaped, message: 'no_pending_jobs' });
   }
 
@@ -68,6 +70,7 @@ async function handle(request: Request) {
         const r = await runAiJob(next.id);
         results.push(r);
       } catch (err: any) {
+        captureError('cron.run-pending-jobs', err, { jobId: next.id });
         results.push({
           jobId: next.id,
           status: 'failed',
