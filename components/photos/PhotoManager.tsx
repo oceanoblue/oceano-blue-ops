@@ -47,6 +47,7 @@ interface JobView {
   cost_cents: number | null;
   duration_ms: number | null;
   error_message: string | null;
+  input_photo_ids?: string[] | null;
   created_at?: string;
 }
 
@@ -166,6 +167,19 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   // parent_photo_id points back at the ARW and whose filename ends .jpg),
   // hide the ARW from view — the worker has already converted it and we want
   // the UI to show the converted JPEG instead of the unrenderable ARW.
+  // Raw photos that were already consumed by an HDR merge (any non-failed
+  // hdr_merge job's inputs). Once a frame is merged it must NOT reappear as a
+  // bracket/single or get re-carried into Stage 2 — that was the source of the
+  // duplicate JPEGs piling into AI Enhance.
+  const mergedSourceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const j of jobs) {
+      if (j.job_type !== 'hdr_merge' || j.status === 'failed') continue;
+      for (const id of j.input_photo_ids ?? []) ids.add(id);
+    }
+    return ids;
+  }, [jobs]);
+
   const rawPhotos = useMemo(() => {
     const all = photos.filter((p) => p.kind === 'raw');
     const replacedArwIds = new Set<string>();
@@ -175,8 +189,10 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         replacedArwIds.add(p.parent_photo_id);
       }
     }
-    return all.filter((p) => !replacedArwIds.has(p.id));
-  }, [photos]);
+    return all.filter(
+      (p) => !replacedArwIds.has(p.id) && !mergedSourceIds.has(p.id)
+    );
+  }, [photos, mergedSourceIds]);
   const processedPhotos = useMemo(() => photos.filter((p) => p.kind === 'processed'), [photos]);
 
   // Build parent → children index so we can tell which merged JPEGs have

@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
   const { data: jobs, error } = await supabase
     .from('ai_jobs')
-    .select('id, job_type, provider, model, status, error_message, cost_cents, duration_ms, output_photo_ids, created_at, completed_at')
+    .select('id, job_type, provider, model, status, error_message, cost_cents, duration_ms, input_photo_ids, output_photo_ids, created_at, completed_at')
     .eq('order_id', orderId)
     .order('created_at', { ascending: false });
 
