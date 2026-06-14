@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { classifyRoom } from '@/lib/ai/room-classify';
 import { isDeliverable } from '@/lib/photos/deliverable';
+import { mapWithConcurrency } from '@/lib/utils/concurrent';
 
 export const dynamic = 'force-dynamic';
 // Vision calls are sequential and ~1s each; allow headroom for a full gallery.
@@ -53,23 +54,24 @@ export async function POST(request: Request) {
 
   let classified = 0;
   let failed = 0;
-  for (const p of targets) {
+  // Bounded parallelism: download + vision call + write per photo, up to 5 at a
+  // time (was fully sequential — latency scaled linearly and timed out on big
+  // orders). 5 keeps us well under OpenAI rate limits.
+  await mapWithConcurrency(targets, 5, async (p) => {
     try {
       const { data: blob } = await admin.storage.from(p.bucket).download(p.storage_path);
       if (!blob) {
         failed++;
-        continue;
+        return;
       }
       const bytes = Buffer.from(await blob.arrayBuffer());
       const result = await classifyRoom(bytes);
       if (!result) {
         failed++;
-        continue;
+        return;
       }
-      // Cast dodges the supabase-js admin-client `.update()` never-overload
-      // quirk (same as other admin writes in the baseline); room_type is now a
-      // real column on Photo after 0035.
-      const { error: upErr } = await (admin.from('photos') as any)
+      const { error: upErr } = await admin
+        .from('photos')
         .update({ room_type: result.roomType, room_confidence: result.confidence })
         .eq('id', p.id);
       if (upErr) failed++;
@@ -77,7 +79,7 @@ export async function POST(request: Request) {
     } catch {
       failed++;
     }
-  }
+  });
 
   return NextResponse.json({
     ok: true,

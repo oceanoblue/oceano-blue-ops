@@ -47,21 +47,35 @@ export async function GET(_req: Request, { params }: { params: { token: string }
     .order('sort_order', { ascending: true });
 
   const deliverable = (photos ?? []).filter((p: any) => isDeliverable(p));
-  const signed = await Promise.all(
-    deliverable.map(async (p: any) => {
+
+  // Batch signed-URL creation per bucket — one round-trip instead of one call
+  // per photo (a 50-photo gallery was 50 sequential signing requests).
+  const byBucket = new Map<string, any[]>();
+  for (const p of deliverable) {
+    const arr = byBucket.get(p.bucket) ?? [];
+    arr.push(p);
+    byBucket.set(p.bucket, arr);
+  }
+  const urlByPath = new Map<string, string>();
+  await Promise.all(
+    Array.from(byBucket.entries()).map(async ([bucket, ps]) => {
       const { data } = await supabase.storage
-        .from(p.bucket)
-        .createSignedUrl(p.storage_path, 3600);
-      return {
-        id: p.id,
-        filename: p.filename,
-        width: p.width,
-        height: p.height,
-        room_type: p.room_type ?? null,
-        url: data?.signedUrl ?? null,
-      };
+        .from(bucket)
+        .createSignedUrls(ps.map((p) => p.storage_path), 3600);
+      for (const row of data ?? []) {
+        if (row.signedUrl && row.path) urlByPath.set(row.path, row.signedUrl);
+      }
     })
   );
+
+  const signed = deliverable.map((p: any) => ({
+    id: p.id,
+    filename: p.filename,
+    width: p.width,
+    height: p.height,
+    room_type: p.room_type ?? null,
+    url: urlByPath.get(p.storage_path) ?? null,
+  }));
 
   return NextResponse.json({
     order: { id: order.id, order_number: order.order_number },
