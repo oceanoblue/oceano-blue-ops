@@ -4,6 +4,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { fingerprint } from '@/lib/photos/fingerprint';
 import { clusterDuplicates, type Fingerprinted } from '@/lib/photos/dedupe';
 import { isDeliverable } from '@/lib/photos/deliverable';
+import { mapWithConcurrency } from '@/lib/utils/concurrent';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -52,28 +53,29 @@ export async function POST(request: Request) {
 
   const candidates = ((photos ?? []) as any[]).filter(isDeliverable);
 
-  // Fingerprint every deliverable photo. Skip any that fail to download/decode.
-  const prints: Fingerprinted[] = [];
+  // Fingerprint every deliverable photo with bounded parallelism (was fully
+  // sequential download+decode). Unreadable frames yield null and are skipped.
   const nameById = new Map<string, string>();
-  for (const p of candidates) {
-    nameById.set(p.id, p.filename);
+  for (const p of candidates) nameById.set(p.id, p.filename);
+  const fpResults = await mapWithConcurrency(candidates, 4, async (p) => {
     try {
       const { data: blob } = await admin.storage.from(p.bucket).download(p.storage_path);
-      if (!blob) continue;
+      if (!blob) return null;
       const bytes = Buffer.from(await blob.arrayBuffer());
       const fp = await fingerprint(bytes);
-      prints.push({ id: p.id, hash: fp.hash, sharpness: fp.sharpness });
+      return { id: p.id, hash: fp.hash, sharpness: fp.sharpness } as Fingerprinted;
     } catch {
-      // Unreadable frame — leave it untouched rather than risk a bad merge.
+      return null;
     }
-  }
+  });
+  const prints: Fingerprinted[] = fpResults.filter((x): x is Fingerprinted => x !== null);
 
   const clusters = clusterDuplicates(prints, threshold);
   const rejectedIds = clusters.flatMap((c) => c.rejectedIds);
 
   if (!dry_run && rejectedIds.length > 0) {
-    // Cast dodges the supabase-js admin-client update never-overload quirk.
-    const { error: upErr } = await (admin.from('photos') as any)
+    const { error: upErr } = await admin
+      .from('photos')
       .update({ is_selected: false })
       .in('id', rejectedIds);
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
