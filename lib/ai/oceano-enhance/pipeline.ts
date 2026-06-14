@@ -87,6 +87,27 @@ const DEFAULTS: Required<EnhanceOptions> = {
 };
 
 /**
+ * The signature "luxury real estate" grade applied to every auto-enhance when
+ * the operator hasn't dialed in their own settings. The all-zero DEFAULTS above
+ * are a true no-op (used by the manual slider route); THIS is the opinionated
+ * look — bright & airy, open shadows, recovered highlights (protects windows /
+ * exteriors), a touch warm and inviting, gentle contrast + vibrance for pop,
+ * crisp but not crunchy. Tuned to read like Fotello/Autoenhance-grade finals
+ * straight out of the pipeline. Override per-deployment via DB settings.
+ */
+export const LUXURY_BASELINE: EnhanceOptions = {
+  exposure: 0.12, // brighter, airy
+  contrast: 0.1, // gentle pop
+  temp: 0.05, // a touch warm / inviting (WB already neutralized)
+  saturation: 0.15, // rich but realistic colour
+  highlights: 0.25, // recover & protect highlights (windows, sunlit exteriors)
+  shadows: 0.25, // open up the shadows
+  whites: 0.05, // clean, bright whites
+  blacks: 0.08, // anchored blacks so it stays crisp, not washed out
+  sharpening: 0.32, // crisp detail without halos
+};
+
+/**
  * Translate legacy options (shadowLift / highlightRecover / vibrance) onto
  * the new field set so the pipeline doesn't need two code paths.
  */

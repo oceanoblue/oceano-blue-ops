@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import sharp from 'sharp';
 import type { AiJobType } from '@/lib/supabase/database.types';
-import { enhanceSingle, type EnhanceOptions } from './pipeline';
+import { enhanceSingle, LUXURY_BASELINE, type EnhanceOptions } from './pipeline';
 import { openaiGptImage } from '../openai-gpt-image';
 import { geminiBananaPro } from '../gemini-banana-pro';
 import { buildPrompt } from '../prompts';
@@ -184,9 +184,10 @@ export async function smartEnhance(
   filename: string,
   options?: EnhanceOptions
 ): Promise<SmartEnhanceResult> {
-  // 1. Run deterministic pipeline as the base — fast and free.
+  // 1. Run deterministic pipeline as the base — fast and free. Start from the
+  // luxury baseline grade; DB settings and per-call options override it.
   const settings = await loadEnhanceSettings();
-  const base = await enhanceSingle(inputBuf, { ...settings, ...options });
+  const base = await enhanceSingle(inputBuf, { ...LUXURY_BASELINE, ...settings, ...options });
 
   // 2. Analyze the base to decide what generative edits are worth it.
   const analysis = await analyze(base.bytes);
