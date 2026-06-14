@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getProvider } from './index';
 import { analyzePhoto, planEdits } from './vision-analyze';
+import { captureError } from '@/lib/observability/report';
 import type { AiJob, Photo } from '@/lib/supabase/database.types';
 import type { SourceImage } from './types';
 
@@ -226,13 +227,19 @@ export async function runAiJob(jobId: string): Promise<{
         }
       } catch (chainErr) {
         // Don't fail the parent job over an auto-chain hiccup.
-        console.error('[runner] auto-chain failed:', chainErr);
+        captureError('ai.runner.autochain', chainErr, { jobId, orderId: job.order_id });
       }
     }
 
     return { jobId, status: 'complete', outputPhotoIds };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    captureError('ai.runner', err, {
+      jobId,
+      jobType: job.job_type,
+      orderId: job.order_id,
+      provider: job.provider,
+    });
     await supabase
       .from('ai_jobs')
       .update({
