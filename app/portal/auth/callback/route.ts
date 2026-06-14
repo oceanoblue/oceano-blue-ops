@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { safeRelativePath } from '@/lib/utils/safe-redirect';
 
 /**
  * Supabase magic-link redirect handler.
@@ -9,7 +10,8 @@ import { createClient } from '@/lib/supabase/server';
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
-  const next = url.searchParams.get('next') ?? '/portal/listings';
+  // Constrain `next` to a same-site path — never an attacker-supplied URL.
+  const next = safeRelativePath(url.searchParams.get('next'), '/portal/listings');
 
   if (code) {
     const supabase = createClient();
