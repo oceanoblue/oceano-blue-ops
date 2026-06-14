@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { localToUtc, dayOfWeekInTz } from '@/lib/utils/timezone';
 import { fetchBusyRanges } from '@/lib/google-calendar/api';
+import { enforceRateLimit } from '@/lib/security/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,12 @@ interface Photographer {
 }
 
 export async function GET(request: Request) {
+  // Public endpoint that fans out to multi-table queries + Google freebusy per
+  // photographer — throttle to blunt cost-amplification / scraping. Generous
+  // enough for normal date browsing (calendar clicks).
+  const limited = await enforceRateLimit(request, 'availability', 60, 60);
+  if (limited) return limited;
+
   const url = new URL(request.url);
   const dateStr = url.searchParams.get('date');
   const duration = Math.max(15, parseInt(url.searchParams.get('duration') || '60', 10));

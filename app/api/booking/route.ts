@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
+import { enforceRateLimit } from '@/lib/security/rate-limit';
 
 const BookingSchema = z.object({
   client_email: z.string().email(),
@@ -20,6 +21,10 @@ const BookingSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // Public, unauthenticated endpoint — throttle per IP.
+  const limited = await enforceRateLimit(request, 'booking', 5, 600);
+  if (limited) return limited;
+
   try {
     const body = await request.json();
     const parsed = BookingSchema.parse(body);

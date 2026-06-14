@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
 import { insertEvent } from '@/lib/google-calendar/api';
+import { enforceRateLimit } from '@/lib/security/rate-limit';
 
 const Body = z.object({
   client_email: z.string().email(),
@@ -37,6 +38,11 @@ const Body = z.object({
 });
 
 export async function POST(request: Request) {
+  // Public, unauthenticated endpoint — throttle per IP (creates rows + pushes a
+  // calendar event). 5 bookings / 10 min is generous for a real client.
+  const limited = await enforceRateLimit(request, 'booking_v2', 5, 600);
+  if (limited) return limited;
+
   const parsed = Body.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json(
