@@ -123,23 +123,79 @@ async function resize(img: Sharp, opts: Required<EnhanceOptions>): Promise<Sharp
 }
 
 /**
- * Grey-world white balance: scale R and B channels so that the average of
- * each channel matches the average of green. Works great for typical
- * mixed-light interiors without going crazy on red couches or blue accent
- * walls.
+ * Compute per-channel gains that neutralize a measured bright-neutral colour,
+ * anchored to green, tamed by `blend` and clamped so we never wildly shift.
+ * Pure + exported for testing.
+ */
+export function wbGains(
+  rm: number,
+  gm: number,
+  bm: number,
+  blend = 0.7
+): { rGain: number; bGain: number } {
+  const clamp = (x: number) => Math.max(0.82, Math.min(1.22, x));
+  const rGain = rm > 0 ? clamp(1 + (gm / rm - 1) * blend) : 1;
+  const bGain = bm > 0 ? clamp(1 + (gm / bm - 1) * blend) : 1;
+  return { rGain, bGain };
+}
+
+/**
+ * White-patch white balance on bright neutrals.
+ *
+ * Grey-world (balance to the whole-scene average) injects colour casts whenever
+ * a frame is dominated by non-neutral content — e.g. a real-estate interior
+ * with warm wood floors comes out with magenta walls and blue shadows. Instead
+ * we sample the brightest, not-yet-clipped pixels (the white walls/ceiling/trim
+ * that SHOULD be neutral) and balance off those. Falls back to a no-op when
+ * there aren't enough neutral references to trust.
  */
 async function whiteBalance(buf: Buffer): Promise<Buffer> {
-  const stats = await sharp(buf).stats();
-  const [r, g, b] = stats.channels;
-  if (!r || !g || !b) return buf;
-  const targetMean = (r.mean + g.mean + b.mean) / 3;
-  // Tame the correction so we don't over-shift; bias 60% toward neutral.
-  const blend = 0.6;
-  const rGain = 1 + ((targetMean / r.mean) - 1) * blend;
-  const bGain = 1 + ((targetMean / b.mean) - 1) * blend;
-  return sharp(buf)
-    .linear([rGain, 1, bGain], [0, 0, 0])
-    .toBuffer();
+  let data: Buffer;
+  let info: { width: number; height: number; channels: number };
+  try {
+    const out = await sharp(buf)
+      .resize(160, 160, { fit: 'inside' })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    data = out.data;
+    info = out.info;
+  } catch {
+    return buf;
+  }
+  const px = info.width * info.height;
+  const ch = info.channels;
+  if (px === 0 || ch < 3) return buf;
+
+  // Luminance per pixel; take the brightest ~20% as candidate neutrals.
+  const lum = new Float32Array(px);
+  for (let i = 0; i < px; i++) {
+    const o = i * ch;
+    lum[i] = 0.299 * data[o] + 0.587 * data[o + 1] + 0.114 * data[o + 2];
+  }
+  const thresh = Float32Array.from(lum).sort()[Math.floor(px * 0.8)];
+
+  let rs = 0;
+  let gs = 0;
+  let bs = 0;
+  let n = 0;
+  for (let i = 0; i < px; i++) {
+    if (lum[i] < thresh) continue;
+    const o = i * ch;
+    const r = data[o];
+    const g = data[o + 1];
+    const b = data[o + 2];
+    // Skip pixels that are essentially clipped — pure white carries no cast info.
+    if (r >= 252 && g >= 252 && b >= 252) continue;
+    rs += r;
+    gs += g;
+    bs += b;
+    n += 1;
+  }
+  if (n < 20) return buf; // not enough trustworthy neutral references
+
+  const { rGain, bGain } = wbGains(rs / n, gs / n, bs / n);
+  return sharp(buf).linear([rGain, 1, bGain], [0, 0, 0]).toBuffer();
 }
 
 /**
