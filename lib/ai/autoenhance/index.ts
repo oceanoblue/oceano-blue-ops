@@ -23,7 +23,7 @@ const POLL_INITIAL_MS = 1500;
 const POLL_MAX_MS = 6000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-function devModeHeader() {
+function devModeHeader(): Record<string, string> {
   return process.env.AUTOENHANCE_DEV_MODE === 'true' ? { 'x-dev-mode': 'true' } : {};
 }
 
@@ -56,7 +56,7 @@ async function uploadImage(uploadUrl: string, apiKey: string, bytes: Buffer): Pr
       'content-type': 'application/octet-stream',
       'x-api-key': apiKey,
     },
-    body: bytes,
+    body: new Uint8Array(bytes),
   });
   if (!r.ok) {
     throw new Error(`Autoenhance upload failed: ${r.status} ${await r.text()}`);

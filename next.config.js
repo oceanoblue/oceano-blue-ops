@@ -1,11 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Skip TS/ESLint during prod build. Strict checks still run locally via
-  // `npm run typecheck` / `npm run lint`. This is a pragmatic call for v1
-  // because the hand-written Database type isn't strict enough for joined
-  // selects yet — regenerate with `supabase gen types typescript --local`
-  // when you want to flip these back on.
-  typescript: { ignoreBuildErrors: true },
+  // TypeScript errors now FAIL the build (the supabase-js typing skew that
+  // forced this off has been fixed — the DB layer is strictly typed and tsc is
+  // clean). ESLint is still skipped at build time because no eslint config is
+  // set up yet (separate task); strict types are the guarantee that matters.
+  typescript: { ignoreBuildErrors: false },
   eslint: { ignoreDuringBuilds: true },
   experimental: {
     serverActions: {

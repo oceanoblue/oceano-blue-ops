@@ -1,8 +1,8 @@
 name: CI
 
-# Quality gate on every PR and on pushes to main. Tests + build are required;
-# typecheck + lint are informational for now (the DB-types repair that clears the
-# ~121 tsc baseline is tracked separately — flip these to required once it lands).
+# Quality gate on every PR and on pushes to main. Typecheck + tests + build are
+# required (the DB-types repair cleared the tsc baseline to zero and the build now
+# enforces types). Lint stays informational until an eslint config is added.
 on:
   pull_request:
   push:
@@ -38,9 +38,8 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
           NEXT_PUBLIC_APP_URL: https://example.com
 
-      - name: Typecheck (informational)
+      - name: Typecheck
         run: npm run typecheck
-        continue-on-error: true
 
       - name: Lint (informational)
         run: npm run lint

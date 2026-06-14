@@ -132,10 +132,11 @@ export function ProductEditDrawer({
       const payload = { ...draft, slug };
       let productId = draft.id;
       if (productId) {
-        const { error } = await supabase.from('products').update(payload).eq('id', productId);
+        // Form draft payload (kind is a free string from a select); written as-is.
+        const { error } = await supabase.from('products').update(payload as any).eq('id', productId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.from('products').insert(payload).select('id').single();
+        const { data, error } = await supabase.from('products').insert(payload as any).select('id').single();
         if (error) throw error;
         productId = (data as any).id;
       }

@@ -111,6 +111,7 @@ export type Database = {
       }
       ai_jobs: {
         Row: {
+          attempts: number
           completed_at: string | null
           cost_cents: number | null
           created_at: string
@@ -131,6 +132,7 @@ export type Database = {
           tool_run_id: string | null
         }
         Insert: {
+          attempts?: number
           completed_at?: string | null
           cost_cents?: number | null
           created_at?: string
@@ -151,6 +153,7 @@ export type Database = {
           tool_run_id?: string | null
         }
         Update: {
+          attempts?: number
           completed_at?: string | null
           cost_cents?: number | null
           created_at?: string
@@ -1741,7 +1744,7 @@ export type Database = {
           height: number | null
           id: string
           is_hdr: boolean
-          is_selected: boolean
+          is_selected: boolean | null
           kind: Database["public"]["Enums"]["photo_kind"]
           mime_type: string | null
           order_id: string
@@ -1769,7 +1772,7 @@ export type Database = {
           height?: number | null
           id?: string
           is_hdr?: boolean
-          is_selected?: boolean
+          is_selected?: boolean | null
           kind?: Database["public"]["Enums"]["photo_kind"]
           mime_type?: string | null
           order_id: string
@@ -1797,7 +1800,7 @@ export type Database = {
           height?: number | null
           id?: string
           is_hdr?: boolean
-          is_selected?: boolean
+          is_selected?: boolean | null
           kind?: Database["public"]["Enums"]["photo_kind"]
           mime_type?: string | null
           order_id?: string
@@ -2455,6 +2458,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rate_limits: {
+        Row: {
+          count: number
+          created_at: string
+          key: string
+        }
+        Insert: {
+          count?: number
+          created_at?: string
+          key: string
+        }
+        Update: {
+          count?: number
+          created_at?: string
+          key?: string
+        }
+        Relationships: []
       }
       resolve_projects: {
         Row: {
@@ -3291,6 +3312,7 @@ export type Database = {
       }
     }
     Functions: {
+      bump_rate_limit: { Args: { p_key: string }; Returns: number }
       create_booking_v2: {
         Args: {
           p_access_method: string
@@ -3361,6 +3383,13 @@ export type Database = {
       price_for_sqft: {
         Args: { p_product_id: string; p_sqft: number }
         Returns: number
+      }
+      reap_stale_ai_jobs: {
+        Args: { p_max_attempts?: number; p_stale_seconds?: number }
+        Returns: {
+          failed: number
+          requeued: number
+        }[]
       }
     }
     Enums: {

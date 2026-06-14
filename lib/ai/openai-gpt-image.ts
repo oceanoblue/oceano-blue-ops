@@ -82,7 +82,7 @@ export const openaiGptImage: AiProvider = {
     );
     const imageFiles = buffers.map(
       (buf, i) =>
-        new File([buf], req.inputs[i].filename ?? `input-${i}.png`, {
+        new File([new Uint8Array(buf)], req.inputs[i].filename ?? `input-${i}.png`, {
           type: req.inputs[i].mimeType ?? 'image/png',
         })
     );
