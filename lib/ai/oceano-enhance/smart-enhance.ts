@@ -6,6 +6,7 @@ import { openaiGptImage } from '../openai-gpt-image';
 import { geminiBananaPro } from '../gemini-banana-pro';
 import { buildPrompt } from '../prompts';
 import { loadEnhanceSettings } from './settings';
+import { captureError } from '@/lib/observability/report';
 
 /**
  * Smart Enhance — the "do everything automatically" mode.
@@ -126,7 +127,7 @@ async function analyze(bytes: Buffer): Promise<SmartAnalysis | null> {
     };
   } catch (err) {
     // Vision analysis is best-effort — never blow up the whole job over it.
-    console.error('[smart-enhance] analysis failed:', err);
+    captureError('smart-enhance.analyze', err);
     return null;
   }
 }
@@ -222,7 +223,7 @@ export async function smartEnhance(
     } catch (err) {
       // One bad provider shouldn't kill the whole enhance — keep going with
       // what we have so far.
-      console.error(`[smart-enhance] ${edit} failed:`, err);
+      captureError('smart-enhance.applyEdit', err, { edit });
     }
   }
 

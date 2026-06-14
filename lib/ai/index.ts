@@ -18,18 +18,20 @@ const PROVIDERS: Record<AiProviderId, AiProvider> = {
 /**
  * Default provider per job type. Editable in /dashboard/settings.
  *
- * GPT Image 2.0 is the signature enhance engine — it carries the luxury
- * real-estate look (neutral whites, true-to-life color, sky/window pulls)
- * defined in lib/ai/prompts.ts. Nano Banana 2 / Pro are selectable secondary
- * engines. Pure exposure fusion (hdr_merge) and lawn green-up stay on the
- * deterministic Oceano pipeline — zero cost, zero hallucination — before the
- * GPT Image enhance pass runs on the merged result.
+ * Oceano Smart Enhance is the signature enhance engine: a deterministic Sharp
+ * base (grey-world white balance, exposure, highlight recovery, vibrance — one
+ * consistent temperature, no blown exteriors, no per-frame drift) followed by
+ * vision analysis that chains generative fixes (window pull, sky, lawn, …) ONLY
+ * where a photo needs them. This gives the reliable luxury look that pure
+ * generative editing (GPT Image / Nano Banana — still selectable) couldn't hold
+ * consistently. Pure exposure fusion (hdr_merge) and lawn green-up are also on
+ * the deterministic pipeline.
  */
 const DEFAULTS: Record<AiJobType, AiProviderId> = {
   hdr_merge: 'oceano-enhance',
-  enhance_single: 'openai-gpt-image',
+  enhance_single: 'oceano-enhance',
   lawn_enhance: 'oceano-enhance',
-  declutter: 'openai-gpt-image',
+  declutter: 'oceano-enhance',
   sky_replace: 'openai-gpt-image',
   window_pull: 'openai-gpt-image',
   twilight_convert: 'openai-gpt-image',
