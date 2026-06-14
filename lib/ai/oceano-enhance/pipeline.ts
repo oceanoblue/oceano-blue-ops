@@ -90,21 +90,25 @@ const DEFAULTS: Required<EnhanceOptions> = {
  * The signature "luxury real estate" grade applied to every auto-enhance when
  * the operator hasn't dialed in their own settings. The all-zero DEFAULTS above
  * are a true no-op (used by the manual slider route); THIS is the opinionated
- * look — bright & airy, open shadows, recovered highlights (protects windows /
- * exteriors), a touch warm and inviting, gentle contrast + vibrance for pop,
- * crisp but not crunchy. Tuned to read like Fotello/Autoenhance-grade finals
- * straight out of the pipeline. Override per-deployment via DB settings.
+ * look. Tuned against how best-in-class services (Fotello "Airy", Autoenhance,
+ * BoxBrownie, PhotoUp) actually grade: neutral-clean white balance, bright &
+ * airy via shadow lift (not a blown global push), STRONG highlight recovery so
+ * windows/exteriors stay legible, whites held just below clip, a hair of black
+ * lift for airiness over a true black point, gentle contrast, restrained/
+ * realistic colour (oversaturation is the #1 "fake" tell), crisp edge-aware
+ * sharpening. Restraint + accuracy is what reads as luxury, not stronger fx.
+ * Override per-deployment via DB settings.
  */
 export const LUXURY_BASELINE: EnhanceOptions = {
-  exposure: 0.12, // brighter, airy
-  contrast: 0.1, // gentle pop
-  temp: 0.05, // a touch warm / inviting (WB already neutralized)
-  saturation: 0.15, // rich but realistic colour
-  highlights: 0.25, // recover & protect highlights (windows, sunlit exteriors)
-  shadows: 0.25, // open up the shadows
-  whites: 0.05, // clean, bright whites
-  blacks: 0.08, // anchored blacks so it stays crisp, not washed out
-  sharpening: 0.32, // crisp detail without halos
+  exposure: 0.25, // airy lift, moderate so exteriors don't blow
+  contrast: 0.08, // gentle S, not an HDR slam
+  temp: 0.0, // neutral — white-patch WB sets the white point; no warm cast
+  saturation: 0.1, // modest + realistic; oversaturation looks fake
+  highlights: 0.35, // strong recovery: hold window & sunlit-exterior detail
+  shadows: 0.3, // open the corners for the bright/airy look (don't crush wood)
+  whites: 0.0, // keep the brightest whites just below clip
+  blacks: -0.03, // a hair of lift for "airy"; contrast keeps a true black point
+  sharpening: 0.3, // crisp, edge-aware, no crunch
 };
 
 /**
