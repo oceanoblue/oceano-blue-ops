@@ -34,6 +34,26 @@ CRITICAL COLOR & WHITE BALANCE RULES
 - Preserve texture and detail in white walls, ceilings, fabrics, and cabinetry.
 - Respect the natural lighting environment of the property.
 
+WHITE BALANCE CONSISTENCY (ONE TEMPERATURE — IMPORTANT)
+The ENTIRE image must read at a single, consistent, slightly-warm neutral white
+balance. The most common failure is interiors drifting cool/blue while the
+exterior or window light stays warm (or vice versa) — do NOT let that happen.
+Interior walls, exterior facade, sky, and the view through windows must all sit
+on the same coherent temperature, as if lit by one consistent daylight. Lock
+white balance to the neutral architectural surfaces (ceilings, trim, cabinetry)
+and bring everything else into agreement with them. Never deliver a photo where
+one zone looks noticeably cooler or warmer than another. Aim for inviting,
+warm-neutral — never clinical blue, never amber.
+
+EXTERIOR EXPOSURE (DO NOT OVERBLOW)
+Exteriors, facades, rooflines, sunlit ground, patios, and skies must NOT be
+overexposed, washed out, or blown to white. Hold real detail, texture, and
+color in the brightest exterior areas — a bright sunny exterior should still
+show material in the walls and roof and tone in the sky. When an interior shot
+includes a doorway or window to the outside, the outdoor area must stay
+exposed-down enough to show its detail, not clip to a white hole. Bright and
+airy, yes — bleached and detail-less, never.
+
 COLOR (ENHANCED BUT TRUE-TO-LIFE)
 Deliver rich, premium, magazine-grade color depth: deep natural greens in
 foliage and lawns, clean believable blue skies, honest warm wood tones, and
