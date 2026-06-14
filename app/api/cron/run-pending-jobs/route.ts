@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { runAiJob } from '@/lib/ai/runner';
+import { reapStaleAiJobs } from '@/lib/ai/reaper';
 
 /**
  * Background AI job processor.
@@ -37,6 +38,11 @@ async function handle(request: Request) {
   }
 
   const admin = createAdminClient();
+
+  // Recover orphaned jobs first: stuck 'running' jobs get requeued (so they're
+  // picked up below) or failed once they exhaust attempts.
+  const reaped = await reapStaleAiJobs();
+
   const { data: pending } = await admin
     .from('ai_jobs')
     .select('id')
@@ -45,7 +51,7 @@ async function handle(request: Request) {
     .limit(BATCH);
 
   if (!pending?.length) {
-    return NextResponse.json({ processed: 0, message: 'no_pending_jobs' });
+    return NextResponse.json({ processed: 0, reaped, message: 'no_pending_jobs' });
   }
 
   // Bounded-parallel worker pool. Promise.all on a fixed number of workers
@@ -106,6 +112,7 @@ async function handle(request: Request) {
     completed,
     failed,
     skipped,
+    reaped,
   });
 }
 
