@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import sharp from 'sharp';
 import { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/supabase/database.types';
 
 /**
  * Accepts multipart photo uploads from the dashboard.
@@ -71,7 +72,8 @@ export async function POST(request: Request) {
       width,
       height,
       byte_size: buf.byteLength,
-      exif,
+      // Opaque image metadata blob → stored as jsonb.
+      exif: exif as unknown as Json,
       uploaded_by: user.id,
       processing_status: 'pending',
     });

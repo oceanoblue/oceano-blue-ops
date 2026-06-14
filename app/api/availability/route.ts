@@ -107,7 +107,7 @@ export async function GET(request: Request) {
     if (dow !== a.day_of_week) continue;
     const start = localToUtc(dateStr, a.start_local.slice(0, 5), a.timezone).getTime();
     const end = localToUtc(dateStr, a.end_local.slice(0, 5), a.timezone).getTime();
-    const ph = photographers.get(a.team_member_id) ?? {
+    const ph: Photographer = photographers.get(a.team_member_id) ?? {
       id: a.team_member_id,
       timezone: a.timezone,
       windows: [],

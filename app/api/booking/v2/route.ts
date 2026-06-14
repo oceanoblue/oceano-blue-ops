@@ -62,8 +62,9 @@ export async function POST(request: Request) {
     p_city: b.city,
     p_state: b.state,
     p_zip: b.zip,
-    p_lat: b.lat ?? null,
-    p_lng: b.lng ?? null,
+    // SQL accepts NULL (double precision); generated RPC arg type is non-null.
+    p_lat: (b.lat ?? null) as number,
+    p_lng: (b.lng ?? null) as number,
     p_sqft: b.sqft,
     p_scheduled_at: b.scheduled_at,
     p_duration_minutes: b.duration_minutes,

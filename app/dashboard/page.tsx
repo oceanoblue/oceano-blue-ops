@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { fmtDateTime, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
+import type { OrderStatus } from '@/lib/supabase/database.types';
 import { BookingLinkButton } from '@/components/BookingLinkButton';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export default async function DashboardHome() {
     const { count } = await supabase
       .from('orders')
       .select('id', { count: 'exact', head: true })
-      .in('status', b.statuses);
+      .in('status', b.statuses as OrderStatus[]);
     counts[b.label] = count ?? 0;
   }
 

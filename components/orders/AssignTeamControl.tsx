@@ -25,7 +25,8 @@ export function AssignTeamControl({
   function assign(field: 'photographer_id' | 'editor_id', value: string | null) {
     start(async () => {
       const supabase = createClient();
-      await supabase.from('orders').update({ [field]: value }).eq('id', orderId);
+      // Dynamic single-column patch; field is whitelisted by the param type.
+      await supabase.from('orders').update({ [field]: value } as any).eq('id', orderId);
       router.refresh();
     });
   }
