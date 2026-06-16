@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Home } from 'lucide-react';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 interface ClientOpt {
   id: string;
@@ -99,7 +100,20 @@ export function NewListingForm({ clients }: { clients: ClientOpt[] }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label className="label">Address *</label>
-          <input className="input" value={f.address_line1} onChange={(e) => set('address_line1', e.target.value)} placeholder="47 South Sea Pines Drive" required />
+          <AddressAutocomplete
+            value={f.address_line1}
+            onTextChange={(v) => set('address_line1', v)}
+            onPick={(a) =>
+              setF((prev) => ({
+                ...prev,
+                address_line1: a.address_line1 || prev.address_line1,
+                city: a.city || prev.city,
+                state: a.state || prev.state,
+                zip: a.zip || prev.zip,
+              }))
+            }
+            placeholder="47 South Sea Pines Drive"
+          />
         </div>
         <div className="sm:col-span-2">
           <label className="label">Address line 2</label>
