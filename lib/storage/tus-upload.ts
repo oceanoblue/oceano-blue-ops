@@ -41,10 +41,20 @@ export async function tusUpload({
   return new Promise<void>((resolve, reject) => {
     const upload = new tus.Upload(file, {
       endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
-      retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
+      retryDelays: [0, 1000, 3000, 5000, 10000, 20000, 30000],
       headers: {
-        authorization: `Bearer ${session.access_token}`,
         'x-upsert': 'false',
+      },
+      // Attach a CURRENT access token to every request (create + each PATCH
+      // chunk). A long multi-file batch can outlive the token grabbed at the
+      // start; a stale token gets the chunk rejected at the gateway (HTTP 400/
+      // 401). getSession() auto-refreshes, so this always sends a live token.
+      async onBeforeRequest(req) {
+        const {
+          data: { session: live },
+        } = await supabase.auth.getSession();
+        const token = live?.access_token ?? session.access_token;
+        req.setHeader('authorization', `Bearer ${token}`);
       },
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
