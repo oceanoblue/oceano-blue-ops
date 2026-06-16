@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { placeDetails, isPlacesConfigured } from '@/lib/google-maps/places';
 import { enforceRateLimit } from '@/lib/security/rate-limit';
+import { captureError } from '@/lib/observability/report';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
     const address = await placeDetails(parsed.data.place_id, parsed.data.session_token);
     return NextResponse.json({ address });
   } catch (err: any) {
+    captureError('places.details', err);
     return NextResponse.json({ error: err?.message || 'details_failed' }, { status: 502 });
   }
 }
