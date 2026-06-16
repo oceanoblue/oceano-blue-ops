@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { placesAutocomplete, isPlacesConfigured } from '@/lib/google-maps/places';
 import { enforceRateLimit } from '@/lib/security/rate-limit';
+import { captureError, logEvent } from '@/lib/observability/report';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,9 @@ export async function POST(request: Request) {
   if (limited) return limited;
 
   if (!isPlacesConfigured()) {
+    logEvent('places.autocomplete', 'not_configured', {
+      hint: 'GOOGLE_MAPS_SERVER_KEY missing in this deployment',
+    });
     return NextResponse.json({ error: 'maps_not_configured' }, { status: 503 });
   }
   const parsed = Body.safeParse(await request.json());
@@ -26,6 +30,8 @@ export async function POST(request: Request) {
     const suggestions = await placesAutocomplete(parsed.data.input, parsed.data.session_token);
     return NextResponse.json({ suggestions });
   } catch (err: any) {
+    // Surface the exact Google reason (API not enabled / billing / restriction).
+    captureError('places.autocomplete', err);
     return NextResponse.json({ error: err?.message || 'autocomplete_failed' }, { status: 502 });
   }
 }
