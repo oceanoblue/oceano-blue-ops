@@ -5,12 +5,19 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Loader2, RefreshCw } from 'lucide-react';
 
-interface EnhanceSettings {
+export interface EnhanceSettings {
   target_long_edge: number;
-  shadow_lift: number;
-  highlight_recover: number;
-  vibrance: number;
   jpeg_quality: number;
+  exposure: number;
+  contrast: number;
+  temp: number;
+  tint: number;
+  saturation: number;
+  highlights: number;
+  shadows: number;
+  whites: number;
+  blacks: number;
+  sharpening: number;
 }
 
 interface RecentPhoto {
@@ -21,34 +28,27 @@ interface RecentPhoto {
   storage_path: string;
 }
 
+// Presets fill the sliders; you can still tweak before saving.
 const PRESETS: Record<string, Partial<EnhanceSettings>> = {
-  'Default (balanced)': {
-    shadow_lift: 0.35,
-    highlight_recover: 0.4,
-    vibrance: 0.15,
-    target_long_edge: 3000,
-    jpeg_quality: 92,
+  'Luxury (default)': {
+    exposure: 0.25, contrast: 0.08, temp: 0.0, tint: 0.0, saturation: 0.1,
+    highlights: 0.35, shadows: 0.3, whites: 0.0, blacks: -0.03, sharpening: 0.3,
   },
-  'Bright & airy': {
-    shadow_lift: 0.55,
-    highlight_recover: 0.55,
-    vibrance: 0.1,
-    target_long_edge: 3000,
-    jpeg_quality: 92,
+  'Brighter & airier': {
+    exposure: 0.35, contrast: 0.06, temp: 0.02, tint: 0.0, saturation: 0.1,
+    highlights: 0.4, shadows: 0.4, whites: 0.0, blacks: -0.05, sharpening: 0.3,
+  },
+  'Warmer & inviting': {
+    exposure: 0.25, contrast: 0.08, temp: 0.12, tint: 0.0, saturation: 0.12,
+    highlights: 0.35, shadows: 0.3, whites: 0.0, blacks: -0.03, sharpening: 0.3,
   },
   'Natural / understated': {
-    shadow_lift: 0.2,
-    highlight_recover: 0.3,
-    vibrance: 0.08,
-    target_long_edge: 3000,
-    jpeg_quality: 92,
+    exposure: 0.12, contrast: 0.05, temp: 0.02, tint: 0.0, saturation: 0.06,
+    highlights: 0.25, shadows: 0.18, whites: 0.0, blacks: 0.0, sharpening: 0.25,
   },
-  'High contrast (luxury)': {
-    shadow_lift: 0.45,
-    highlight_recover: 0.55,
-    vibrance: 0.22,
-    target_long_edge: 4000,
-    jpeg_quality: 94,
+  'More contrast / pop': {
+    exposure: 0.2, contrast: 0.18, temp: 0.0, tint: 0.0, saturation: 0.16,
+    highlights: 0.3, shadows: 0.22, whites: 0.03, blacks: 0.05, sharpening: 0.35,
   },
 };
 
@@ -83,9 +83,13 @@ export function EnhanceSettingsForm({
     setPreviewB64(null);
   }, [photoId]);
 
+  function set<K extends keyof EnhanceSettings>(k: K, v: EnhanceSettings[K]) {
+    setS((prev) => ({ ...prev, [k]: v }));
+  }
+
   function applyPreset(name: string) {
     const p = PRESETS[name];
-    if (p) setS({ ...s, ...p } as EnhanceSettings);
+    if (p) setS((prev) => ({ ...prev, ...p }));
   }
 
   function save() {
@@ -115,10 +119,17 @@ export function EnhanceSettingsForm({
           photo_id: photoId,
           options: {
             targetLongEdge: s.target_long_edge,
-            shadowLift: s.shadow_lift,
-            highlightRecover: s.highlight_recover,
-            vibrance: s.vibrance,
             jpegQuality: s.jpeg_quality,
+            exposure: s.exposure,
+            contrast: s.contrast,
+            temp: s.temp,
+            tint: s.tint,
+            saturation: s.saturation,
+            highlights: s.highlights,
+            shadows: s.shadows,
+            whites: s.whites,
+            blacks: s.blacks,
+            sharpening: s.sharpening,
           },
         }),
       });
@@ -134,12 +145,12 @@ export function EnhanceSettingsForm({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,340px)_1fr]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,360px)_1fr]">
       <section className="card p-6">
-        <h2 className="font-semibold text-ocean-900">Pipeline knobs</h2>
+        <h2 className="font-semibold text-ocean-900">Luxury grade</h2>
         <p className="mt-1 text-sm text-slate-600">
-          These apply to every job that runs through Oceano Enhance (HDR merge,
-          single-shot, lawn, light declutter).
+          These drive every photo that runs through Oceano Enhance. Tune, preview against a
+          real shot, then Save.
         </p>
 
         <div className="mt-4">
@@ -149,68 +160,48 @@ export function EnhanceSettingsForm({
             onChange={(e) => e.target.value && applyPreset(e.target.value)}
             defaultValue=""
           >
-            <option value="" disabled>
-              Apply a preset…
-            </option>
+            <option value="" disabled>Apply a preset…</option>
             {Object.keys(PRESETS).map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
+              <option key={n} value={n}>{n}</option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-slate-500">
-            Presets fill the sliders below — you can still tweak each value before saving.
-          </p>
         </div>
 
-        <div className="mt-6 space-y-5">
-          <Slider
-            label="Shadow lift"
-            help="How aggressively to brighten dark areas. Higher = brighter shadows."
-            value={s.shadow_lift}
-            onChange={(v) => setS({ ...s, shadow_lift: v })}
-          />
-          <Slider
-            label="Highlight recovery"
-            help="Pulls bright windows + sky back from blowing out."
-            value={s.highlight_recover}
-            onChange={(v) => setS({ ...s, highlight_recover: v })}
-          />
-          <Slider
-            label="Vibrance"
-            help="Saturates muted colors without overdoing already-saturated ones."
-            value={s.vibrance}
-            onChange={(v) => setS({ ...s, vibrance: v })}
-          />
+        <div className="mt-6 space-y-4">
+          <Slider label="Exposure" help="Overall brightness (airy lift)." min={-1} max={1}
+            value={s.exposure} onChange={(v) => set('exposure', v)} />
+          <Slider label="Highlights" help="+ recovers blown windows/exteriors." min={-1} max={1}
+            value={s.highlights} onChange={(v) => set('highlights', v)} />
+          <Slider label="Shadows" help="+ opens dark corners (airy)." min={-1} max={1}
+            value={s.shadows} onChange={(v) => set('shadows', v)} />
+          <Slider label="Whites" help="Top of the curve. Keep below clipping." min={-1} max={1}
+            value={s.whites} onChange={(v) => set('whites', v)} />
+          <Slider label="Blacks" help="− lifts for airy; + deepens for crisp." min={-1} max={1}
+            value={s.blacks} onChange={(v) => set('blacks', v)} />
+          <Slider label="Contrast" help="Gentle = depth without HDR flatness." min={-1} max={1}
+            value={s.contrast} onChange={(v) => set('contrast', v)} />
+          <Slider label="Warmth (temp)" help="− cooler, + warmer/inviting." min={-1} max={1}
+            value={s.temp} onChange={(v) => set('temp', v)} />
+          <Slider label="Tint" help="− green, + magenta. Usually 0." min={-1} max={1}
+            value={s.tint} onChange={(v) => set('tint', v)} />
+          <Slider label="Saturation" help="Realistic colour — small. Oversaturation looks fake." min={-1} max={1}
+            value={s.saturation} onChange={(v) => set('saturation', v)} />
+          <Slider label="Sharpening" help="Crisp detail, no crunch." min={0} max={1}
+            value={s.sharpening} onChange={(v) => set('sharpening', v)} />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 pt-2">
             <div>
               <label className="label">Long edge (px)</label>
-              <input
-                type="number"
-                min={1200}
-                max={6000}
-                step={100}
-                className="input"
+              <input type="number" min={1200} max={6000} step={100} className="input"
                 value={s.target_long_edge}
-                onChange={(e) =>
-                  setS({ ...s, target_long_edge: Math.max(1200, +e.target.value) })
-                }
-              />
+                onChange={(e) => set('target_long_edge', Math.max(1200, +e.target.value))} />
               <p className="mt-1 text-xs text-slate-500">3000 is MLS standard.</p>
             </div>
             <div>
               <label className="label">JPEG quality</label>
-              <input
-                type="number"
-                min={60}
-                max={100}
-                className="input"
+              <input type="number" min={60} max={100} className="input"
                 value={s.jpeg_quality}
-                onChange={(e) =>
-                  setS({ ...s, jpeg_quality: Math.min(100, Math.max(60, +e.target.value)) })
-                }
-              />
+                onChange={(e) => set('jpeg_quality', Math.min(100, Math.max(60, +e.target.value)))} />
               <p className="mt-1 text-xs text-slate-500">92 = pro default.</p>
             </div>
           </div>
@@ -218,7 +209,7 @@ export function EnhanceSettingsForm({
 
         <div className="mt-6 flex items-center gap-3">
           <button className="btn-primary" onClick={save} disabled={pending}>
-            {pending ? 'Saving…' : 'Save settings'}
+            {pending ? 'Saving…' : 'Save grade'}
           </button>
           {savedAt && <span className="text-sm text-emerald-700">Saved {savedAt}</span>}
         </div>
@@ -228,43 +219,31 @@ export function EnhanceSettingsForm({
       <section className="card p-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-semibold text-ocean-900">Live preview</h2>
-          <button
-            className="btn-secondary"
-            onClick={runPreview}
-            disabled={!photoId || previewing}
-          >
+          <button className="btn-secondary" onClick={runPreview} disabled={!photoId || previewing}>
             {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             {previewing ? 'Rendering…' : 'Re-render'}
           </button>
         </div>
         <p className="mt-1 text-sm text-slate-600">
-          Pick a recent upload and render it with the current slider values. Nothing is
-          saved — this is a sandbox.
+          Render a real upload with the current sliders. Nothing is saved here — it&apos;s a
+          sandbox. Hit Save grade on the left to apply it to all enhancing.
         </p>
 
         <div className="mt-4">
           <label className="label">Sample photo</label>
-          <select
-            className="input max-w-md"
-            value={photoId ?? ''}
-            onChange={(e) => setPhotoId(e.target.value || null)}
-          >
+          <select className="input max-w-md" value={photoId ?? ''}
+            onChange={(e) => setPhotoId(e.target.value || null)}>
             {recent.length === 0 && <option value="">No recent uploads</option>}
             {recent.map((p) => (
-              <option key={p.id} value={p.id}>
-                Order #{p.order_number} — {p.filename}
-              </option>
+              <option key={p.id} value={p.id}>Order #{p.order_number} — {p.filename}</option>
             ))}
           </select>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <PreviewPanel title="Before" url={originalUrl ?? undefined} />
-          <PreviewPanel
-            title="After (current sliders)"
-            b64={previewB64 ?? undefined}
-            placeholder={previewing ? 'Rendering…' : 'Click Re-render to preview.'}
-          />
+          <PreviewPanel title="After (current grade)" b64={previewB64 ?? undefined}
+            placeholder={previewing ? 'Rendering…' : 'Click Re-render to preview.'} />
         </div>
       </section>
     </div>
@@ -272,15 +251,14 @@ export function EnhanceSettingsForm({
 }
 
 function Slider({
-  label,
-  help,
-  value,
-  onChange,
+  label, help, value, onChange, min, max,
 }: {
   label: string;
   help: string;
   value: number;
   onChange: (v: number) => void;
+  min: number;
+  max: number;
 }) {
   return (
     <div>
@@ -288,25 +266,15 @@ function Slider({
         <label className="label">{label}</label>
         <span className="text-xs font-mono text-slate-500">{value.toFixed(2)}</span>
       </div>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={value}
-        onChange={(e) => onChange(+e.target.value)}
-        className="w-full"
-      />
+      <input type="range" min={min} max={max} step={0.01} value={value}
+        onChange={(e) => onChange(+e.target.value)} className="w-full" />
       <p className="text-xs text-slate-500">{help}</p>
     </div>
   );
 }
 
 function PreviewPanel({
-  title,
-  url,
-  b64,
-  placeholder,
+  title, url, b64, placeholder,
 }: {
   title: string;
   url?: string;
@@ -316,9 +284,7 @@ function PreviewPanel({
   const src = b64 ? `data:image/jpeg;base64,${b64}` : url;
   return (
     <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-1">
-        {title}
-      </div>
+      <div className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-1">{title}</div>
       <div className="aspect-[3/2] w-full overflow-hidden rounded-md ring-1 ring-slate-200 bg-slate-50 grid place-items-center">
         {src ? (
           // eslint-disable-next-line @next/next/no-img-element

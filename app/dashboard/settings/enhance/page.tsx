@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { SettingsNav } from '@/components/layout/SettingsNav';
 import { EnhanceSettingsForm } from '@/components/settings/EnhanceSettingsForm';
+import { LUXURY_BASELINE } from '@/lib/ai/oceano-enhance/pipeline';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,9 @@ export default async function EnhanceSettingsPage() {
 
   const { data: settings } = await supabase
     .from('oceano_enhance_settings')
-    .select('target_long_edge, shadow_lift, highlight_recover, vibrance, jpeg_quality')
+    .select(
+      'target_long_edge, jpeg_quality, exposure, contrast, temp, tint, saturation, highlights, shadows, whites, blacks, sharpening'
+    )
     .eq('id', true)
     .maybeSingle();
 
@@ -34,12 +37,22 @@ export default async function EnhanceSettingsPage() {
     order_number: p.orders?.order_number ?? 0,
   }));
 
-  const initial = (settings as any) ?? {
-    target_long_edge: 3000,
-    shadow_lift: 0.35,
-    highlight_recover: 0.4,
-    vibrance: 0.15,
-    jpeg_quality: 92,
+  const d = (settings as any) ?? {};
+  const num = (v: any, fallback: number) => (v != null ? Number(v) : fallback);
+  const b = LUXURY_BASELINE;
+  const initial = {
+    target_long_edge: num(d.target_long_edge, 3000),
+    jpeg_quality: num(d.jpeg_quality, 92),
+    exposure: num(d.exposure, b.exposure ?? 0.25),
+    contrast: num(d.contrast, b.contrast ?? 0.08),
+    temp: num(d.temp, b.temp ?? 0),
+    tint: num(d.tint, b.tint ?? 0),
+    saturation: num(d.saturation, b.saturation ?? 0.1),
+    highlights: num(d.highlights, b.highlights ?? 0.35),
+    shadows: num(d.shadows, b.shadows ?? 0.3),
+    whites: num(d.whites, b.whites ?? 0),
+    blacks: num(d.blacks, b.blacks ?? -0.03),
+    sharpening: num(d.sharpening, b.sharpening ?? 0.3),
   };
 
   return (
@@ -47,21 +60,12 @@ export default async function EnhanceSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-ocean-950">Settings</h1>
         <p className="text-sm text-slate-600">
-          Tune the Oceano Enhance pipeline and preview it against a real upload before
-          saving.
+          Tune the Oceano Enhance luxury grade and preview it against a real upload. Saved
+          values drive every enhance.
         </p>
       </div>
       <SettingsNav />
-      <EnhanceSettingsForm
-        initial={{
-          target_long_edge: Number(initial.target_long_edge),
-          shadow_lift: Number(initial.shadow_lift),
-          highlight_recover: Number(initial.highlight_recover),
-          vibrance: Number(initial.vibrance),
-          jpeg_quality: Number(initial.jpeg_quality),
-        }}
-        recent={recent}
-      />
+      <EnhanceSettingsForm initial={initial} recent={recent} />
     </div>
   );
 }
