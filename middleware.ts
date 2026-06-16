@@ -9,7 +9,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 const PUBLIC_PATHS = [
   '/', '/book', '/login', '/gallery', '/portal',
   '/api/delivery', '/api/booking', '/api/portal',
-  '/api/products', '/api/availability',
+  '/api/products', '/api/availability', '/api/places',
   '/api/worker',       // local worker API — authenticates via Bearer worker key
   '/api/automations',  // Make.com bridge — authenticates via x-pos-automation-secret
   '/api/cron',         // background job worker — authenticates via Bearer CRON_SECRET
