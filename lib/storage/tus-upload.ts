@@ -59,6 +59,18 @@ export async function tusUpload({
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
       chunkSize: 6 * 1024 * 1024, // 6 MB chunks (Supabase recommended minimum)
+      // tus-js-client does NOT retry 4xx by default, so a single transient
+      // gateway blip (Supabase occasionally returns a plain-HTML 400/409 on a
+      // chunk PATCH for large RAW uploads) fails the WHOLE upload. These are
+      // transient — on retry, tus issues a HEAD to re-sync the offset and
+      // resumes, which clears them. Retry transient gateway statuses + network
+      // errors, bounded by retryDelays.
+      onShouldRetry(err, retryAttempt) {
+        const status = (err as any)?.originalResponse?.getStatus?.() ?? 0;
+        const transient =
+          status === 0 || [400, 408, 409, 423, 429, 500, 502, 503, 504].includes(status);
+        return transient && retryAttempt < 6;
+      },
       metadata: {
         bucketName: bucket,
         objectName,
