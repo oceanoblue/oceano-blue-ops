@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 
 /**
  * RAW → JPEG conversion proxy (fresh route).
@@ -84,7 +84,25 @@ export async function POST(request: Request) {
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      return NextResponse.json({ error: data.error || `worker_${r.status}` }, { status: r.status });
+      const msg = String(data.error || `worker_${r.status}`);
+      // The original RAW isn't in storage — its upload never finished (e.g. a
+      // failed resumable chunk left a photo row with no object). This is NOT
+      // transient, so mark the photo failed and return a clear, actionable
+      // error instead of a cryptic recurring "download_failed: Object not found".
+      if (/object not found|download_failed|not.?found/i.test(msg)) {
+        await createAdminClient()
+          .from('photos')
+          .update({ processing_status: 'failed' })
+          .eq('id', parsed.data.photo_id);
+        return NextResponse.json(
+          {
+            error: 'source_missing',
+            hint: 'This file never finished uploading, so there is no original to convert. Remove it and re-upload the original frame.',
+          },
+          { status: 422 }
+        );
+      }
+      return NextResponse.json({ error: msg }, { status: r.status });
     }
     return NextResponse.json(data);
   } catch (err: any) {
