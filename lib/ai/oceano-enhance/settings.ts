@@ -11,17 +11,26 @@ export async function loadEnhanceSettings(): Promise<EnhanceOptions> {
     const supabase = createAdminClient();
     const { data } = await supabase
       .from('oceano_enhance_settings')
-      .select('target_long_edge, shadow_lift, highlight_recover, vibrance, jpeg_quality')
+      .select(
+        'target_long_edge, jpeg_quality, exposure, contrast, temp, tint, saturation, highlights, shadows, whites, blacks, sharpening'
+      )
       .eq('id', true)
       .maybeSingle();
     if (!data) return {};
+    const num = (v: any) => (v != null ? Number(v) : undefined);
     return {
-      targetLongEdge: data.target_long_edge ?? undefined,
-      shadowLift: data.shadow_lift != null ? Number(data.shadow_lift) : undefined,
-      highlightRecover:
-        data.highlight_recover != null ? Number(data.highlight_recover) : undefined,
-      vibrance: data.vibrance != null ? Number(data.vibrance) : undefined,
-      jpegQuality: data.jpeg_quality ?? undefined,
+      targetLongEdge: (data as any).target_long_edge ?? undefined,
+      jpegQuality: (data as any).jpeg_quality ?? undefined,
+      exposure: num((data as any).exposure),
+      contrast: num((data as any).contrast),
+      temp: num((data as any).temp),
+      tint: num((data as any).tint),
+      saturation: num((data as any).saturation),
+      highlights: num((data as any).highlights),
+      shadows: num((data as any).shadows),
+      whites: num((data as any).whites),
+      blacks: num((data as any).blacks),
+      sharpening: num((data as any).sharpening),
     };
   } catch {
     return {};

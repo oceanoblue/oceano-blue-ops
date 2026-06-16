@@ -1491,31 +1491,61 @@ export type Database = {
       }
       oceano_enhance_settings: {
         Row: {
+          blacks: number
+          contrast: number
+          exposure: number
           highlight_recover: number
+          highlights: number
           id: boolean
           jpeg_quality: number
+          saturation: number
           shadow_lift: number
+          shadows: number
+          sharpening: number
           target_long_edge: number
+          temp: number
+          tint: number
           updated_at: string
           vibrance: number
+          whites: number
         }
         Insert: {
+          blacks?: number
+          contrast?: number
+          exposure?: number
           highlight_recover?: number
+          highlights?: number
           id?: boolean
           jpeg_quality?: number
+          saturation?: number
           shadow_lift?: number
+          shadows?: number
+          sharpening?: number
           target_long_edge?: number
+          temp?: number
+          tint?: number
           updated_at?: string
           vibrance?: number
+          whites?: number
         }
         Update: {
+          blacks?: number
+          contrast?: number
+          exposure?: number
           highlight_recover?: number
+          highlights?: number
           id?: boolean
           jpeg_quality?: number
+          saturation?: number
           shadow_lift?: number
+          shadows?: number
+          sharpening?: number
           target_long_edge?: number
+          temp?: number
+          tint?: number
           updated_at?: string
           vibrance?: number
+          whites?: number
         }
         Relationships: []
       }
