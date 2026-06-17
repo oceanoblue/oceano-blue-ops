@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server';
 import { refreshAccessToken } from './oauth';
+import { captureError, logEvent } from '@/lib/observability/report';
 
 /**
  * Returns a valid access token for the given team_member. Refreshes if
@@ -48,7 +49,10 @@ export async function fetchBusyRanges(
   endIso: string
 ): Promise<FreeBusyRange[]> {
   const token = await getAccessToken(teamMemberId);
-  if (!token) return [];
+  if (!token) {
+    logEvent('gcal.freeBusy', 'no_token', { teamMemberId });
+    return [];
+  }
   const r = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
     method: 'POST',
     headers: {
@@ -61,9 +65,21 @@ export async function fetchBusyRanges(
       items: [{ id: 'primary' }],
     }),
   });
-  if (!r.ok) return [];
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    captureError('gcal.freeBusy', new Error(`freebusy_${r.status}: ${body.slice(0, 300)}`), {
+      teamMemberId,
+    });
+    return [];
+  }
   const data: any = await r.json();
-  return data?.calendars?.primary?.busy ?? [];
+  const busy: FreeBusyRange[] = data?.calendars?.primary?.busy ?? [];
+  logEvent('gcal.freeBusy', 'ok', {
+    teamMemberId,
+    busyCount: busy.length,
+    errors: data?.calendars?.primary?.errors ?? null,
+  });
+  return busy;
 }
 
 export interface CalendarEvent {
