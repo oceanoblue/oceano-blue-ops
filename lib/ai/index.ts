@@ -18,20 +18,17 @@ const PROVIDERS: Record<AiProviderId, AiProvider> = {
 /**
  * Default provider per job type. Editable in /dashboard/settings.
  *
- * Oceano Smart Enhance is the signature enhance engine: a deterministic Sharp
- * base (grey-world white balance, exposure, highlight recovery, vibrance — one
- * consistent temperature, no blown exteriors, no per-frame drift) followed by
- * vision analysis that chains generative fixes (window pull, sky, lawn, …) ONLY
- * where a photo needs them. This gives the reliable luxury look that pure
- * generative editing (GPT Image / Nano Banana — still selectable) couldn't hold
- * consistently. Pure exposure fusion (hdr_merge) and lawn green-up are also on
- * the deterministic pipeline.
+ * GPT Image 2.0 is the default signature enhance engine. Oceano Smart Enhance
+ * (deterministic base + auto generative fixes) remains selectable and tunable
+ * via the enhance settings panel, but is off by default pending grade tuning.
+ * Pure exposure fusion (hdr_merge) + lawn green-up stay on the deterministic
+ * Oceano pipeline.
  */
 const DEFAULTS: Record<AiJobType, AiProviderId> = {
   hdr_merge: 'oceano-enhance',
-  enhance_single: 'oceano-enhance',
+  enhance_single: 'openai-gpt-image',
   lawn_enhance: 'oceano-enhance',
-  declutter: 'oceano-enhance',
+  declutter: 'openai-gpt-image',
   sky_replace: 'openai-gpt-image',
   window_pull: 'openai-gpt-image',
   twilight_convert: 'openai-gpt-image',
