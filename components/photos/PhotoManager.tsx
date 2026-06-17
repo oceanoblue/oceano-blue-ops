@@ -121,7 +121,7 @@ export function PhotoManager({ orderId }: { orderId: string }) {
   const [bracketCount, setBracketCount] = useState<'auto' | 3 | 5 | 7>('auto');
 
   // Stage 2 config
-  const [aiProvider, setAiProvider] = useState<AiProvider>('oceano-enhance');
+  const [aiProvider, setAiProvider] = useState<AiProvider>('openai-gpt-image');
   const [autoDetect, setAutoDetect] = useState(true);
   const [stage2Selection, setStage2Selection] = useState<Set<string>>(new Set());
 
@@ -189,9 +189,21 @@ export function PhotoManager({ orderId }: { orderId: string }) {
         replacedArwIds.add(p.parent_photo_id);
       }
     }
-    return all.filter(
-      (p) => !replacedArwIds.has(p.id) && !mergedSourceIds.has(p.id)
-    );
+    // Collapse duplicate conversions: a flaky/concurrent convert can leave more
+    // than one JPEG sibling per source ARW. Duplicates carry the same sequence
+    // number, which shatters consecutive-run bracket detection and dumps frames
+    // into "Singles". Keep exactly one converted JPEG per parent.
+    const seenParent = new Set<string>();
+    const out: Photo[] = [];
+    for (const p of all) {
+      if (replacedArwIds.has(p.id) || mergedSourceIds.has(p.id)) continue;
+      if (p.parent_photo_id && !isRawFilename(p.filename)) {
+        if (seenParent.has(p.parent_photo_id)) continue;
+        seenParent.add(p.parent_photo_id);
+      }
+      out.push(p);
+    }
+    return out;
   }, [photos, mergedSourceIds]);
   const processedPhotos = useMemo(() => photos.filter((p) => p.kind === 'processed'), [photos]);
 
@@ -1188,10 +1200,10 @@ function Stage2({
                 value={provider}
                 onChange={(e) => onProviderChange(e.target.value as AiProvider)}
               >
-                <option value="oceano-enhance">Oceano Smart Enhance (default)</option>
-                <option value="openai-gpt-image">GPT Image 2.0</option>
+                <option value="openai-gpt-image">GPT Image 2.0 (default)</option>
                 <option value="gemini-nano-banana-2">Nano Banana 2 (Gemini)</option>
                 <option value="gemini-nano-banana-pro">Nano Banana Pro (Gemini)</option>
+                <option value="oceano-enhance">Oceano Smart Enhance</option>
                 <option value="auto">Auto pick</option>
               </select>
             </div>
