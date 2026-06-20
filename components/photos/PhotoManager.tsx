@@ -345,30 +345,38 @@ export function PhotoManager({
   );
 
   // Auto-advance stage on first load (or after a refresh that surfaces new work).
+  // With auto-enhance on, the manual Stage 2 ("Run AI") is skipped entirely:
+  // once triage is done, work flows straight to Review while enhancing happens
+  // automatically in the background.
   useEffect(() => {
-    if (stage3Photos.length > 0 && stage === 1 && brackets.length === 0 && singles.length === 0) {
+    if (stage !== 1 || brackets.length > 0) return;
+    if (autoEnhanceOnUpload) {
+      if (stage3Photos.length > 0 || stage2Inputs.length > 0) setStage(3);
+    } else if (stage3Photos.length > 0 && singles.length === 0) {
       setStage(3);
-    } else if (stage2Inputs.length > 0 && stage === 1 && brackets.length === 0) {
+    } else if (stage2Inputs.length > 0) {
       setStage(2);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage2Inputs.length, stage3Photos.length, brackets.length, singles.length]);
+  }, [stage2Inputs.length, stage3Photos.length, brackets.length, singles.length, autoEnhanceOnUpload]);
 
-  // Auto-enhance on upload — standalone singles. Once the photographer reaches
-  // Stage 2 (triage done), kick the signature enhance for any eligible JPEG
-  // single. The endpoint is idempotent + dedupe-safe (it excludes bracket frames
-  // and anything already enhanced), so firing once per Stage-2 entry can't
-  // double-spend. Merged HDR bases are auto-enhanced server-side by the runner.
-  // We don't switch stages here: as each base's enhance completes it gains a
-  // child and naturally leaves Stage 2 for Stage 3.
-  const autoEnhanceFiredRef = useRef(false);
+  // Auto-enhance on upload — standalone singles. Whenever auto-enhance is on and
+  // there are eligible JPEG singles (not bracket frames, not already enhanced),
+  // kick the signature enhance. The endpoint is idempotent + dedupe-safe, so this
+  // can fire on load, after a merge, or when more singles are added without ever
+  // double-spending. Merged HDR bases are auto-enhanced server-side by the runner.
+  // Keyed on the eligible-set signature so it kicks once per distinct set.
+  const autoEnhanceTriedRef = useRef<string>('');
   useEffect(() => {
-    if (stage !== 2) {
-      autoEnhanceFiredRef.current = false;
-      return;
-    }
-    if (!autoEnhanceOnUpload || autoEnhanceFiredRef.current) return;
-    autoEnhanceFiredRef.current = true;
+    if (!autoEnhanceOnUpload) return;
+    const eligible = singles
+      .filter((s) => !isRawFilename(s.filename) && !hasEnhanceChild(s.id))
+      .map((s) => s.id)
+      .sort();
+    if (eligible.length === 0) return;
+    const sig = eligible.join(',');
+    if (autoEnhanceTriedRef.current === sig) return;
+    autoEnhanceTriedRef.current = sig;
     fetch('/api/ai/auto-enhance', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -380,7 +388,7 @@ export function PhotoManager({
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, autoEnhanceOnUpload, orderId]);
+  }, [autoEnhanceOnUpload, singles, childrenByParent, orderId]);
 
   // ─── Upload ──────────────────────────────────────────────────────────────
   const onDrop = useCallback(
@@ -547,7 +555,9 @@ export function PhotoManager({
         }
       }
       setSelectedBrackets(new Set());
-      setStage(2);
+      // With auto-enhance on, merged bases enhance themselves (runner) — skip the
+      // manual Run AI step and go straight to Review. Otherwise land on Stage 2.
+      setStage(autoEnhanceOnUpload ? 3 : 2);
       refresh();
     } catch (err: any) {
       setRunError(err?.message || 'failed');
@@ -763,7 +773,7 @@ export function PhotoManager({
           running={running}
           onApproveMerge={runStage1ApproveMerge}
           canSkipToStage2={stage2Inputs.length > 0}
-          onSkip={() => setStage(2)}
+          onSkip={() => setStage(autoEnhanceOnUpload ? 3 : 2)}
           bracketCount={bracketCount}
           onBracketCountChange={setBracketCount}
         />
