@@ -1,18 +1,27 @@
 import Link from 'next/link';
+import { CalendarClock, FileEdit, CalendarCheck2, Camera, Cog, PackageCheck, Send } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { fmtDateTime, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
+import { fmtDateTime } from '@/lib/utils/format';
 import type { OrderStatus } from '@/lib/supabase/database.types';
 import { BookingLinkButton } from '@/components/BookingLinkButton';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StatCard } from '@/components/ui/StatCard';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export const dynamic = 'force-dynamic';
 
-const PIPELINE_BUCKETS: Array<{ label: string; statuses: string[] }> = [
-  { label: 'New / draft', statuses: ['draft'] },
-  { label: 'Booked', statuses: ['booked', 'scheduled'] },
-  { label: 'On site', statuses: ['shooting', 'uploaded'] },
-  { label: 'In production', statuses: ['processing', 'editing'] },
-  { label: 'Ready', statuses: ['ready'] },
-  { label: 'Delivered (7d)', statuses: ['delivered'] },
+const PIPELINE_BUCKETS: Array<{
+  label: string;
+  statuses: string[];
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  { label: 'New / draft', statuses: ['draft'], icon: FileEdit },
+  { label: 'Booked', statuses: ['booked', 'scheduled'], icon: CalendarCheck2 },
+  { label: 'On site', statuses: ['shooting', 'uploaded'], icon: Camera },
+  { label: 'In production', statuses: ['processing', 'editing'], icon: Cog },
+  { label: 'Ready', statuses: ['ready'], icon: PackageCheck },
+  { label: 'Delivered', statuses: ['delivered'], icon: Send },
 ];
 
 export default async function DashboardHome() {
@@ -22,7 +31,7 @@ export default async function DashboardHome() {
     .from('orders')
     .select('id, order_number, status, scheduled_at, rush, client_id')
     .order('updated_at', { ascending: false })
-    .limit(10);
+    .limit(8);
 
   const counts: Record<string, number> = {};
   for (const b of PIPELINE_BUCKETS) {
@@ -42,47 +51,54 @@ export default async function DashboardHome() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-ocean-950">Overview</h1>
-          <p className="text-sm text-slate-600">What's moving through the pipeline today.</p>
-        </div>
+      <PageHeader title="Overview" subtitle="What's moving through the pipeline today.">
         <BookingLinkButton />
-      </div>
+      </PageHeader>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {PIPELINE_BUCKETS.map((b) => (
-          <div key={b.label} className="card p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">{b.label}</div>
-            <div className="mt-1 text-2xl font-bold text-ocean-900">{counts[b.label] ?? 0}</div>
-          </div>
+          <StatCard
+            key={b.label}
+            label={b.label}
+            value={counts[b.label] ?? 0}
+            icon={b.icon}
+            href={`/dashboard/orders?status=${b.statuses[0]}`}
+          />
         ))}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card p-6">
           <header className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900">Upcoming shoots</h2>
+            <h2 className="inline-flex items-center gap-2 font-semibold text-slate-900">
+              <CalendarClock className="h-4 w-4 text-slate-500" /> Upcoming shoots
+            </h2>
             <Link href="/dashboard/schedule" className="text-sm text-ocean-700 hover:underline">
               Open schedule →
             </Link>
           </header>
-          <ul className="divide-y divide-slate-100">
-            {(upcoming ?? []).length === 0 && (
-              <li className="text-sm text-slate-500 py-3">Nothing scheduled in the future yet.</li>
-            )}
-            {(upcoming ?? []).map((o) => (
-              <li key={o.id} className="flex items-center justify-between py-3">
-                <div>
-                  <Link href={`/dashboard/orders/${o.id}`} className="font-medium hover:underline">
-                    #{o.order_number}
-                  </Link>
-                  <div className="text-xs text-slate-500">{fmtDateTime(o.scheduled_at)}</div>
-                </div>
-                <span className={`pill ${STATUS_COLOR[o.status] ?? ''}`}>{STATUS_LABEL[o.status]}</span>
-              </li>
-            ))}
-          </ul>
+          {(upcoming ?? []).length === 0 ? (
+            <EmptyState
+              compact
+              icon={CalendarClock}
+              title="Nothing scheduled yet"
+              description="Booked shoots with a future date will show up here."
+            />
+          ) : (
+            <ul className="-my-1 divide-y divide-slate-100">
+              {(upcoming ?? []).map((o) => (
+                <li key={o.id} className="flex items-center justify-between py-3">
+                  <div>
+                    <Link href={`/dashboard/orders/${o.id}`} className="font-medium hover:underline">
+                      #{o.order_number}
+                    </Link>
+                    <div className="text-xs text-slate-500">{fmtDateTime(o.scheduled_at)}</div>
+                  </div>
+                  <StatusBadge status={o.status} />
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <section className="card p-6">
@@ -92,16 +108,26 @@ export default async function DashboardHome() {
               All orders →
             </Link>
           </header>
-          <ul className="divide-y divide-slate-100">
-            {(orders ?? []).map((o) => (
-              <li key={o.id} className="flex items-center justify-between py-3">
-                <Link href={`/dashboard/orders/${o.id}`} className="font-medium hover:underline">
-                  #{o.order_number}
-                </Link>
-                <span className={`pill ${STATUS_COLOR[o.status] ?? ''}`}>{STATUS_LABEL[o.status]}</span>
-              </li>
-            ))}
-          </ul>
+          {(orders ?? []).length === 0 ? (
+            <EmptyState
+              compact
+              icon={FileEdit}
+              title="No orders yet"
+              description="New bookings and orders will appear here as they come in."
+            />
+          ) : (
+            <ul className="-my-1 divide-y divide-slate-100">
+              {(orders ?? []).map((o) => (
+                <li key={o.id} className="flex items-center justify-between py-3">
+                  <Link href={`/dashboard/orders/${o.id}`} className="font-medium hover:underline">
+                    #{o.order_number}
+                    {o.rush && <span className="ml-2 pill bg-rose-100 text-rose-700">RUSH</span>}
+                  </Link>
+                  <StatusBadge status={o.status} />
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
     </div>
