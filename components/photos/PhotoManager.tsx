@@ -424,15 +424,21 @@ export function PhotoManager({
       setUploadProgress({ done: 0, total: files.length });
 
       const supabase = createClient();
-      const concurrency = 3;
-      const registered: Array<{
+      // Upload several files at once. Direct-to-storage + fresh-token-per-chunk
+      // make higher parallelism safe; this is the main throughput lever.
+      const concurrency = 6;
+      type RegItem = {
         photo_id: string;
         filename: string;
         storage_path: string;
         mime_type: string;
         byte_size: number;
         exif?: Record<string, unknown>;
-      }> = [];
+      };
+      const registered: RegItem[] = [];
+      // EXIF parsing runs off the critical path so a worker can start the next
+      // file immediately; all parses are awaited before register.
+      const exifJobs: Promise<void>[] = [];
 
       let done = 0;
       let aborted = false;
@@ -458,17 +464,23 @@ export function PhotoManager({
           setRunError(`Upload failed: ${err?.message || err}`);
           return;
         }
-        // Extract bracket-relevant EXIF from the original file (best-effort) so
-        // detection can distinguish HDR sets from in-sequence detail singles.
-        const exif = await extractUploadExif(file);
-        registered.push({
+        // Register immediately; extract bracket-relevant EXIF in the background
+        // (so detection can tell HDR sets from in-sequence detail singles).
+        const entry: RegItem = {
           photo_id: photoId,
           filename: file.name,
           storage_path: storagePath,
           mime_type: contentType,
           byte_size: file.size,
-          ...(Object.keys(exif).length ? { exif: exif as Record<string, unknown> } : {}),
-        });
+        };
+        registered.push(entry);
+        exifJobs.push(
+          extractUploadExif(file)
+            .then((exif) => {
+              if (Object.keys(exif).length) entry.exif = exif as Record<string, unknown>;
+            })
+            .catch(() => {})
+        );
         done += 1;
         setUploadProgress({ done, total: files.length });
       }
@@ -483,6 +495,9 @@ export function PhotoManager({
       await Promise.all(
         Array.from({ length: Math.min(concurrency, files.length) }, () => worker())
       );
+
+      // Make sure EXIF is attached before registering.
+      await Promise.all(exifJobs);
 
       if (registered.length > 0) {
         const r = await fetch('/api/photos/register', {
