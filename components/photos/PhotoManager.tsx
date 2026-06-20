@@ -1606,7 +1606,14 @@ function Stage3({
         </div>
       )}
 
-      {qcReport && <QcReportPanel report={qcReport} onClose={() => setQcReport(null)} />}
+      {qcReport && (
+        <QcReportPanel
+          report={qcReport}
+          orderId={orderId}
+          onChange={onChange}
+          onClose={() => setQcReport(null)}
+        />
+      )}
 
       {failedJobs.length > 0 && (
         <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
@@ -1838,15 +1845,45 @@ const QC_FLAG_LABEL: Record<string, string> = {
 
 function QcReportPanel({
   report,
+  orderId,
+  onChange,
   onClose,
 }: {
   report: { summary: any; findings: any[] };
+  orderId: string;
+  onChange: () => void;
   onClose: () => void;
 }) {
   const s = report.summary ?? {};
   const findings = report.findings ?? [];
   const clean = findings.length === 0;
   const score = typeof s.consistency_score === 'number' ? s.consistency_score : null;
+  const [fixing, setFixing] = useState(false);
+  const [fixError, setFixError] = useState<string | null>(null);
+  const [fixed, setFixed] = useState<number | null>(null);
+
+  async function fixAll() {
+    setFixing(true);
+    setFixError(null);
+    try {
+      const r = await fetch('/api/ai/qc-fix', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setFixError(data.message || data.error || `error_${r.status}`);
+      } else {
+        setFixed(data.queued?.length ?? 0);
+        onChange();
+      }
+    } catch (err: any) {
+      setFixError(err?.message || 'network_error');
+    } finally {
+      setFixing(false);
+    }
+  }
 
   return (
     <div className="card p-4 space-y-3">
@@ -1868,10 +1905,39 @@ function QcReportPanel({
             </span>
           )}
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-700" title="Dismiss">
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          {!clean && fixed === null && (
+            <button
+              onClick={fixAll}
+              disabled={fixing}
+              className="text-xs font-medium px-2.5 py-1.5 rounded-md bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-60 inline-flex items-center gap-1.5"
+              title="Re-render every flagged photo from its original with a targeted correction"
+            >
+              {fixing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Fixing…
+                </>
+              ) : (
+                <>
+                  <Wand2 className="h-3.5 w-3.5" /> Fix all flagged ({findings.length})
+                </>
+              )}
+            </button>
+          )}
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700" title="Dismiss">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
+
+      {fixError && <p className="text-sm text-rose-600">Fix failed: {fixError}</p>}
+      {fixed !== null && (
+        <div className="flex items-center gap-2 text-sm text-ocean-800">
+          <Loader2 className="h-4 w-4 animate-spin" /> Re-rendering {fixed} photo
+          {fixed === 1 ? '' : 's'} with corrections — they&apos;ll refresh in the grid as each
+          finishes. The originals stay until you approve the new versions.
+        </div>
+      )}
 
       <p className="text-sm text-slate-600">
         Reviewed {s.photo_count ?? 0} photo{(s.photo_count ?? 0) === 1 ? '' : 's'}
