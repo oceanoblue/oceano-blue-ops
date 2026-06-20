@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   groupPhotosIntoBrackets,
+  groupWithExif,
   validateBracketsWithExif,
   type ExifSnapshot,
 } from './bracket-grouping';
@@ -127,5 +128,64 @@ describe('validateBracketsWithExif', () => {
     const fixed = validateBracketsWithExif(base, withExif(photos, [0, -2, 2, 1]));
     expect(fixed.brackets).toHaveLength(1);
     expect(fixed.brackets[0].photos).toHaveLength(3);
+  });
+});
+
+describe('groupWithExif — mixed continuous sessions', () => {
+  // Build EXIF with realistic capture times: frames in the same burst are <0.5s
+  // apart; a `gapBefore` flag inserts a multi-second pause (a detail single).
+  function exifFor(
+    photos: Photo[],
+    frames: Array<{ ev: number; gapBefore?: boolean }>
+  ): Record<string, ExifSnapshot> {
+    const exif: Record<string, ExifSnapshot> = {};
+    let t = 1_000_000;
+    photos.forEach((p, i) => {
+      t += i === 0 ? 0 : frames[i].gapBefore ? 4000 : 250;
+      exif[p.id] = { takenAt: t, exposureBias: frames[i].ev };
+    });
+    return exif;
+  }
+
+  it('separates brackets from interspersed singles in one continuous run', () => {
+    // 3-bracket, single, 3-bracket, single, 3-bracket — singles have a pause.
+    const photos = seq('OBM', 100, 110);
+    const f = [
+      { ev: 0 }, { ev: -2 }, { ev: 2 }, // bracket
+      { ev: 0, gapBefore: true }, // single
+      { ev: 0, gapBefore: true }, { ev: -2 }, { ev: 2 }, // bracket
+      { ev: 0, gapBefore: true }, // single
+      { ev: 0, gapBefore: true }, { ev: -2 }, { ev: 2 }, // bracket
+    ];
+    const { brackets, singles } = groupWithExif(photos, exifFor(photos, f));
+    expect(brackets.map((b) => b.photos.length)).toEqual([3, 3, 3]);
+    expect(ids(singles)).toEqual(['OBM00103', 'OBM00107']);
+  });
+
+  it('handles a true 5-bracket among singles', () => {
+    const photos = seq('OBM', 200, 206);
+    const f = [
+      { ev: 0 }, // single
+      { ev: -2, gapBefore: true }, { ev: -1 }, { ev: 0 }, { ev: 1 }, { ev: 2 }, // 5-bracket burst
+      { ev: 0, gapBefore: true }, // single
+    ];
+    const { brackets, singles } = groupWithExif(photos, exifFor(photos, f));
+    expect(brackets.map((b) => b.photos.length)).toEqual([5]);
+    expect(ids(singles)).toEqual(['OBM00200', 'OBM00206']);
+  });
+
+  it('falls back to filename grouping when EXIF is absent', () => {
+    const photos = seq('OBM', 300, 305); // 6 → filename 3+3
+    const { brackets, singles } = groupWithExif(photos, {});
+    expect(brackets.map((b) => b.photos.length)).toEqual([3, 3]);
+    expect(singles).toHaveLength(0);
+  });
+
+  it('treats spaced-out detail singles (same EV 0) as singles, not a bracket', () => {
+    const photos = seq('OBM', 400, 403);
+    const f = [{ ev: 0 }, { ev: 0, gapBefore: true }, { ev: 0, gapBefore: true }, { ev: 0, gapBefore: true }];
+    const { brackets, singles } = groupWithExif(photos, exifFor(photos, f));
+    expect(brackets).toHaveLength(0);
+    expect(singles).toHaveLength(4);
   });
 });

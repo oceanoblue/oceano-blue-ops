@@ -36,10 +36,9 @@ import { BracketCard } from './BracketCard';
 import { tusUpload, RESUMABLE_THRESHOLD_BYTES } from '@/lib/storage/tus-upload';
 import {
   groupPhotosIntoBrackets,
+  groupWithExif,
   isRawFilename,
   readExifFromUrl,
-  applyExifGrouping,
-  validateBracketsWithExif,
   type ExifSnapshot,
 } from '@/lib/photos/bracket-grouping';
 import { extractUploadExif } from '@/lib/photos/exif-extract';
@@ -306,28 +305,63 @@ export function PhotoManager({
   // from in-sequence detail singles; the lazy URL-based reads below are a
   // fallback for older photos uploaded before EXIF was stored.
   const storedExif = useMemo(() => {
+    // Read EXIF off every photo row by id (own EXIF).
+    const own: Record<string, { ev: number | null; t: number | null }> = {};
+    for (const p of photos) {
+      const e = (p.exif ?? {}) as any;
+      const ev = typeof e.ExposureBiasValue === 'number' ? e.ExposureBiasValue : null;
+      const parsed = e.DateTimeOriginal ? Date.parse(e.DateTimeOriginal) : NaN;
+      own[p.id] = { ev, t: Number.isNaN(parsed) ? null : parsed };
+    }
+    // Map onto the surfaced frames. A worker-converted JPEG carries no EXIF, so
+    // fall back to its source ARW's EXIF (parent_photo_id).
     const m: Record<string, ExifSnapshot> = {};
     for (const p of rawPhotos) {
-      const e = (p.exif ?? {}) as any;
-      const bias = typeof e.ExposureBiasValue === 'number' ? e.ExposureBiasValue : null;
-      const t = e.DateTimeOriginal ? Date.parse(e.DateTimeOriginal) : NaN;
-      const takenAt = Number.isNaN(t) ? null : t;
-      if (bias !== null || takenAt !== null) m[p.id] = { takenAt, exposureBias: bias };
+      let ev = own[p.id]?.ev ?? null;
+      let t = own[p.id]?.t ?? null;
+      const parent = (p as any).parent_photo_id as string | null;
+      if (parent && own[parent]) {
+        if (ev === null) ev = own[parent].ev;
+        if (t === null) t = own[parent].t;
+      }
+      if (ev !== null || t !== null) m[p.id] = { takenAt: t, exposureBias: ev };
     }
     return m;
-  }, [rawPhotos]);
+  }, [photos, rawPhotos]);
 
   const { brackets, singles } = useMemo(() => {
     // A fixed Count is authoritative — chunk runs by N and skip the EXIF guess.
     if (bracketCount !== 'auto') {
       return groupPhotosIntoBrackets(rawPhotos, { fixedSize: bracketCount });
     }
+    // EXIF-aware: segment each consecutive run by the exposure-bias cycle, which
+    // separates brackets from interspersed detail singles. Runs without complete
+    // EXIF fall back to filename chunking inside groupWithExif.
     const exif = { ...exifByPhoto, ...storedExif }; // stored wins
-    const base = groupPhotosIntoBrackets(rawPhotos);
-    const promoted = applyExifGrouping(base, exif);
-    // Split out any detail single the filename pass absorbed into a bracket.
-    return validateBracketsWithExif(promoted, exif);
+    return groupWithExif(rawPhotos, exif);
   }, [rawPhotos, exifByPhoto, storedExif, bracketCount]);
+
+  // Backfill EXIF server-side when surfaced frames are missing exposure bias
+  // (older orders, or RAW the browser couldn't read). Fires once; refreshes so
+  // the grouping above re-runs with real exposure data.
+  const exifBackfillRef = useRef(false);
+  useEffect(() => {
+    if (exifBackfillRef.current || rawPhotos.length === 0) return;
+    const missing = rawPhotos.some((p) => typeof storedExif[p.id]?.exposureBias !== 'number');
+    if (!missing) return;
+    exifBackfillRef.current = true;
+    fetch('/api/photos/extract-exif', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ order_id: orderId }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.updated) refresh();
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawPhotos, storedExif, orderId]);
 
   // Lazy EXIF reads for the secondary bracket pass.
   useEffect(() => {
