@@ -39,8 +39,10 @@ import {
   isRawFilename,
   readExifFromUrl,
   applyExifGrouping,
+  validateBracketsWithExif,
   type ExifSnapshot,
 } from '@/lib/photos/bracket-grouping';
+import { extractUploadExif } from '@/lib/photos/exif-extract';
 import { groupByRoom } from '@/lib/photos/rooms';
 import { useInView } from '@/lib/hooks/use-in-view';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -295,14 +297,33 @@ export function PhotoManager({
   // EXIF cache for filename-only bracket detection fallback.
   const [exifByPhoto, setExifByPhoto] = useState<Record<string, ExifSnapshot>>({});
 
+  // EXIF persisted on each photo row at upload (ExposureBiasValue +
+  // DateTimeOriginal). This is the authoritative source for telling brackets
+  // from in-sequence detail singles; the lazy URL-based reads below are a
+  // fallback for older photos uploaded before EXIF was stored.
+  const storedExif = useMemo(() => {
+    const m: Record<string, ExifSnapshot> = {};
+    for (const p of rawPhotos) {
+      const e = (p.exif ?? {}) as any;
+      const bias = typeof e.ExposureBiasValue === 'number' ? e.ExposureBiasValue : null;
+      const t = e.DateTimeOriginal ? Date.parse(e.DateTimeOriginal) : NaN;
+      const takenAt = Number.isNaN(t) ? null : t;
+      if (bias !== null || takenAt !== null) m[p.id] = { takenAt, exposureBias: bias };
+    }
+    return m;
+  }, [rawPhotos]);
+
   const { brackets, singles } = useMemo(() => {
     // A fixed Count is authoritative — chunk runs by N and skip the EXIF guess.
     if (bracketCount !== 'auto') {
       return groupPhotosIntoBrackets(rawPhotos, { fixedSize: bracketCount });
     }
+    const exif = { ...exifByPhoto, ...storedExif }; // stored wins
     const base = groupPhotosIntoBrackets(rawPhotos);
-    return applyExifGrouping(base, exifByPhoto);
-  }, [rawPhotos, exifByPhoto, bracketCount]);
+    const promoted = applyExifGrouping(base, exif);
+    // Split out any detail single the filename pass absorbed into a bracket.
+    return validateBracketsWithExif(promoted, exif);
+  }, [rawPhotos, exifByPhoto, storedExif, bracketCount]);
 
   // Lazy EXIF reads for the secondary bracket pass.
   useEffect(() => {
@@ -410,6 +431,7 @@ export function PhotoManager({
         storage_path: string;
         mime_type: string;
         byte_size: number;
+        exif?: Record<string, unknown>;
       }> = [];
 
       let done = 0;
@@ -436,12 +458,16 @@ export function PhotoManager({
           setRunError(`Upload failed: ${err?.message || err}`);
           return;
         }
+        // Extract bracket-relevant EXIF from the original file (best-effort) so
+        // detection can distinguish HDR sets from in-sequence detail singles.
+        const exif = await extractUploadExif(file);
         registered.push({
           photo_id: photoId,
           filename: file.name,
           storage_path: storagePath,
           mime_type: contentType,
           byte_size: file.size,
+          ...(Object.keys(exif).length ? { exif: exif as Record<string, unknown> } : {}),
         });
         done += 1;
         setUploadProgress({ done, total: files.length });
