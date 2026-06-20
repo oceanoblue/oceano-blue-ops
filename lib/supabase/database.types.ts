@@ -1764,6 +1764,7 @@ export type Database = {
           ai_cost_cents: number | null
           ai_prompt: string | null
           ai_provider: string | null
+          ai_recipe: Json | null
           asset_id: string | null
           bracket_group_id: string | null
           bucket: string
@@ -1783,6 +1784,7 @@ export type Database = {
           room_confidence: number | null
           room_type: string | null
           sort_order: number | null
+          source_job_id: string | null
           storage_path: string
           updated_at: string
           uploaded_by: string | null
@@ -1792,6 +1794,7 @@ export type Database = {
           ai_cost_cents?: number | null
           ai_prompt?: string | null
           ai_provider?: string | null
+          ai_recipe?: Json | null
           asset_id?: string | null
           bracket_group_id?: string | null
           bucket?: string
@@ -1811,6 +1814,7 @@ export type Database = {
           room_confidence?: number | null
           room_type?: string | null
           sort_order?: number | null
+          source_job_id?: string | null
           storage_path: string
           updated_at?: string
           uploaded_by?: string | null
@@ -1820,6 +1824,7 @@ export type Database = {
           ai_cost_cents?: number | null
           ai_prompt?: string | null
           ai_provider?: string | null
+          ai_recipe?: Json | null
           asset_id?: string | null
           bracket_group_id?: string | null
           bucket?: string
@@ -1839,6 +1844,7 @@ export type Database = {
           room_confidence?: number | null
           room_type?: string | null
           sort_order?: number | null
+          source_job_id?: string | null
           storage_path?: string
           updated_at?: string
           uploaded_by?: string | null

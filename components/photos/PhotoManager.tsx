@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
+import { describeRecipe } from '@/lib/ai/recipe';
 import { PhotoViewer } from './PhotoViewer';
 import { BracketCard } from './BracketCard';
 import { tusUpload, RESUMABLE_THRESHOLD_BYTES } from '@/lib/storage/tus-upload';
@@ -1748,6 +1749,34 @@ function ProcessedCard({
     }
   }
 
+  // Faithfully re-run the recipe that produced this photo, from the ORIGINAL
+  // frame(s) — not a fresh default pass on the already-processed output. Makes
+  // an edit reproducible with one click; the old output is kept for comparison.
+  async function rerunRecipe() {
+    setBusy('rerun');
+    try {
+      const r = await fetch('/api/ai/rerun', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ photo_id: photo.id }),
+      });
+      if (!r.ok) {
+        // No stored recipe (e.g. a pre-recipe output) — fall back to a fresh
+        // enhance so the button still does something useful.
+        const j = await r.json().catch(() => ({}));
+        if (j?.error === 'no_recipe' || j?.error === 'no_inputs') {
+          await applyExtra('enhance_single');
+          return;
+        }
+      }
+      onChange();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const recipeSummary = describeRecipe((photo as any).ai_recipe ?? null);
+
   const isApproved = photo.is_selected === true;
   const isRejected = photo.is_selected === false;
 
@@ -1824,12 +1853,16 @@ function ProcessedCard({
             </button>
           </div>
           <button
-            onClick={() => applyExtra('enhance_single')}
+            onClick={rerunRecipe}
             disabled={busy !== null}
-            title="Re-run enhance"
+            title={
+              recipeSummary
+                ? `Re-run this recipe from the original frame · ${recipeSummary}`
+                : 'Re-run enhance from the original frame'
+            }
             className="p-1.5 rounded-md bg-white/15 text-white text-xs hover:bg-ocean-600 transition"
           >
-            {busy === 'enhance_single' ? (
+            {busy === 'rerun' || busy === 'enhance_single' ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <RotateCw className="h-3.5 w-3.5" />
