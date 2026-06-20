@@ -43,6 +43,7 @@ import {
   type ExifSnapshot,
 } from '@/lib/photos/bracket-grouping';
 import { extractUploadExif } from '@/lib/photos/exif-extract';
+import { compressImageFile } from '@/lib/photos/compress-image';
 import { groupByRoom } from '@/lib/photos/rooms';
 import { useInView } from '@/lib/hooks/use-in-view';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -116,6 +117,9 @@ export function PhotoManager({
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
   const [uploading, setUploading] = useState(false);
+  // Compress browser-decodable images to web quality before upload (much faster;
+  // RAW/TIFF are untouched). The pipeline already works from JPEG.
+  const [compressUploads, setCompressUploads] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string | null>>({});
   const [viewer, setViewer] = useState<{ list: 'raw' | 'processed'; index: number } | null>(null);
@@ -443,9 +447,12 @@ export function PhotoManager({
       let done = 0;
       let aborted = false;
 
-      async function uploadOne(file: File) {
+      async function uploadOne(original: File) {
         if (aborted) return;
         const photoId = crypto.randomUUID();
+        // Compress decodable images to web quality before upload (RAW/TIFF pass
+        // through unchanged). EXIF is read from the ORIGINAL below.
+        const file = compressUploads ? await compressImageFile(original) : original;
         const safeName = file.name.replace(/[^\w.\-]+/g, '_');
         const storagePath = `${orderId}/${photoId}-${safeName}`;
         const contentType = file.type || 'application/octet-stream';
@@ -475,7 +482,7 @@ export function PhotoManager({
         };
         registered.push(entry);
         exifJobs.push(
-          extractUploadExif(file)
+          extractUploadExif(original)
             .then((exif) => {
               if (Object.keys(exif).length) entry.exif = exif as Record<string, unknown>;
             })
@@ -722,6 +729,25 @@ export function PhotoManager({
           JPEG / PNG / TIFF / WebP run through AI directly. ARW / CR2 / NEF auto-convert via the worker.
         </p>
       </div>
+
+      <label
+        className="flex items-center gap-2 text-xs text-slate-600"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          type="checkbox"
+          checked={compressUploads}
+          disabled={uploading}
+          onChange={(e) => setCompressUploads(e.target.checked)}
+          className="h-3.5 w-3.5 rounded accent-ocean-600"
+        />
+        <span>
+          Compress to web quality before upload — much faster.{' '}
+          <span className="text-slate-400">
+            Shrinks JPEG/PNG/WebP (≤4096px); RAW &amp; TIFF upload untouched.
+          </span>
+        </span>
+      </label>
 
       {/* Stepper */}
       <Stepper
