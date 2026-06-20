@@ -112,6 +112,33 @@ function extractEmbeddedPreview(tmpPath) {
   })();
 }
 
+/**
+ * Read the bracket-defining EXIF off a RAW temp file via exiftool (numeric).
+ *
+ * The browser's EXIF reader (exifr) silently drops ExposureBiasValue on Sony
+ * ARW — it returns DateTimeOriginal/lens/camera but not the exposure
+ * compensation, which is THE signal that tells a bracketed frame from a single.
+ * exiftool reads it reliably (standard EXIF + Sony MakerNote), so we capture it
+ * here while the file is already on disk for conversion. Returns the parsed
+ * exiftool object or null.
+ */
+function extractBracketExif(tmpPath) {
+  return new Promise((resolve) => {
+    const proc = spawn('exiftool', ['-j', '-n', '-ExposureBiasValue', '-DateTimeOriginal', tmpPath]);
+    const chunks = [];
+    proc.stdout.on('data', (c) => chunks.push(c));
+    proc.on('error', () => resolve(null));
+    proc.on('close', () => {
+      try {
+        const arr = JSON.parse(Buffer.concat(chunks).toString() || '[]');
+        resolve(Array.isArray(arr) && arr[0] ? arr[0] : null);
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
 /** Demosaic a RAW temp file to a 16-bit TIFF buffer via dcraw_emu. */
 function demosaicToTiff(tmpPath, filename) {
   const tiffOut = `${tmpPath}.tiff`;
@@ -201,6 +228,24 @@ app.post('/convert', async (req, res) => {
       method = 'libraw/dcraw_emu';
       log('decoding', { bytes: rawBuf.byteLength, q: DCRAW_QUALITY });
       sourceBuf = await demosaicToTiff(tmp, src.filename);
+    }
+
+    // Backfill the bracket-defining EXIF the browser drops on Sony ARW, onto the
+    // SOURCE raw row. The grouping engine reads exposure bias off the source (and
+    // converted JPEGs inherit it via parent_photo_id), so this is what lets it
+    // tell 3-shot brackets from interspersed detail singles instead of guessing
+    // by filename. Best-effort: never let it fail the conversion.
+    try {
+      const bx = await extractBracketExif(tmp);
+      if (bx && typeof bx.ExposureBiasValue === 'number' && (src.exif?.ExposureBiasValue == null)) {
+        await supabase
+          .from('photos')
+          .update({ exif: { ...(src.exif || {}), ExposureBiasValue: bx.ExposureBiasValue } })
+          .eq('id', src.id);
+        log('source_exif_backfilled', { ev: bx.ExposureBiasValue });
+      }
+    } catch (e) {
+      log('exif_backfill_failed', { error: e?.message || String(e) });
     }
 
     fs.unlink(tmp).catch(() => {});
