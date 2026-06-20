@@ -1,9 +1,38 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { STATUS_LABEL } from '@/lib/utils/format';
-import { OrderRow } from '@/components/orders/OrderRow';
+import { STATUS_LABEL, fmtDateTime, fmtAddress } from '@/lib/utils/format';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { DataTable, type Column } from '@/components/ui/DataTable';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 
 export const dynamic = 'force-dynamic';
+
+const COLUMNS: Column<any>[] = [
+  {
+    key: 'order',
+    header: 'Order',
+    cell: (o) => (
+      <>
+        <span className="font-medium text-ocean-800">#{o.order_number}</span>
+        {o.rush && <span className="ml-2 pill bg-rose-100 text-rose-700">RUSH</span>}
+      </>
+    ),
+  },
+  { key: 'address', header: 'Address', className: 'text-slate-700', cell: (o) => (o.listings ? fmtAddress(o.listings) : '—') },
+  {
+    key: 'client',
+    header: 'Client',
+    className: 'text-slate-700',
+    cell: (o) => (
+      <>
+        <div>{o.clients?.full_name ?? '—'}</div>
+        <div className="text-xs text-slate-500">{o.clients?.brokerage ?? ''}</div>
+      </>
+    ),
+  },
+  { key: 'scheduled', header: 'Scheduled', className: 'text-slate-700', cell: (o) => fmtDateTime(o.scheduled_at) },
+  { key: 'status', header: 'Status', cell: (o) => <StatusBadge status={o.status} /> },
+];
 
 export default async function OrdersPage({
   searchParams,
@@ -25,13 +54,9 @@ export default async function OrdersPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ocean-950">Orders</h1>
-          <p className="text-sm text-slate-600">Every shoot in the pipeline.</p>
-        </div>
+      <PageHeader title="Orders" subtitle="Every shoot in the pipeline.">
         <Link href="/dashboard/orders/new" className="btn-primary">New order</Link>
-      </div>
+      </PageHeader>
 
       <div className="flex flex-wrap gap-2">
         <FilterPill label="All" href="/dashboard/orders" active={!searchParams.status} />
@@ -45,30 +70,14 @@ export default async function OrdersPage({
         ))}
       </div>
 
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-left">
-              <th className="table-head px-4 py-3">Order</th>
-              <th className="table-head px-4 py-3">Address</th>
-              <th className="table-head px-4 py-3">Client</th>
-              <th className="table-head px-4 py-3">Scheduled</th>
-              <th className="table-head px-4 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {error && (
-              <tr><td colSpan={5} className="px-4 py-6 text-rose-600 text-sm">{error.message}</td></tr>
-            )}
-            {(orders ?? []).map((o: any) => (
-              <OrderRow key={o.id} order={o} />
-            ))}
-            {!error && (orders ?? []).length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">No orders yet.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={COLUMNS}
+        rows={orders ?? []}
+        rowKey={(o) => o.id}
+        rowHref={(o) => `/dashboard/orders/${o.id}`}
+        empty="No orders yet."
+        error={error?.message ?? null}
+      />
     </div>
   );
 }
