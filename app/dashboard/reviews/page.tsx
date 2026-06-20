@@ -1,10 +1,32 @@
 import { createClient } from '@/lib/supabase/server';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { DataTable, type Column } from '@/components/ui/DataTable';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 
 export const dynamic = 'force-dynamic';
 
+const COLUMNS: Column<any>[] = [
+  { key: 'title', header: 'Title', className: 'font-medium text-slate-800', cell: (r) => r.title ?? 'Review' },
+  { key: 'job', header: 'Job', className: 'text-slate-700', cell: (r) => r.jobs?.title ?? '—' },
+  { key: 'provider', header: 'Provider', className: 'capitalize text-slate-700', cell: (r) => r.provider ?? '—' },
+  { key: 'status', header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
+  {
+    key: 'link',
+    header: 'Link',
+    cell: (r) =>
+      r.external_url ? (
+        <a href={r.external_url} className="text-ocean-700 hover:underline" target="_blank" rel="noreferrer">
+          Open →
+        </a>
+      ) : (
+        '—'
+      ),
+  },
+];
+
 export default async function ReviewsPage() {
   const supabase = createClient();
-  const { data: reviews } = await supabase
+  const { data: reviews, error } = await supabase
     .from('review_sessions')
     .select('id, title, provider, status, external_url, created_at, jobs(title)')
     .order('created_at', { ascending: false })
@@ -12,52 +34,17 @@ export default async function ReviewsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-ocean-950">Reviews</h1>
-        <p className="text-sm text-slate-600">
-          Review sessions across Frame.io, Vimeo, Pixieset, and internal review.
-        </p>
-      </div>
-
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-left">
-              <th className="table-head px-4 py-3">Title</th>
-              <th className="table-head px-4 py-3">Job</th>
-              <th className="table-head px-4 py-3">Provider</th>
-              <th className="table-head px-4 py-3">Status</th>
-              <th className="table-head px-4 py-3">Link</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {(reviews ?? []).map((r: any) => (
-              <tr key={r.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium text-slate-800">{r.title ?? 'Review'}</td>
-                <td className="px-4 py-3 text-slate-700">{r.jobs?.title ?? '—'}</td>
-                <td className="px-4 py-3 capitalize text-slate-700">{r.provider ?? '—'}</td>
-                <td className="px-4 py-3 capitalize">{r.status?.replace(/_/g, ' ')}</td>
-                <td className="px-4 py-3">
-                  {r.external_url ? (
-                    <a href={r.external_url} className="text-ocean-700 hover:underline" target="_blank" rel="noreferrer">
-                      Open →
-                    </a>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-              </tr>
-            ))}
-            {(reviews ?? []).length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-slate-500">
-                  No review sessions yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <PageHeader
+        title="Reviews"
+        subtitle="Review sessions across Frame.io, Vimeo, Pixieset, and internal review."
+      />
+      <DataTable
+        columns={COLUMNS}
+        rows={reviews ?? []}
+        rowKey={(r) => r.id}
+        empty="No review sessions yet."
+        error={error?.message ?? null}
+      />
     </div>
   );
 }

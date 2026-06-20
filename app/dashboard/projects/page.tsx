@@ -1,11 +1,26 @@
-import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { DataTable, type Column } from '@/components/ui/DataTable';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 
 export const dynamic = 'force-dynamic';
 
+const COLUMNS: Column<any>[] = [
+  { key: 'name', header: 'Project', className: 'font-medium text-ocean-800', cell: (p) => p.name },
+  { key: 'client', header: 'Client', className: 'text-slate-700', cell: (p) => p.clients?.full_name ?? '—' },
+  { key: 'jobs', header: 'Jobs', className: 'text-slate-700', cell: (p) => p.jobs?.[0]?.count ?? 0 },
+  { key: 'status', header: 'Status', cell: (p) => <StatusBadge status={p.status} /> },
+  {
+    key: 'due',
+    header: 'Due',
+    className: 'text-slate-700',
+    cell: (p) => (p.due_date ? new Date(p.due_date).toLocaleDateString() : '—'),
+  },
+];
+
 export default async function ProjectsPage() {
   const supabase = createClient();
-  const { data: projects } = await supabase
+  const { data: projects, error } = await supabase
     .from('projects')
     .select('id, name, status, due_date, language, clients(full_name), jobs(count)')
     .order('created_at', { ascending: false })
@@ -13,44 +28,14 @@ export default async function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-ocean-950">Projects</h1>
-        <p className="text-sm text-slate-600">Client initiatives that group related jobs.</p>
-      </div>
-
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-left">
-              <th className="table-head px-4 py-3">Project</th>
-              <th className="table-head px-4 py-3">Client</th>
-              <th className="table-head px-4 py-3">Jobs</th>
-              <th className="table-head px-4 py-3">Status</th>
-              <th className="table-head px-4 py-3">Due</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {(projects ?? []).map((p: any) => (
-              <tr key={p.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium text-ocean-800">{p.name}</td>
-                <td className="px-4 py-3 text-slate-700">{p.clients?.full_name ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-700">{p.jobs?.[0]?.count ?? 0}</td>
-                <td className="px-4 py-3 capitalize">{p.status?.replace(/_/g, ' ')}</td>
-                <td className="px-4 py-3 text-slate-700">
-                  {p.due_date ? new Date(p.due_date).toLocaleDateString() : '—'}
-                </td>
-              </tr>
-            ))}
-            {(projects ?? []).length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-slate-500">
-                  No projects yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <PageHeader title="Projects" subtitle="Client initiatives that group related jobs." />
+      <DataTable
+        columns={COLUMNS}
+        rows={projects ?? []}
+        rowKey={(p) => p.id}
+        empty="No projects yet."
+        error={error?.message ?? null}
+      />
     </div>
   );
 }
