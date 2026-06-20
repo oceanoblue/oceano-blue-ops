@@ -24,6 +24,8 @@ import {
   Eraser,
   ChevronRight,
   Copy,
+  ShieldCheck,
+  X,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
@@ -1405,6 +1407,31 @@ function Stage3({
   const [deduping, setDeduping] = useState(false);
   const [dedupeResult, setDedupeResult] = useState<{ sets: number; deselected: number } | null>(null);
   const [dedupeError, setDedupeError] = useState<string | null>(null);
+  const [qcRunning, setQcRunning] = useState(false);
+  const [qcError, setQcError] = useState<string | null>(null);
+  const [qcReport, setQcReport] = useState<{ summary: any; findings: any[] } | null>(null);
+
+  async function runQcReview() {
+    setQcRunning(true);
+    setQcError(null);
+    try {
+      const r = await fetch('/api/ai/qc-review', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setQcError(data.message || data.error || `error_${r.status}`);
+      } else {
+        setQcReport({ summary: data.summary, findings: data.findings ?? [] });
+      }
+    } catch (err: any) {
+      setQcError(err?.message || 'network_error');
+    } finally {
+      setQcRunning(false);
+    }
+  }
 
   const hasRooms = photos.some((p) => (p as any).room_type);
   const roomGroups = useMemo(() => groupByRoom(photos as any[]), [photos]);
@@ -1509,6 +1536,22 @@ function Stage3({
               )}
             </button>
             <button
+              onClick={runQcReview}
+              disabled={qcRunning || photos.length === 0}
+              className="text-xs font-medium px-2.5 py-1.5 rounded-md ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-60 inline-flex items-center gap-1.5"
+              title="Check color accuracy, white-balance consistency across the set, and material/wall-color drift vs the originals"
+            >
+              {qcRunning ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking…
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-3.5 w-3.5" /> Consistency check
+                </>
+              )}
+            </button>
+            <button
               onClick={organizeByRoom}
               disabled={organizing || photos.length === 0}
               className="text-xs font-medium px-2.5 py-1.5 rounded-md bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-60 inline-flex items-center gap-1.5"
@@ -1556,6 +1599,14 @@ function Stage3({
           )}
         </div>
       )}
+
+      {qcError && (
+        <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          Consistency check failed: {qcError}
+        </div>
+      )}
+
+      {qcReport && <QcReportPanel report={qcReport} onClose={() => setQcReport(null)} />}
 
       {failedJobs.length > 0 && (
         <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
@@ -1770,6 +1821,104 @@ function SingleThumb({
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// ─── Consistency check results ──────────────────────────────────────────────
+const QC_FLAG_LABEL: Record<string, string> = {
+  warm: 'runs warm',
+  cool: 'runs cool',
+  green: 'green tint',
+  magenta: 'magenta tint',
+  bright: 'brighter than set',
+  dark: 'darker than set',
+};
+
+function QcReportPanel({
+  report,
+  onClose,
+}: {
+  report: { summary: any; findings: any[] };
+  onClose: () => void;
+}) {
+  const s = report.summary ?? {};
+  const findings = report.findings ?? [];
+  const clean = findings.length === 0;
+  const score = typeof s.consistency_score === 'number' ? s.consistency_score : null;
+
+  return (
+    <div className="card p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-ocean-600" />
+          <h3 className="text-sm font-semibold text-slate-900">Consistency check</h3>
+          {score !== null && (
+            <span
+              className={`pill ${
+                score >= 85
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : score >= 70
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'bg-rose-100 text-rose-700'
+              }`}
+            >
+              {score}/100 consistent
+            </span>
+          )}
+        </div>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-700" title="Dismiss">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <p className="text-sm text-slate-600">
+        Reviewed {s.photo_count ?? 0} photo{(s.photo_count ?? 0) === 1 ? '' : 's'}
+        {s.ai_ran
+          ? ' including an AI wall / color-accuracy check against the originals'
+          : ' for color consistency (set OPENAI_API_KEY to add the AI wall/accuracy check)'}
+        {s.truncated ? ` · limited to the first ${s.photo_count}` : ''}.
+      </p>
+
+      {clean ? (
+        <div className="flex items-center gap-2 text-sm text-emerald-700">
+          <CheckCircle2 className="h-4 w-4" /> Looks clean — consistent white balance and no
+          material-color drift detected.
+        </div>
+      ) : (
+        <ul className="-my-1 divide-y divide-slate-100">
+          {findings.map((f: any) => {
+            const issues: string[] = [];
+            if (f.consistency?.flags?.length)
+              issues.push(f.consistency.flags.map((k: string) => QC_FLAG_LABEL[k] ?? k).join(', '));
+            if (f.ai?.wall_drift) issues.push('material/wall color changed');
+            if (f.ai && f.ai.white_balance_ok === false) issues.push('off white balance');
+            if (f.ai && f.ai.color_accuracy === 'poor') issues.push('poor color accuracy');
+            return (
+              <li key={f.photo_id} className="flex items-start gap-2 py-2 text-sm">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                <div>
+                  <div className="font-medium text-slate-800">
+                    {f.filename}
+                    {f.room_type && <span className="font-normal text-slate-400"> · {f.room_type}</span>}
+                  </div>
+                  <div className="text-slate-600">
+                    {issues.join(' · ')}
+                    {f.ai?.notes ? ` — ${f.ai.notes}` : ''}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {!clean && (
+        <p className="text-xs text-slate-500">
+          Open a flagged photo and use <span className="font-medium">Redo</span> (or the edit chips)
+          to re-render it into line with the set.
+        </p>
       )}
     </div>
   );
