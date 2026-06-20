@@ -1,6 +1,8 @@
 /**
  * Google OAuth 2.0 helpers — minimal, no SDK.
- * Scopes: calendar.events (read + write).
+ * Scopes: calendar.events (read + write events) + calendar.readonly (freeBusy
+ * queries across ALL the user's calendars for availability — calendar.events
+ * alone can't run freeBusy or enumerate calendars).
  */
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -8,6 +10,7 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
 ];
 
