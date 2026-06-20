@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -21,12 +21,28 @@ export function AssignTeamControl({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function assign(field: 'photographer_id' | 'editor_id', value: string | null) {
+    setError(null);
     start(async () => {
       const supabase = createClient();
       // Dynamic single-column patch; field is whitelisted by the param type.
-      await supabase.from('orders').update({ [field]: value } as any).eq('id', orderId);
+      const { error: err } = await supabase
+        .from('orders')
+        .update({ [field]: value } as any)
+        .eq('id', orderId);
+      if (err) {
+        // The double-book guard (SQLSTATE 23P01) blocks reassigning a
+        // photographer onto a slot they're already booked for.
+        const conflict = (err as any).code === '23P01' || /slot_unavailable/i.test(err.message);
+        setError(
+          conflict
+            ? 'That photographer is already booked around this time.'
+            : err.message
+        );
+        return;
+      }
       router.refresh();
     });
   }
@@ -61,6 +77,7 @@ export function AssignTeamControl({
           ))}
         </select>
       </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   );
 }

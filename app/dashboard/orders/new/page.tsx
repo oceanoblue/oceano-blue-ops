@@ -76,7 +76,16 @@ export default function NewOrderPage() {
       .select('id')
       .single();
     setBusy(false);
-    if (error) { setErr(error.message); return; }
+    if (error) {
+      // Double-book guard (SQLSTATE 23P01) → friendly message.
+      const conflict = (error as any).code === '23P01' || /slot_unavailable/i.test(error.message);
+      setErr(
+        conflict
+          ? 'That photographer is already booked around this time — pick another slot or photographer.'
+          : error.message
+      );
+      return;
+    }
     router.push(`/dashboard/orders/${(data as any).id}`);
   }
 

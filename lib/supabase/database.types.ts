@@ -3358,6 +3358,7 @@ export type Database = {
           p_items: Json
           p_lat: number
           p_lng: number
+          p_photographer_id?: string | null
           p_scheduled_at: string
           p_sqft: number
           p_state: string

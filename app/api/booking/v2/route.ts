@@ -72,18 +72,27 @@ export async function POST(request: Request) {
     p_access_method: b.access_method,
     p_highlights: b.highlights,
     p_items: b.items,
+    // Assign the photographer inside the RPC transaction so the double-book
+    // guard runs atomically — a conflict rolls the whole booking back.
+    p_photographer_id: (b.photographer_id ?? null) as string,
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // The DB guard raises SQLSTATE 23P01 (exclusion_violation) when the slot is
+    // already taken — surface that as a 409 the booking UI can act on, not a 500.
+    const conflict =
+      (error as any).code === '23P01' || /slot_unavailable/i.test(error.message);
+    if (conflict) {
+      return NextResponse.json(
+        { error: 'slot_unavailable', message: 'That time was just taken — please pick another slot.' },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  // Best-effort: stamp the photographer onto the order. Done as a separate
-  // update so the RPC signature stays stable.
+  // Push to the photographer's Google Calendar (best-effort). The photographer
+  // is already stamped on the order by the RPC above.
   if (b.photographer_id) {
-    await supabase
-      .from('orders')
-      .update({ photographer_id: b.photographer_id })
-      .eq('id', data);
-
-    // Push to the photographer's Google Calendar (best-effort).
     try {
       const start = new Date(b.scheduled_at);
       const end = new Date(start.getTime() + b.duration_minutes * 60_000);
