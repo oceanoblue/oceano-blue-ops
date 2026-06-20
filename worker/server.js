@@ -79,6 +79,63 @@ function releaseConvertSlot() {
   }
 }
 
+// Convert strategy. 'preview' (default) extracts the camera's embedded full-size
+// JPEG — near-instant, no demosaic — and only falls back to a dcraw decode when
+// the preview is missing or too small. 'demosaic' forces the full dcraw path.
+const CONVERT_MODE = (process.env.RAW_CONVERT_MODE || 'preview').toLowerCase();
+// Only trust an embedded preview if it's at least this big on the long edge
+// (Sony ARW embeds a full-res ~6000px JPEG; some bodies embed only a small one).
+const MIN_PREVIEW_EDGE = parseInt(process.env.MIN_PREVIEW_EDGE || '2400', 10);
+// dcraw interpolation quality for the fallback path. 1 (VNG) is several times
+// faster than 3 (AHD) and visually identical once downscaled to 3000px + JPEG.
+const DCRAW_QUALITY = process.env.DCRAW_QUALITY || '1';
+
+/** Extract the embedded JPEG preview bytes from a RAW temp file (or null). */
+function extractEmbeddedPreview(tmpPath) {
+  const extractTag = (tag) =>
+    new Promise((resolve) => {
+      const proc = spawn('exiftool', ['-b', `-${tag}`, tmpPath]);
+      const chunks = [];
+      proc.stdout.on('data', (c) => chunks.push(c));
+      proc.on('error', () => resolve(null));
+      proc.on('close', () => {
+        const buf = Buffer.concat(chunks);
+        resolve(buf.length > 0 ? buf : null);
+      });
+    });
+  return (async () => {
+    return (
+      (await extractTag('PreviewImage')) ||
+      (await extractTag('JpgFromRaw')) ||
+      (await extractTag('ThumbnailImage'))
+    );
+  })();
+}
+
+/** Demosaic a RAW temp file to a 16-bit TIFF buffer via dcraw_emu. */
+function demosaicToTiff(tmpPath, filename) {
+  const tiffOut = `${tmpPath}.tiff`;
+  return new Promise((resolve, reject) => {
+    const proc = spawn('dcraw_emu', ['-w', '-T', '-q', DCRAW_QUALITY, '-o', '1', '-Z', tiffOut, tmpPath]);
+    const errChunks = [];
+    proc.stderr.on('data', (c) => errChunks.push(c));
+    proc.on('error', reject);
+    proc.on('close', async (code) => {
+      if (code !== 0) {
+        reject(new Error(`dcraw_emu exited ${code}: ${Buffer.concat(errChunks).toString().slice(0, 500)}`));
+        return;
+      }
+      try {
+        const tiff = await fs.readFile(tiffOut);
+        fs.unlink(tiffOut).catch(() => {});
+        resolve(tiff);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
+
 app.post('/convert', async (req, res) => {
   // Auth: main app must include the shared secret. This keeps the worker from
   // being abused by random internet traffic.
@@ -120,55 +177,37 @@ app.post('/convert', async (req, res) => {
 
     const rawBuf = Buffer.from(await file.arrayBuffer());
 
-    // 3. Run dcraw_emu against a temp file. The current Debian libraw-bin
-    // build of dcraw_emu rejects the classic `-c` (stdout) + numeric-arg
-    // combination with "Non-numeric argument". Switching to file-based
-    // output via -Z is more compatible and avoids stdout-buffer issues
-    // on large 16-bit TIFFs anyway.
-    //
-    // Flags:
-    //   -w   use camera white balance
-    //   -T   write TIFF (16-bit) instead of PPM
-    //   -q3  AHD interpolation, highest quality (no space — some
-    //        dcraw_emu builds need flag+value concatenated)
-    //   -o1  sRGB output color space
-    //   -Z   explicit output file path (rather than stdout)
     const tmp = join(tmpdir(), `${randomUUID()}-${src.filename}`);
-    const tiffOut = `${tmp}.tiff`;
     await fs.writeFile(tmp, rawBuf);
-    log('decoding', { bytes: rawBuf.byteLength });
 
-    await new Promise((resolve, reject) => {
-      const proc = spawn('dcraw_emu', [
-        '-w',
-        '-T',
-        '-q', '3',
-        '-o', '1',
-        '-Z', tiffOut,
-        tmp,
-      ]);
-      const errChunks = [];
-      proc.stderr.on('data', (c) => errChunks.push(c));
-      proc.on('error', reject);
-      proc.on('close', (code) => {
-        if (code !== 0) {
-          reject(new Error(`dcraw_emu exited ${code}: ${Buffer.concat(errChunks).toString().slice(0, 500)}`));
-        } else {
-          resolve();
+    // 3. Get a source image. Preview-first: extract the camera's embedded
+    // full-size JPEG (near-instant, no demosaic) and only fall back to a dcraw
+    // decode when there's no usable preview. The embedded JPEG is the camera's
+    // own render at the captured exposure — ideal for HDR merge + AI enhance,
+    // and far faster than AHD demosaicing every frame.
+    let sourceBuf = null;
+    let method = 'embedded-preview';
+    if (CONVERT_MODE !== 'demosaic') {
+      const preview = await extractEmbeddedPreview(tmp);
+      if (preview) {
+        const pm = await sharp(preview).metadata().catch(() => null);
+        if (pm && Math.max(pm.width || 0, pm.height || 0) >= MIN_PREVIEW_EDGE) {
+          sourceBuf = preview;
+          log('using_embedded_preview', { preview_edge: Math.max(pm.width || 0, pm.height || 0) });
         }
-      });
-    });
+      }
+    }
+    if (!sourceBuf) {
+      method = 'libraw/dcraw_emu';
+      log('decoding', { bytes: rawBuf.byteLength, q: DCRAW_QUALITY });
+      sourceBuf = await demosaicToTiff(tmp, src.filename);
+    }
 
-    // Read decoded TIFF from disk
-    const tiff = await fs.readFile(tiffOut);
-
-    // Best-effort cleanup of temp files
     fs.unlink(tmp).catch(() => {});
-    fs.unlink(tiffOut).catch(() => {});
 
-    // 4. TIFF → JPEG via Sharp (sRGB, 3000px long edge, q92)
-    log('encoding_jpeg', { tiff_bytes: tiff.byteLength });
-    const jpeg = await sharp(tiff)
+    // 4. → JPEG via Sharp (sRGB, 3000px long edge, q92)
+    log('encoding_jpeg', { src_bytes: sourceBuf.byteLength, method });
+    const jpeg = await sharp(sourceBuf)
       .rotate()
       .resize({ width: 3000, height: 3000, fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 92, mozjpeg: true, progressive: true })
@@ -202,7 +241,7 @@ app.post('/convert', async (req, res) => {
       byte_size: jpeg.byteLength,
       processing_status: 'pending',
       uploaded_by: src.uploaded_by,
-      exif: { converted_from: src.filename, decoder: 'libraw/dcraw_emu' },
+      exif: { converted_from: src.filename, decoder: method },
     });
     if (insErr) throw new Error(`insert_failed: ${insErr.message}`);
 
@@ -263,27 +302,9 @@ app.post('/preview', async (req, res) => {
     await fs.writeFile(tmp, rawBuf);
     log('extracting_preview', { bytes: rawBuf.byteLength });
 
-    // Extract the embedded JPEG preview with exiftool. The libraw-bin build of
-    // dcraw_emu in this image rejects `-e` ("Unknown option -e"), and exiftool
-    // is the most reliable way to pull the camera preview across RAW formats.
-    // Sony ARW stores it under PreviewImage; other bodies use JpgFromRaw or
-    // ThumbnailImage. `-b` streams the raw bytes to stdout.
-    const extractTag = (tag) =>
-      new Promise((resolve, reject) => {
-        const proc = spawn('exiftool', ['-b', `-${tag}`, tmp]);
-        const chunks = [];
-        proc.stdout.on('data', (c) => chunks.push(c));
-        proc.on('error', reject);
-        proc.on('close', () => {
-          const buf = Buffer.concat(chunks);
-          resolve(buf.length > 0 ? buf : null);
-        });
-      });
-
-    const thumbBytes =
-      (await extractTag('PreviewImage')) ||
-      (await extractTag('JpgFromRaw')) ||
-      (await extractTag('ThumbnailImage'));
+    // Extract the camera's embedded JPEG preview (Sony ARW → PreviewImage, other
+    // bodies → JpgFromRaw / ThumbnailImage) via the shared helper.
+    const thumbBytes = await extractEmbeddedPreview(tmp);
     if (!thumbBytes) throw new Error('no_preview_extracted');
 
     // Resize to a sane preview size for the UI.

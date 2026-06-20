@@ -289,8 +289,9 @@ export function PhotoManager({
         refresh(); // swap each ARW card for its JPEG as it lands
       }
     }
-    // Two lanes: keeps one request queued at the worker without dog-piling it.
-    Promise.all([bgWorker(), bgWorker()]).finally(() => {
+    // Run several lanes so the worker's parallel convert slots stay full (it now
+    // converts preview-first, so a batch finishes far faster).
+    Promise.all(Array.from({ length: 4 }, () => bgWorker())).finally(() => {
       bgRunning.current = false;
       setBgConvert(null);
       refresh();
