@@ -25,6 +25,7 @@ import {
   ChevronRight,
   Copy,
   ShieldCheck,
+  Archive,
   X,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -42,6 +43,7 @@ import {
 } from '@/lib/photos/bracket-grouping';
 import { groupByRoom } from '@/lib/photos/rooms';
 import { useInView } from '@/lib/hooks/use-in-view';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 interface JobView {
   id: string;
@@ -1433,8 +1435,22 @@ function Stage3({
     }
   }
 
-  const hasRooms = photos.some((p) => (p as any).room_type);
-  const roomGroups = useMemo(() => groupByRoom(photos as any[]), [photos]);
+  const [showArchived, setShowArchived] = useState(false);
+  // Rejected / deduped frames (is_selected === false) render faded and clutter
+  // the gallery — tuck them behind an "Archived" toggle. Approved + undecided
+  // stay in the main view. Approve/reset on an archived card un-archives it.
+  const archivedPhotos = useMemo(() => photos.filter((p) => p.is_selected === false), [photos]);
+  const activePhotos = useMemo(() => photos.filter((p) => p.is_selected !== false), [photos]);
+  const shown = showArchived ? archivedPhotos : activePhotos;
+
+  // If the last archived photo is restored while viewing Archived, drop back to
+  // the gallery so the user isn't stranded on an empty view.
+  useEffect(() => {
+    if (showArchived && archivedPhotos.length === 0) setShowArchived(false);
+  }, [showArchived, archivedPhotos.length]);
+
+  const hasRooms = activePhotos.some((p) => (p as any).room_type);
+  const roomGroups = useMemo(() => groupByRoom(shown as any[]), [shown]);
 
   async function organizeByRoom() {
     setOrganizing(true);
@@ -1511,7 +1527,28 @@ function Stage3({
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-2">
-            {hasRooms && (
+            {(archivedPhotos.length > 0 || showArchived) && (
+              <button
+                onClick={() => setShowArchived((v) => !v)}
+                className={`text-xs font-medium px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 transition ${
+                  showArchived
+                    ? 'bg-ocean-600 text-white hover:bg-ocean-500'
+                    : 'ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+                title={showArchived ? 'Back to the gallery' : 'View archived (rejected / deduped) photos'}
+              >
+                {showArchived ? (
+                  <>
+                    <ChevronRight className="h-3.5 w-3.5 rotate-180" /> Back to gallery
+                  </>
+                ) : (
+                  <>
+                    <Archive className="h-3.5 w-3.5" /> Archived ({archivedPhotos.length})
+                  </>
+                )}
+              </button>
+            )}
+            {hasRooms && !showArchived && (
               <button
                 onClick={() => setByRoom((v) => !v)}
                 className="text-xs font-medium px-2.5 py-1.5 rounded-md ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50"
@@ -1630,11 +1667,32 @@ function Stage3({
         </div>
       )}
 
-      {photos.length === 0 && processingJobs.length === 0 ? (
-        <div className="card p-8 text-center text-sm text-slate-500">
-          Nothing AI-processed yet. Run Stage 2 first.
+      {showArchived && (
+        <div className="card border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+          Archived photos (rejected or de-duplicated) are hidden from the gallery and excluded from
+          delivery. Approve or un-reject any to restore it.
         </div>
-      ) : byRoom && hasRooms ? (
+      )}
+
+      {shown.length === 0 && (showArchived || processingJobs.length === 0) ? (
+        <div className="card">
+          {showArchived ? (
+            <EmptyState
+              compact
+              icon={Archive}
+              title="Nothing archived"
+              description="Rejected or de-duplicated photos will collect here, out of the way."
+            />
+          ) : (
+            <EmptyState
+              compact
+              icon={Sparkles}
+              title="Nothing to review yet"
+              description="Enhanced photos will show up here as they finish."
+            />
+          )}
+        </div>
+      ) : byRoom && hasRooms && !showArchived ? (
         <div className="space-y-8">
           {processingJobs.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -1668,14 +1726,13 @@ function Stage3({
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {processingJobs.map((j) => (
-            <ProcessingTile key={j.id} job={j} />
-          ))}
-          {photos.map((p, i) => (
+          {!showArchived &&
+            processingJobs.map((j) => <ProcessingTile key={j.id} job={j} />)}
+          {shown.map((p) => (
             <ProcessedCard
               key={p.id}
               photo={p}
-              onOpen={() => openViewer(i)}
+              onOpen={() => openViewer(indexById.get(p.id) ?? 0)}
               urls={photoUrls}
               setUrls={setPhotoUrls}
               onChange={onChange}
