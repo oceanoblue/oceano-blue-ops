@@ -1,32 +1,34 @@
 import type { Photo } from '@/lib/supabase/database.types';
-import { groupPhotosIntoBrackets } from './bracket-grouping';
+import { groupWithExif, type ExifSnapshot } from './bracket-grouping';
 import { detectBrackets } from '@/lib/ai/bracket-detect';
 
 /**
  * Real estate bracket detection over Production OS `assets` rows.
  *
- * This deliberately REUSES the two existing detectors instead of
- * reimplementing them:
+ * The Photo Rescue pipeline shares the SAME bracket-grouping engine as the
+ * Orders pipeline (`groupWithExif` in lib/photos/bracket-grouping.ts), so the
+ * two stay at parity: brackets and interspersed detail singles are separated
+ * correctly even when shot in one continuous filename run, using the capture
+ * time-gap (burst detection) plus the exposure-bias cycle. Falls back to the
+ * filename count heuristic per run when EXIF is unavailable.
  *
- *  - `groupPhotosIntoBrackets` (lib/photos/bracket-grouping.ts) — filename
- *    sequence runs of 3/5/7. Fast and ~95% correct for photographer uploads.
- *  - `detectBrackets` (lib/ai/bracket-detect.ts) — EXIF signature: capture
- *    timestamp window + same camera/lens/focal length + distinct exposure
- *    bias values.
+ * On top of the grouping we attach a confidence score and a `review_required`
+ * flag — the rescue-specific layer that lets a human verify uncertain groups:
  *
- * Both functions read only `id`, `filename`, `exif`, `created_at` (and
- * `byte_size`) — all present on `assets` — so we pass asset rows through with a
- * structural cast. We then reconcile the two results into a single set of
- * groups, each with a confidence score and a `review_required` flag:
- *
- *   filename run CONFIRMED by EXIF brackets   → 0.97  (no review)
+ *   filename run confirmed by distinct-EV EXIF → 0.95  (no review)
  *   filename run, no EXIF available to confirm → 0.82  (no review)
- *   filename run, EXIF present but disagrees   → 0.60  (review)
+ *   filename run with partial/ambiguous EXIF   → 0.70  (review)
  *   EXIF-only group (filenames not sequential) → 0.65  (review)
  *
- * Groups below REVIEW_THRESHOLD (0.80) are flagged for human review — this is
- * the core of the "Real Estate Photo Rescue" fix. The threshold sits below the
- * filename-only score (0.82, reliable) and above the uncertain scores (≤0.65).
+ * Groups below REVIEW_THRESHOLD (0.80) are flagged for human review. The
+ * threshold sits below the filename-only score (0.82, reliable) and above the
+ * uncertain scores (≤0.70). The EXIF-only recovery still uses `detectBrackets`
+ * (a sliding capture-time window) over the frames the primary pass left as
+ * singles, so renamed/interleaved sequences are still recovered.
+ *
+ * `groupWithExif`/`detectBrackets` read only `id`, `filename`, `exif`,
+ * `created_at` — all present on `assets` — so we pass asset rows through with a
+ * structural cast.
  */
 
 export interface AssetLike {
@@ -83,9 +85,19 @@ function exposureBiasOf(asset: AssetLike): number | null {
   return Number(m[1]) / (m[2] ? Number(m[2]) : 1);
 }
 
-function hasUsableExif(asset: AssetLike): boolean {
-  const e = asset.exif as ExifLike | null | undefined;
-  return !!e && (e.DateTimeOriginal != null || e.ExposureBiasValue != null);
+/** Build the ExifSnapshot the canonical grouper expects from raw asset EXIF. */
+function snapshotOf(asset: AssetLike): ExifSnapshot {
+  const dto = (asset.exif as ExifLike | null | undefined)?.DateTimeOriginal;
+  let takenAt: number | null = null;
+  if (typeof dto === 'string') {
+    // EXIF "YYYY:MM:DD HH:MM:SS" → ISO; an already-ISO string passes through.
+    const iso = dto.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3');
+    const t = Date.parse(iso);
+    if (!Number.isNaN(t)) takenAt = t;
+  } else if (dto instanceof Date) {
+    takenAt = dto.getTime();
+  }
+  return { takenAt, exposureBias: exposureBiasOf(asset) };
 }
 
 /** True if EXIF make/model looks like a drone (DJI etc.). */
@@ -136,45 +148,49 @@ function makeGroup(
 
 export function detectAssetBracketGroups(assets: AssetLike[]): AssetDetectionResult {
   const byId = new Map(assets.map((a) => [a.id, a]));
+  const exif: Record<string, ExifSnapshot> = {};
+  for (const a of assets) exif[a.id] = snapshotOf(a);
 
-  // Reuse the two existing detectors. They only touch fields assets also have.
-  const fn = groupPhotosIntoBrackets(assets as unknown as Photo[]);
-  const exifGroups = [...detectBrackets(assets as unknown as Photo[]).values()];
-  const exifSets = exifGroups.map((ids) => new Set(ids));
-
-  const exactExif = (members: string[]) => {
-    const ms = new Set(members);
-    return exifSets.some((s) => s.size === ms.size && [...ms].every((id) => s.has(id)));
-  };
+  // 1) Canonical EXIF-aware grouping (the SAME engine the Orders pipeline uses):
+  //    consecutive filename runs, segmented by capture-time bursts + the
+  //    exposure-bias cycle so an interspersed detail single is never absorbed
+  //    into a neighbouring bracket. Runs without complete EXIF fall back to the
+  //    filename count heuristic inside groupWithExif.
+  const primary = groupWithExif(assets as unknown as Photo[], exif);
 
   const used = new Set<string>();
   const groups: DetectedGroup[] = [];
 
-  // 1) Filename-sequence brackets (highest signal), confirmed or not by EXIF.
-  for (const b of fn.brackets) {
-    const members = b.photos.map((p) => p.id);
-    members.forEach((id) => used.add(id));
-    const anyExif = members.some((id) => hasUsableExif(byId.get(id)!));
+  for (const b of primary.brackets) {
+    const ids = b.photos.map((p) => p.id);
+    ids.forEach((id) => used.add(id));
+    const members = ids.map((id) => byId.get(id)!);
+    const biases = members.map((m) => exposureBiasOf(m)).filter((v): v is number => v !== null);
+    const allBias = biases.length === members.length;
+    const distinctBias = new Set(biases).size === biases.length;
 
-    if (anyExif && exactExif(members)) {
+    if (allBias && distinctBias) {
       groups.push(
-        makeGroup(members, byId, 0.97, 'filename+exif', 'Sequential filenames confirmed by EXIF exposure bracket.')
+        makeGroup(ids, byId, 0.95, 'filename+exif', 'Sequential filenames confirmed by EXIF exposure bracket (distinct bias per frame).')
       );
-    } else if (anyExif) {
+    } else if (biases.length === 0) {
       groups.push(
-        makeGroup(members, byId, 0.6, 'filename', 'Sequential filenames, but EXIF does not confirm a matching bracket — please verify.')
+        makeGroup(ids, byId, 0.82, 'filename', 'Sequential filenames (no EXIF available to confirm).')
       );
     } else {
       groups.push(
-        makeGroup(members, byId, 0.82, 'filename', 'Sequential filenames (no EXIF available to confirm).')
+        makeGroup(ids, byId, 0.7, 'filename', 'Sequential filenames with partial or ambiguous EXIF — please verify.')
       );
     }
   }
 
-  // 2) EXIF-only groups recovered from photos the filename pass left as singles.
-  for (const ids of exifGroups) {
+  // 2) EXIF-only recovery: brackets whose filenames are not sequential (renamed
+  //    or interleaved from two bodies) get pulled out of the leftover singles by
+  //    a sliding capture-time window + distinct exposure bias.
+  const leftovers = primary.singles.map((p) => byId.get(p.id)!).filter(Boolean);
+  for (const ids of detectBrackets(leftovers as unknown as Photo[]).values()) {
     if (ids.length < 3) continue;
-    if (ids.some((id) => used.has(id))) continue; // overlaps a filename bracket
+    if (ids.some((id) => used.has(id))) continue;
     ids.forEach((id) => used.add(id));
     groups.push(
       makeGroup(ids, byId, 0.65, 'exif', 'Grouped only by EXIF timestamp + exposure bias; filenames are not sequential — please verify.')
