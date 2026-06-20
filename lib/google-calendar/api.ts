@@ -53,6 +53,28 @@ export async function fetchBusyRanges(
     logEvent('gcal.freeBusy', 'no_token', { teamMemberId });
     return [];
   }
+
+  // Enumerate the user's calendars so events on ANY calendar (not just
+  // 'primary') block availability. Falls back to 'primary' if the list call
+  // fails (e.g. scope not yet re-granted).
+  let calendarIds: string[] = ['primary'];
+  try {
+    const lr = await fetch(
+      'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250&fields=items(id,accessRole)',
+      { headers: { authorization: `Bearer ${token}` } }
+    );
+    if (lr.ok) {
+      const ld: any = await lr.json();
+      const ids = (ld.items ?? [])
+        .filter((c: any) => c.accessRole && c.accessRole !== 'none')
+        .map((c: any) => c.id)
+        .filter(Boolean);
+      if (ids.length) calendarIds = ids.slice(0, 50); // freeBusy caps at 50 items
+    }
+  } catch {
+    /* keep primary fallback */
+  }
+
   const r = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
     method: 'POST',
     headers: {
@@ -62,7 +84,7 @@ export async function fetchBusyRanges(
     body: JSON.stringify({
       timeMin: startIso,
       timeMax: endIso,
-      items: [{ id: 'primary' }],
+      items: calendarIds.map((id) => ({ id })),
     }),
   });
   if (!r.ok) {
@@ -73,11 +95,15 @@ export async function fetchBusyRanges(
     return [];
   }
   const data: any = await r.json();
-  const busy: FreeBusyRange[] = data?.calendars?.primary?.busy ?? [];
+  const cals = data?.calendars ?? {};
+  const busy: FreeBusyRange[] = [];
+  for (const key of Object.keys(cals)) {
+    for (const b of cals[key]?.busy ?? []) busy.push(b);
+  }
   logEvent('gcal.freeBusy', 'ok', {
     teamMemberId,
+    calendars: calendarIds.length,
     busyCount: busy.length,
-    errors: data?.calendars?.primary?.errors ?? null,
   });
   return busy;
 }
