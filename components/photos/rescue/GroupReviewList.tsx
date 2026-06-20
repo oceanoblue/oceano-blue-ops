@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, GitMerge, Scissors, Loader2, AlertTriangle, Layers, Camera } from 'lucide-react';
+import { Check, GitMerge, Scissors, Loader2, AlertTriangle, Layers, Camera, Archive, ArchiveRestore } from 'lucide-react';
 import { SCENE_TYPES, sceneBadgeClass } from '@/lib/photos/scene';
 
 export type ReviewItem = {
@@ -73,6 +73,12 @@ export function GroupReviewList({
   const [busy, setBusy] = useState(false);
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [selectedSingles, setSelectedSingles] = useState<Set<string>>(new Set());
+  const [showArchived, setShowArchived] = useState(false);
+
+  // Archived (rejected) singles are hidden from the working view to keep it
+  // uncluttered, surfaced on demand behind the "Archived" toggle.
+  const activeSingles = singles.filter((s) => s.status !== 'rejected');
+  const archivedSingles = singles.filter((s) => s.status === 'rejected');
 
   async function act(payload: Record<string, unknown>) {
     setBusy(true);
@@ -123,7 +129,7 @@ export function GroupReviewList({
         <h2 className="font-semibold text-slate-900">
           Bracket review
           <span className="ml-2 text-sm font-normal text-slate-500">
-            {groups.length} groups · {needsReview} need review · {singles.length} singles
+            {groups.length} groups · {needsReview} need review · {activeSingles.length} singles
           </span>
         </h2>
         <button
@@ -245,45 +251,89 @@ export function GroupReviewList({
       {/* Singles */}
       {singles.length > 0 && (
         <div className="card p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900">Singles ({singles.length})</h3>
-            <button
-              className="btn-secondary !px-2.5 !py-1.5 text-xs"
-              disabled={busy || selectedSingles.size < 2}
-              onClick={() => act({ action: 'create_group', job_id: jobId, asset_ids: [...selectedSingles] })}
-            >
-              <Layers className="h-3.5 w-3.5" /> Group selected ({selectedSingles.size})
-            </button>
-          </div>
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {singles.map((s) => (
-              <li key={s.id} className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={selectedSingles.has(s.id)}
-                  onChange={() => toggle(selectedSingles, s.id, setSelectedSingles)}
-                />
-                <Thumb url={s.thumb_url} alt={s.filename} />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <span className={`truncate ${s.status === 'rejected' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                    {s.filename}
-                  </span>
-                  <SceneBadge scene={s.scene} />
-                </div>
-                <select
-                  className="rounded border-slate-200 text-xs"
-                  value={s.scene ?? 'unknown'}
-                  disabled={busy}
-                  title="Scene"
-                  onChange={(e) => setScene(s.id, e.target.value)}
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-900">Singles ({activeSingles.length})</h3>
+            <div className="flex items-center gap-2">
+              {archivedSingles.length > 0 && (
+                <button
+                  className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                  onClick={() => setShowArchived((v) => !v)}
                 >
-                  {SCENE_TYPES.map((sc) => (
-                    <option key={sc} value={sc}>{sc}</option>
-                  ))}
-                </select>
-              </li>
-            ))}
-          </ul>
+                  <Archive className="h-3.5 w-3.5" />
+                  {showArchived ? 'Hide archived' : `Archived (${archivedSingles.length})`}
+                </button>
+              )}
+              <button
+                className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                disabled={busy || selectedSingles.size < 2}
+                onClick={() => act({ action: 'create_group', job_id: jobId, asset_ids: [...selectedSingles] })}
+              >
+                <Layers className="h-3.5 w-3.5" /> Group selected ({selectedSingles.size})
+              </button>
+            </div>
+          </div>
+
+          {activeSingles.length > 0 ? (
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {activeSingles.map((s) => (
+                <li key={s.id} className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={selectedSingles.has(s.id)}
+                    onChange={() => toggle(selectedSingles, s.id, setSelectedSingles)}
+                  />
+                  <Thumb url={s.thumb_url} alt={s.filename} />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-slate-700">{s.filename}</span>
+                    <SceneBadge scene={s.scene} />
+                  </div>
+                  <select
+                    className="rounded border-slate-200 text-xs"
+                    value={s.scene ?? 'unknown'}
+                    disabled={busy}
+                    title="Scene"
+                    onChange={(e) => setScene(s.id, e.target.value)}
+                  >
+                    {SCENE_TYPES.map((sc) => (
+                      <option key={sc} value={sc}>{sc}</option>
+                    ))}
+                  </select>
+                  <button
+                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
+                    title="Archive"
+                    disabled={busy}
+                    onClick={() => act({ action: 'reject_asset', asset_id: s.id })}
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-slate-400">No active singles.</p>
+          )}
+
+          {showArchived && archivedSingles.length > 0 && (
+            <div className="mt-3 border-t border-slate-100 pt-3">
+              <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Archived</h4>
+              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {archivedSingles.map((s) => (
+                  <li key={s.id} className="flex items-center gap-2 text-xs opacity-70">
+                    <Thumb url={s.thumb_url} alt={s.filename} />
+                    <span className="min-w-0 flex-1 truncate text-slate-500 line-through">{s.filename}</span>
+                    <button
+                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-ocean-700 disabled:opacity-50"
+                      title="Unarchive"
+                      disabled={busy}
+                      onClick={() => act({ action: 'restore_asset', asset_id: s.id })}
+                    >
+                      <ArchiveRestore className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -21,6 +21,7 @@ const Body = z.discriminatedUnion('action', [
   z.object({ action: z.literal('set_role'), group_id: z.string().uuid(), asset_id: z.string().uuid(), role: z.enum(ROLES) }),
   z.object({ action: z.literal('mark_reviewed'), group_id: z.string().uuid() }),
   z.object({ action: z.literal('reject_asset'), asset_id: z.string().uuid() }),
+  z.object({ action: z.literal('restore_asset'), asset_id: z.string().uuid() }),
 ]);
 
 export async function POST(request: Request) {
@@ -186,6 +187,23 @@ export async function POST(request: Request) {
       }
       if (rejected[0].job_id) {
         await logEvent(rejected[0].job_id, 'asset_rejected', 'Rejected single asset', { asset_id: body.asset_id });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    case 'restore_asset': {
+      // Unarchive: move a rejected single back into the ungrouped pool.
+      const { data: restored } = await admin
+        .from('assets')
+        .update({ status: 'indexed' })
+        .eq('id', body.asset_id)
+        .eq('status', 'rejected')
+        .select('id, job_id');
+      if (!restored || restored.length === 0) {
+        return NextResponse.json({ error: 'asset_not_found' }, { status: 404 });
+      }
+      if (restored[0].job_id) {
+        await logEvent(restored[0].job_id, 'asset_restored', 'Restored archived asset', { asset_id: body.asset_id });
       }
       return NextResponse.json({ ok: true });
     }

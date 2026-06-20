@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { Images } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { NewReJobButton } from '@/components/photos/rescue/NewReJobButton';
 
 export const dynamic = 'force-dynamic';
@@ -17,16 +19,14 @@ export default async function PhotoRescueIndex() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ocean-950">Real Estate Photo Rescue</h1>
-          <p className="text-sm text-slate-600">
-            Ingest a shoot, auto-detect HDR brackets with confidence scores, fix
-            uncertain groups, and run delivery QC.
-          </p>
-        </div>
+      <PageHeader
+        eyebrow="Production"
+        title="Real Estate Photo Rescue"
+        subtitle="Ingest a shoot, auto-detect HDR brackets with confidence scores, fix uncertain groups, and run delivery QC."
+        icon={Images}
+      >
         <NewReJobButton />
-      </div>
+      </PageHeader>
 
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
