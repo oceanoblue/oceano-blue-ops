@@ -81,50 +81,56 @@ export interface GroupingOptions {
   fixedSize?: 3 | 5 | 7;
 }
 
+/** Sort photos by (filename base, sequence number). */
+function sortBySequence(photos: Photo[]): Photo[] {
+  return [...photos]
+    .map((p) => ({ photo: p, seq: parseSequence(p.filename) }))
+    .sort((a, b) => {
+      if (!a.seq || !b.seq) return a.photo.filename.localeCompare(b.photo.filename);
+      if (a.seq.base !== b.seq.base) return a.seq.base.localeCompare(b.seq.base);
+      return a.seq.num - b.seq.num;
+    })
+    .map((s) => s.photo);
+}
+
+/** Chunk one consecutive run into brackets/singles by count (filename heuristic). */
+function chunkRunByFilename(
+  run: Photo[],
+  fixedSize: 3 | 5 | 7 | undefined,
+  brackets: BracketGroup[],
+  singles: Photo[]
+): void {
+  let j = 0;
+  while (j < run.length) {
+    const remaining = run.length - j;
+    const size: 0 | 3 | 5 | 7 = fixedSize
+      ? remaining >= fixedSize
+        ? fixedSize
+        : 0
+      : pickAutoSize(remaining);
+    if (size !== 0) {
+      brackets.push({ id: `bracket-${run[j].id}`, photos: run.slice(j, j + size), detectedSize: size });
+      j += size;
+    } else {
+      singles.push(run[j]);
+      j++;
+    }
+  }
+}
+
 export function groupPhotosIntoBrackets(
   photos: Photo[],
   opts?: GroupingOptions
 ): GroupingResult {
-  // Sort by (base, num) so consecutive shots cluster together.
-  const sortable: Array<{ photo: Photo; seq: ReturnType<typeof parseSequence> }> =
-    photos.map((p) => ({ photo: p, seq: parseSequence(p.filename) }));
-
-  sortable.sort((a, b) => {
-    if (!a.seq || !b.seq) return a.photo.filename.localeCompare(b.photo.filename);
-    if (a.seq.base !== b.seq.base) return a.seq.base.localeCompare(b.seq.base);
-    return a.seq.num - b.seq.num;
-  });
-
-  const sorted = sortable.map((s) => s.photo);
+  const sorted = sortBySequence(photos);
   const brackets: BracketGroup[] = [];
   const singles: Photo[] = [];
-
   // Process each maximal consecutive run independently so a run of N frames is
   // split into uniform brackets (3+3) instead of a greedy largest-run grab
   // (5+1). A fixed Count overrides the per-run heuristic entirely.
   for (const run of consecutiveRuns(sorted)) {
-    let j = 0;
-    while (j < run.length) {
-      const remaining = run.length - j;
-      const size: 0 | 3 | 5 | 7 = opts?.fixedSize
-        ? remaining >= opts.fixedSize
-          ? opts.fixedSize
-          : 0
-        : pickAutoSize(remaining);
-      if (size !== 0) {
-        brackets.push({
-          id: `bracket-${run[j].id}`,
-          photos: run.slice(j, j + size),
-          detectedSize: size,
-        });
-        j += size;
-      } else {
-        singles.push(run[j]);
-        j++;
-      }
-    }
+    chunkRunByFilename(run, opts?.fixedSize, brackets, singles);
   }
-
   return { brackets, singles };
 }
 
@@ -249,37 +255,120 @@ export function applyExifGrouping(
 // is a lone single or a distinct-EV 3/5/7 bracket). Otherwise the original
 // bracket is kept, so it can never make grouping worse.
 
+// Brackets fire in a sub-second burst; a detail single is a separate press with
+// a real pause around it. A capture-time gap larger than this starts a new group.
+const BURST_GAP_MS = 1500;
+
+/** Split a group into sub-runs wherever the exposure-bias value repeats. */
+function splitByEvCycle(photos: Photo[], exif: Record<string, ExifSnapshot>): Photo[][] {
+  const groups: Photo[][] = [];
+  let cur: Photo[] = [];
+  let seen = new Set<number>();
+  for (const p of photos) {
+    const ev = exif[p.id]?.exposureBias;
+    if (typeof ev === 'number' && seen.has(ev)) {
+      groups.push(cur);
+      cur = [p];
+      seen = new Set([ev]);
+    } else {
+      cur.push(p);
+      if (typeof ev === 'number') seen.add(ev);
+    }
+  }
+  if (cur.length) groups.push(cur);
+  return groups;
+}
+
+/**
+ * Segment a run into brackets + singles using capture time and exposure bias.
+ * Primary signal is the burst time-gap (cleanly isolates detail singles); within
+ * each burst, the exposure-bias cycle separates back-to-back brackets and catches
+ * a rapid in-burst single. Returns null when there isn't enough EXIF to be sure
+ * (no timestamps and no exposure bias) or when a piece isn't a clean single /
+ * distinct-EV 3·5·7 bracket — so callers fall back rather than guess.
+ */
 function segmentByExifCycle(
   photos: Photo[],
   exif: Record<string, ExifSnapshot>
 ): Photo[][] | null {
-  const evs = photos.map((p) => exif[p.id]?.exposureBias);
-  if (evs.some((e) => typeof e !== 'number')) return null; // need EXIF for all frames
+  const haveAllEv = photos.every((p) => typeof exif[p.id]?.exposureBias === 'number');
+  const haveAllTs = photos.every((p) => typeof exif[p.id]?.takenAt === 'number');
+  if (!haveAllEv && !haveAllTs) return null;
 
-  const groups: Photo[][] = [];
-  let cur: Photo[] = [];
-  let seen = new Set<number>();
-  for (let i = 0; i < photos.length; i++) {
-    const ev = evs[i] as number;
-    if (seen.has(ev)) {
-      groups.push(cur);
-      cur = [photos[i]];
-      seen = new Set([ev]);
-    } else {
+  // 1) Cluster by capture-time gaps (a clear single shows up as its own cluster).
+  let clusters: Photo[][];
+  if (haveAllTs) {
+    clusters = [];
+    let cur: Photo[] = [];
+    for (let i = 0; i < photos.length; i++) {
+      if (i > 0) {
+        const gap = (exif[photos[i].id]!.takenAt as number) - (exif[photos[i - 1].id]!.takenAt as number);
+        if (gap > BURST_GAP_MS) {
+          clusters.push(cur);
+          cur = [];
+        }
+      }
       cur.push(photos[i]);
-      seen.add(ev);
     }
+    if (cur.length) clusters.push(cur);
+  } else {
+    clusters = [photos];
   }
-  if (cur.length) groups.push(cur);
 
-  // Every piece must be clean: a lone single, or a distinct-EV bracket size.
+  // 2) Within each burst, split by the exposure-bias cycle when EV is available.
+  const groups: Photo[][] = [];
+  for (const c of clusters) {
+    if (haveAllEv) groups.push(...splitByEvCycle(c, exif));
+    else groups.push(c);
+  }
+
+  // 3) Every piece must be a lone single or a distinct-EV 3·5·7 bracket.
   for (const g of groups) {
     if (g.length === 1) continue;
     if (!BRACKET_SIZES.includes(g.length as 3 | 5 | 7)) return null;
-    const distinct = new Set(g.map((p) => exif[p.id]?.exposureBias));
-    if (distinct.size !== g.length) return null;
+    if (haveAllEv) {
+      const distinct = new Set(g.map((p) => exif[p.id]?.exposureBias));
+      if (distinct.size !== g.length) return null;
+    }
   }
   return groups;
+}
+
+/**
+ * Primary EXIF-aware grouping. Splits photos into consecutive filename runs,
+ * then for each run whose frames ALL have an exposure bias, segments the run by
+ * the exposure-bias cycle (correctly separating brackets from interspersed
+ * detail singles even when everything was shot in one continuous numbering
+ * sequence). Runs without complete EXIF fall back to the filename count
+ * heuristic. This is the robust path for mixed bracket + single sessions.
+ */
+export function groupWithExif(
+  photos: Photo[],
+  exif: Record<string, ExifSnapshot>
+): GroupingResult {
+  const sorted = sortBySequence(photos);
+  const brackets: BracketGroup[] = [];
+  const singles: Photo[] = [];
+
+  for (const run of consecutiveRuns(sorted)) {
+    const groups = segmentByExifCycle(run, exif);
+    if (groups) {
+      for (const g of groups) {
+        if (g.length === 1) {
+          singles.push(g[0]);
+        } else {
+          const s = [...g].sort(
+            (a, b) => (exif[a.id]?.exposureBias ?? 0) - (exif[b.id]?.exposureBias ?? 0)
+          );
+          brackets.push({ id: `bracket-${s[0].id}`, photos: s, detectedSize: g.length as 3 | 5 | 7 });
+        }
+      }
+    } else {
+      chunkRunByFilename(run, undefined, brackets, singles);
+    }
+  }
+
+  return { brackets, singles };
 }
 
 /**
