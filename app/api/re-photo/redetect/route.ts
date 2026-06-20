@@ -29,12 +29,14 @@ export async function POST(request: Request) {
 
   const { data: assets } = await admin
     .from('assets')
-    .select('id, filename, exif')
+    .select('id, filename, exif, created_at')
     .eq('job_id', job_id)
     .eq('media_type', 'photo')
     .eq('status', 'indexed');
 
-  const likes = (assets ?? []).filter((a: any) => a.filename).map((a: any) => ({ id: a.id, filename: a.filename, exif: a.exif }));
+  const likes = (assets ?? [])
+    .filter((a: any) => a.filename)
+    .map((a: any) => ({ id: a.id, filename: a.filename, exif: a.exif, created_at: a.created_at }));
   if (likes.length === 0) {
     return NextResponse.json({ ok: true, considered: 0, groups: 0, message: 'No ungrouped photos to detect.' });
   }

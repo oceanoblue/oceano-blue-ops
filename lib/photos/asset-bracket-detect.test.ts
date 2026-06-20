@@ -88,19 +88,42 @@ describe('detectAssetBracketGroups', () => {
     expect(groups[0].method).toBe('filename+exif');
   });
 
-  it('flags a filename run as review when EXIF is present but disagrees', () => {
-    // Sequential names, but EXIF has identical timestamps + identical bias, so
-    // the EXIF detector won't confirm a bracket -> medium confidence + review.
+  it('does NOT group sequential frames that share an exposure bias (not a bracket)', () => {
+    // Sequential names, identical timestamps + identical bias: three frames at
+    // the same exposure are not an HDR bracket, so the EXIF-aware engine keeps
+    // them as singles rather than inventing a low-confidence bracket.
     const assets = [
       asset('d1', 'DSC0001.ARW', { time: '2026:06:07 09:00:00', bias: 0, ...RIG }),
       asset('d2', 'DSC0002.ARW', { time: '2026:06:07 09:00:00', bias: 0, ...RIG }),
       asset('d3', 'DSC0003.ARW', { time: '2026:06:07 09:00:00', bias: 0, ...RIG }),
     ];
-    const { groups } = detectAssetBracketGroups(assets);
-    expect(groups).toHaveLength(1);
-    expect(groups[0].method).toBe('filename');
-    expect(groups[0].confidence).toBe(0.6);
-    expect(groups[0].reviewRequired).toBe(true);
+    const { groups, singleAssetIds } = detectAssetBracketGroups(assets);
+    expect(groups).toHaveLength(0);
+    expect(singleAssetIds.sort()).toEqual(['d1', 'd2', 'd3']);
+  });
+
+  it('separates brackets from interspersed detail singles in one continuous run', () => {
+    // The real "two 5-brackets, no singles" bug: a continuous filename sequence
+    // mixing 3-shot brackets with lone detail singles. Capture-time gaps isolate
+    // the singles; the exposure-bias cycle confirms each bracket.
+    const assets = [
+      // 3-shot bracket, fired in the same second
+      asset('m1', 'OBM0010.ARW', { time: '2026:06:07 10:00:00', bias: -2, ...RIG }),
+      asset('m2', 'OBM0011.ARW', { time: '2026:06:07 10:00:00', bias: 0, ...RIG }),
+      asset('m3', 'OBM0012.ARW', { time: '2026:06:07 10:00:00', bias: 2, ...RIG }),
+      // lone detail single, a few seconds later
+      asset('m4', 'OBM0013.ARW', { time: '2026:06:07 10:00:03', bias: 0, ...RIG }),
+      // another 3-shot bracket
+      asset('m5', 'OBM0014.ARW', { time: '2026:06:07 10:00:06', bias: -2, ...RIG }),
+      asset('m6', 'OBM0015.ARW', { time: '2026:06:07 10:00:06', bias: 0, ...RIG }),
+      asset('m7', 'OBM0016.ARW', { time: '2026:06:07 10:00:06', bias: 2, ...RIG }),
+    ];
+    const { groups, singleAssetIds } = detectAssetBracketGroups(assets);
+    expect(groups).toHaveLength(2);
+    expect(groups.every((g) => g.size === 3)).toBe(true);
+    expect(groups.every((g) => g.method === 'filename+exif')).toBe(true);
+    expect(groups.every((g) => g.reviewRequired === false)).toBe(true);
+    expect(singleAssetIds).toEqual(['m4']);
   });
 
   it('detects 7-shot filename+EXIF brackets', () => {
