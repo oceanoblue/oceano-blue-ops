@@ -1,12 +1,33 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { fmtAddress } from '@/lib/utils/format';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { DataTable, type Column } from '@/components/ui/DataTable';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 
 export const dynamic = 'force-dynamic';
 
+const COLUMNS: Column<any>[] = [
+  { key: 'address', header: 'Address', cell: (l) => <span className="text-ocean-800">{fmtAddress(l)}</span> },
+  {
+    key: 'client',
+    header: 'Client',
+    className: 'text-slate-700',
+    cell: (l) => (
+      <>
+        <div>{l.clients?.full_name ?? '—'}</div>
+        <div className="text-xs text-slate-500">{l.clients?.brokerage ?? ''}</div>
+      </>
+    ),
+  },
+  { key: 'beds', header: 'Beds / Baths', cell: (l) => `${l.bedrooms ?? '—'} / ${l.bathrooms ?? '—'}` },
+  { key: 'sqft', header: 'Sq ft', cell: (l) => l.sqft?.toLocaleString() ?? '—' },
+  { key: 'status', header: 'Status', cell: (l) => <StatusBadge status={l.status} /> },
+];
+
 export default async function ListingsPage() {
   const supabase = createClient();
-  const { data: listings } = await supabase
+  const { data: listings, error } = await supabase
     .from('listings')
     .select('id, address_line1, city, state, zip, bedrooms, bathrooms, sqft, status, clients(full_name, brokerage)')
     .order('created_at', { ascending: false })
@@ -14,50 +35,18 @@ export default async function ListingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ocean-950">Listings</h1>
-          <p className="text-sm text-slate-600">Every property the team has photographed or scheduled.</p>
-        </div>
-        <Link href="/dashboard/listings/new" className="btn-primary">
-          New listing
-        </Link>
-      </div>
+      <PageHeader title="Listings" subtitle="Every property the team has photographed or scheduled.">
+        <Link href="/dashboard/listings/new" className="btn-primary">New listing</Link>
+      </PageHeader>
 
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-left">
-              <th className="table-head px-4 py-3">Address</th>
-              <th className="table-head px-4 py-3">Client</th>
-              <th className="table-head px-4 py-3">Beds / Baths</th>
-              <th className="table-head px-4 py-3">Sq ft</th>
-              <th className="table-head px-4 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {(listings ?? []).map((l: any) => (
-              <tr key={l.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3">
-                  <Link href={`/dashboard/listings/${l.id}`} className="text-ocean-800 hover:underline">
-                    {fmtAddress(l)}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-slate-700">
-                  <div>{l.clients?.full_name ?? '—'}</div>
-                  <div className="text-xs text-slate-500">{l.clients?.brokerage ?? ''}</div>
-                </td>
-                <td className="px-4 py-3">{l.bedrooms ?? '—'} / {l.bathrooms ?? '—'}</td>
-                <td className="px-4 py-3">{l.sqft ?? '—'}</td>
-                <td className="px-4 py-3 capitalize">{l.status}</td>
-              </tr>
-            ))}
-            {(listings ?? []).length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">No listings yet.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={COLUMNS}
+        rows={listings ?? []}
+        rowKey={(l) => l.id}
+        rowHref={(l) => `/dashboard/listings/${l.id}`}
+        empty="No listings yet."
+        error={error?.message ?? null}
+      />
     </div>
   );
 }
