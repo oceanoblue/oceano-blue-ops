@@ -1,7 +1,9 @@
+import { Zap } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +48,14 @@ export default async function AutomationsPage() {
           columns={SCENARIO_COLUMNS}
           rows={scenarios ?? []}
           rowKey={(s) => s.id}
-          empty="No automation scenarios registered yet."
+          empty={
+            <EmptyState
+              compact
+              icon={Zap}
+              title="No scenarios yet"
+              description="Connect Make.com scenarios to see them here."
+            />
+          }
           error={scenariosError?.message ?? null}
         />
       </section>
@@ -57,7 +66,14 @@ export default async function AutomationsPage() {
           columns={RUN_COLUMNS}
           rows={runs ?? []}
           rowKey={(r) => r.id}
-          empty="No scenario runs recorded yet."
+          empty={
+            <EmptyState
+              compact
+              icon={Zap}
+              title="No scenario runs yet"
+              description="Recent Make.com scenario runs will be tracked here."
+            />
+          }
           error={runsError?.message ?? null}
         />
       </section>

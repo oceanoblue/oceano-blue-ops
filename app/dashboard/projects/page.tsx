@@ -1,7 +1,9 @@
+import { FolderKanban } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +35,13 @@ export default async function ProjectsPage() {
         columns={COLUMNS}
         rows={projects ?? []}
         rowKey={(p) => p.id}
-        empty="No projects yet."
+        empty={
+          <EmptyState
+            icon={FolderKanban}
+            title="No projects yet"
+            description="Group related jobs into a client project to track them together."
+          />
+        }
         error={error?.message ?? null}
       />
     </div>
