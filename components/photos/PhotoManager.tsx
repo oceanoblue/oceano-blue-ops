@@ -100,7 +100,13 @@ const STAGE_TITLES: Record<Stage, string> = {
   3: 'Review & Edit',
 };
 
-export function PhotoManager({ orderId }: { orderId: string }) {
+export function PhotoManager({
+  orderId,
+  autoEnhanceOnUpload = true,
+}: {
+  orderId: string;
+  autoEnhanceOnUpload?: boolean;
+}) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -347,6 +353,34 @@ export function PhotoManager({ orderId }: { orderId: string }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage2Inputs.length, stage3Photos.length, brackets.length, singles.length]);
+
+  // Auto-enhance on upload — standalone singles. Once the photographer reaches
+  // Stage 2 (triage done), kick the signature enhance for any eligible JPEG
+  // single. The endpoint is idempotent + dedupe-safe (it excludes bracket frames
+  // and anything already enhanced), so firing once per Stage-2 entry can't
+  // double-spend. Merged HDR bases are auto-enhanced server-side by the runner.
+  // We don't switch stages here: as each base's enhance completes it gains a
+  // child and naturally leaves Stage 2 for Stage 3.
+  const autoEnhanceFiredRef = useRef(false);
+  useEffect(() => {
+    if (stage !== 2) {
+      autoEnhanceFiredRef.current = false;
+      return;
+    }
+    if (!autoEnhanceOnUpload || autoEnhanceFiredRef.current) return;
+    autoEnhanceFiredRef.current = true;
+    fetch('/api/ai/auto-enhance', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ order_id: orderId }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.queued?.length) refresh();
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, autoEnhanceOnUpload, orderId]);
 
   // ─── Upload ──────────────────────────────────────────────────────────────
   const onDrop = useCallback(
@@ -759,6 +793,8 @@ export function PhotoManager({ orderId }: { orderId: string }) {
           running={running}
           onRun={runStage2Enhance}
           onBack={() => setStage(1)}
+          autoEnhanceOnUpload={autoEnhanceOnUpload}
+          onGoToReview={() => setStage(3)}
           photoUrls={photoUrls}
           setPhotoUrls={setPhotoUrls}
         />
@@ -1042,6 +1078,8 @@ function Stage2({
   running,
   onRun,
   onBack,
+  autoEnhanceOnUpload,
+  onGoToReview,
   photoUrls,
   setPhotoUrls,
 }: {
@@ -1067,6 +1105,8 @@ function Stage2({
   running: boolean;
   onRun: () => void;
   onBack: () => void;
+  autoEnhanceOnUpload: boolean;
+  onGoToReview: () => void;
   photoUrls: Record<string, string | null>;
   setPhotoUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
 }) {
@@ -1108,11 +1148,36 @@ function Stage2({
                 />
               ))}
             </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Click a photo to limit the run to a subset. Leave all unselected to run on every photo.
-            </p>
+            {!autoEnhanceOnUpload && (
+              <p className="mt-2 text-xs text-slate-500">
+                Click a photo to limit the run to a subset. Leave all unselected to run on every photo.
+              </p>
+            )}
           </section>
 
+          {autoEnhanceOnUpload && (
+            <section className="card p-4 flex items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 rounded-lg bg-ocean-100 text-ocean-700 grid place-items-center shrink-0">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-800">Auto-enhancing these photos</div>
+                  <p className="text-xs text-slate-500 mt-0.5 max-w-prose">
+                    Auto-enhance on upload is on, so each base runs the signature enhance (plus
+                    scene fixes) automatically — no Run AI needed. Photos move to Review as they
+                    finish. Turn this off in Settings → Enhance to enhance manually.
+                  </p>
+                </div>
+              </div>
+              <button onClick={onGoToReview} className="btn-primary shrink-0">
+                Go to review →
+              </button>
+            </section>
+          )}
+
+          {!autoEnhanceOnUpload && (
+          <>
           <section className="card p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-700">Enhance preferences</h3>
@@ -1238,6 +1303,8 @@ function Stage2({
               Enhance {targetCount} {targetCount === 1 ? 'photo' : 'photos'}
             </button>
           </section>
+          </>
+          )}
         </>
       )}
     </div>

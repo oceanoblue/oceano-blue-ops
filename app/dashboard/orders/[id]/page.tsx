@@ -38,6 +38,14 @@ export default async function OrderDetailPage({ params }: { params: { id: string
     .eq('kind', 'raw');
   const rawOriginalsCount = ((rawPhotos ?? []) as any[]).filter((p) => RAW_EXT.test(p.filename)).length;
 
+  // Org setting: auto-enhance bases on upload (default on).
+  const { data: bizSettings } = await supabase
+    .from('business_settings')
+    .select('auto_enhance_on_upload')
+    .eq('id', true)
+    .maybeSingle();
+  const autoEnhanceOnUpload = (bizSettings as any)?.auto_enhance_on_upload !== false;
+
   const { data: team } = await supabase
     .from('team_members')
     .select('id, full_name, role')
@@ -65,7 +73,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
           <section className="card p-6">
             <h2 className="font-semibold mb-4">Photos</h2>
-            <PhotoManager orderId={order.id} />
+            <PhotoManager orderId={order.id} autoEnhanceOnUpload={autoEnhanceOnUpload} />
           </section>
         </div>
 

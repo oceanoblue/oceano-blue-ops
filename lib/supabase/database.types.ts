@@ -709,6 +709,7 @@ export type Database = {
       }
       business_settings: {
         Row: {
+          auto_enhance_on_upload: boolean
           buffer_minutes: number
           business_name: string
           default_timezone: string
@@ -719,6 +720,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_enhance_on_upload?: boolean
           buffer_minutes?: number
           business_name?: string
           default_timezone?: string
@@ -729,6 +731,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_enhance_on_upload?: boolean
           buffer_minutes?: number
           business_name?: string
           default_timezone?: string
