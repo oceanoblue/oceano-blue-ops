@@ -1,9 +1,12 @@
 import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
-import { Download } from 'lucide-react';
+import { Download, ImageOff } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { fmtAddress, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
+import { fmtAddress, STATUS_LABEL } from '@/lib/utils/format';
 import { ClientGalleryGrid } from '@/components/gallery/ClientGalleryGrid';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { PortalHero } from '@/components/portal/PortalHero';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,45 +51,50 @@ export default async function ClientListingDetail({ params }: { params: { id: st
     })
   );
 
+  const latest = (orders?.[0] as any) ?? null;
+  const metaLine = `${l.bedrooms ?? '—'} bd · ${l.bathrooms ?? '—'} ba · ${
+    l.sqft ? l.sqft.toLocaleString() : '—'
+  } sqft`;
+
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-5">
-          <Link href="/portal/listings" className="text-sm text-ocean-700 hover:underline">← All listings</Link>
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <h1 className="text-xl font-semibold text-ocean-950">{fmtAddress(l)}</h1>
-            {orders?.[0] && (
-              <span className={`pill ${STATUS_COLOR[(orders[0] as any).status]}`}>
-                {STATUS_LABEL[(orders[0] as any).status]}
-              </span>
-            )}
-          </div>
-          <div className="mt-1 text-xs text-slate-500">
-            {l.bedrooms ?? '—'} bd · {l.bathrooms ?? '—'} ba · {l.sqft ?? '—'} sqft
-          </div>
-        </div>
-      </header>
+      <PortalHero
+        eyebrow="Listing"
+        title={fmtAddress(l)}
+        subtitle={metaLine}
+        backHref="/portal/listings"
+        backLabel="All listings"
+      >
+        {latest && <StatusBadge status={latest.status} />}
+        {signed.length > 0 && (
+          <Link
+            href={`/api/portal/zip?listing_id=${l.id}`}
+            prefetch={false}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-sm font-medium text-ink-900 shadow-soft transition hover:-translate-y-px hover:shadow-lift"
+          >
+            <Download className="h-4 w-4" /> Download all
+          </Link>
+        )}
+      </PortalHero>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
         {signed.length === 0 ? (
-          <div className="card p-12 text-center">
-            <h2 className="text-lg font-semibold">Photos in progress</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              We'll email you the moment delivery is ready. Status:{' '}
-              <strong>{orders?.[0] ? STATUS_LABEL[(orders[0] as any).status] : 'no orders'}</strong>.
-            </p>
+          <div className="card">
+            <EmptyState
+              icon={ImageOff}
+              title="Photos in progress"
+              description={
+                <>
+                  We&apos;ll email you the moment your gallery is ready. Current status:{' '}
+                  <strong>{latest ? STATUS_LABEL[latest.status] : 'no orders yet'}</strong>.
+                </>
+              }
+            />
           </div>
         ) : (
           <>
-            <div className="mb-4 flex items-center justify-between">
-              <div className="text-sm text-slate-600">{signed.length} photo{signed.length === 1 ? '' : 's'} ready</div>
-              <Link
-                href={`/api/portal/zip?listing_id=${l.id}`}
-                className="btn-primary"
-                prefetch={false}
-              >
-                <Download className="h-4 w-4" /> Download all
-              </Link>
+            <div className="mb-4 text-sm text-slate-600">
+              {signed.length} photo{signed.length === 1 ? '' : 's'} ready to download.
             </div>
             <ClientGalleryGrid photos={signed} />
           </>
