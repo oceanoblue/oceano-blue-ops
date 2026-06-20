@@ -124,7 +124,8 @@ function extractEmbeddedPreview(tmpPath) {
  */
 function extractBracketExif(tmpPath) {
   return new Promise((resolve) => {
-    const proc = spawn('exiftool', ['-j', '-n', '-ExposureBiasValue', '-DateTimeOriginal', tmpPath]);
+    // -m tolerates a truncated file (the /exif endpoint passes only the header).
+    const proc = spawn('exiftool', ['-j', '-n', '-m', '-ExposureBiasValue', '-DateTimeOriginal', tmpPath]);
     const chunks = [];
     proc.stdout.on('data', (c) => chunks.push(c));
     proc.on('error', () => resolve(null));
@@ -370,6 +371,61 @@ app.post('/preview', async (req, res) => {
     res.status(500).json({ error: err?.message || String(err) });
   } finally {
     releaseConvertSlot();
+  }
+});
+
+/**
+ * Lightweight EXIF read for backfilling already-uploaded RAW that never got
+ * ExposureBiasValue (the browser drops it on Sony ARW). Range-downloads just the
+ * file header — the EXIF IFD lives near the start of a TIFF-based RAW — and runs
+ * exiftool on it. Stateless: returns the parsed value; the caller persists it.
+ *
+ * POST /exif { photo_id }  →  { ExposureBiasValue, DateTimeOriginal }
+ */
+const EXIF_HEADER_BYTES = 4 * 1024 * 1024;
+
+app.post('/exif', async (req, res) => {
+  if (req.headers['x-worker-secret'] !== WORKER_SECRET) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  const photoId = req.body?.photo_id;
+  if (typeof photoId !== 'string') {
+    return res.status(400).json({ error: 'photo_id required' });
+  }
+
+  let tmp = null;
+  try {
+    const { data: src, error: srcErr } = await supabase
+      .from('photos')
+      .select('id, filename, bucket, storage_path')
+      .eq('id', photoId)
+      .single();
+    if (srcErr || !src) throw new Error(`source_not_found: ${srcErr?.message ?? 'no row'}`);
+    if (!/\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i.test(src.filename)) {
+      return res.json({ ExposureBiasValue: null, DateTimeOriginal: null, skipped: 'not_raw' });
+    }
+
+    // Range-fetch only the header via a signed URL (fast — no full download).
+    const { data: signed } = await supabase.storage
+      .from(src.bucket)
+      .createSignedUrl(src.storage_path, 120);
+    if (!signed?.signedUrl) throw new Error('sign_failed');
+    const r = await fetch(signed.signedUrl, { headers: { Range: `bytes=0-${EXIF_HEADER_BYTES - 1}` } });
+    if (!r.ok && r.status !== 206 && r.status !== 200) throw new Error(`fetch_${r.status}`);
+    const buf = Buffer.from(await r.arrayBuffer());
+
+    tmp = join(tmpdir(), `${randomUUID()}-${src.filename}`);
+    await fs.writeFile(tmp, buf);
+    const bx = await extractBracketExif(tmp);
+    res.json({
+      ExposureBiasValue: typeof bx?.ExposureBiasValue === 'number' ? bx.ExposureBiasValue : null,
+      DateTimeOriginal: bx?.DateTimeOriginal ?? null,
+    });
+  } catch (err) {
+    console.error('[arw-worker] exif error', err);
+    res.status(500).json({ error: err?.message || String(err) });
+  } finally {
+    if (tmp) fs.unlink(tmp).catch(() => {});
   }
 });
 

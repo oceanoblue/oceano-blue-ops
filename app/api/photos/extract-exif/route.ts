@@ -53,30 +53,57 @@ export async function POST(request: Request) {
   });
   if (targets.length === 0) return NextResponse.json({ updated: 0 });
 
+  // Sony ARW hides ExposureBiasValue from the browser/exifr reader, so RAW frames
+  // are read by the worker (exiftool, which reads it reliably). Non-RAW originals
+  // (camera JPEGs) are read inline with exifr. This route doubles as the one-time
+  // reprocess for orders uploaded before exposure bias was captured: opening such
+  // an order fires it and the grouping corrects once the bias lands.
+  const workerUrl = process.env.ARW_WORKER_URL;
+  const workerSecret = process.env.ARW_WORKER_SECRET;
+
+  async function readRawViaWorker(p: any): Promise<Record<string, unknown> | null> {
+    if (!workerUrl || !workerSecret) return null;
+    const r = await fetch(`${workerUrl}/exif`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-worker-secret': workerSecret },
+      body: JSON.stringify({ photo_id: p.id }),
+    }).catch(() => null);
+    if (!r || !r.ok) return null;
+    const t = await r.json().catch(() => null);
+    if (!t) return null;
+    const patch: Record<string, unknown> = {};
+    if (typeof t.ExposureBiasValue === 'number') patch.ExposureBiasValue = t.ExposureBiasValue;
+    if (typeof t.DateTimeOriginal === 'string') patch.DateTimeOriginal = t.DateTimeOriginal;
+    return patch;
+  }
+
+  async function readViaExifr(p: any): Promise<Record<string, unknown> | null> {
+    const { data: signed } = await admin.storage.from(p.bucket).createSignedUrl(p.storage_path, 120);
+    const url = signed?.signedUrl;
+    if (!url) return null;
+    const res = await fetch(url, { headers: { Range: `bytes=0-${HEADER_BYTES - 1}` } });
+    if (!res.ok && res.status !== 206 && res.status !== 200) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const t = await exifr
+      .parse(buf, { pick: ['DateTimeOriginal', 'ExposureBiasValue', 'Make', 'Model', 'LensModel', 'FocalLength'] })
+      .catch(() => null);
+    if (!t) return null;
+    const patch: Record<string, unknown> = {};
+    if (t.DateTimeOriginal instanceof Date) patch.DateTimeOriginal = t.DateTimeOriginal.toISOString();
+    else if (typeof t.DateTimeOriginal === 'string') patch.DateTimeOriginal = t.DateTimeOriginal;
+    if (typeof t.ExposureBiasValue === 'number') patch.ExposureBiasValue = t.ExposureBiasValue;
+    if (typeof t.Make === 'string') patch.Make = t.Make.trim();
+    if (typeof t.Model === 'string') patch.Model = t.Model.trim();
+    if (typeof t.LensModel === 'string') patch.LensModel = t.LensModel.trim();
+    if (typeof t.FocalLength === 'number') patch.FocalLength = t.FocalLength;
+    return patch;
+  }
+
   let updated = 0;
   await mapWithConcurrency(targets, 4, async (p: any) => {
     try {
-      const { data: signed } = await admin.storage.from(p.bucket).createSignedUrl(p.storage_path, 120);
-      const url = signed?.signedUrl;
-      if (!url) return;
-      const res = await fetch(url, { headers: { Range: `bytes=0-${HEADER_BYTES - 1}` } });
-      if (!res.ok && res.status !== 206 && res.status !== 200) return;
-      const buf = Buffer.from(await res.arrayBuffer());
-      const t = await exifr
-        .parse(buf, { pick: ['DateTimeOriginal', 'ExposureBiasValue', 'Make', 'Model', 'LensModel', 'FocalLength'] })
-        .catch(() => null);
-      if (!t) return;
-
-      const patch: Record<string, unknown> = {};
-      if (t.DateTimeOriginal instanceof Date) patch.DateTimeOriginal = t.DateTimeOriginal.toISOString();
-      else if (typeof t.DateTimeOriginal === 'string') patch.DateTimeOriginal = t.DateTimeOriginal;
-      if (typeof t.ExposureBiasValue === 'number') patch.ExposureBiasValue = t.ExposureBiasValue;
-      if (typeof t.Make === 'string') patch.Make = t.Make.trim();
-      if (typeof t.Model === 'string') patch.Model = t.Model.trim();
-      if (typeof t.LensModel === 'string') patch.LensModel = t.LensModel.trim();
-      if (typeof t.FocalLength === 'number') patch.FocalLength = t.FocalLength;
-      if (Object.keys(patch).length === 0) return;
-
+      const patch = RAW_EXT.test(p.filename) ? await readRawViaWorker(p) : await readViaExifr(p);
+      if (!patch || Object.keys(patch).length === 0) return;
       const merged = { ...((p.exif ?? {}) as object), ...patch };
       const { error } = await admin.from('photos').update({ exif: merged }).eq('id', p.id);
       if (!error) updated += 1;
