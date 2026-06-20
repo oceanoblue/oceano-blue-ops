@@ -1,7 +1,9 @@
+import { Briefcase } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +40,13 @@ export default async function JobsPage() {
         rows={jobs ?? []}
         rowKey={(j) => j.id}
         rowHref={(j) => `/dashboard/jobs/${j.id}`}
-        empty="No jobs yet."
+        empty={
+          <EmptyState
+            icon={Briefcase}
+            title="No jobs yet"
+            description="Production jobs across every job type will appear here."
+          />
+        }
         error={error?.message ?? null}
       />
     </div>

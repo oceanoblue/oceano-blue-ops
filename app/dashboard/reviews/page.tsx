@@ -1,7 +1,9 @@
+import { MessageSquare } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +44,13 @@ export default async function ReviewsPage() {
         columns={COLUMNS}
         rows={reviews ?? []}
         rowKey={(r) => r.id}
-        empty="No review sessions yet."
+        empty={
+          <EmptyState
+            icon={MessageSquare}
+            title="No review sessions yet"
+            description="Frame.io, Vimeo, Pixieset, and internal review sessions will be tracked here."
+          />
+        }
         error={error?.message ?? null}
       />
     </div>

@@ -1,9 +1,11 @@
 import Link from 'next/link';
+import { ClipboardList } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { STATUS_LABEL, fmtDateTime, fmtAddress } from '@/lib/utils/format';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,7 +77,22 @@ export default async function OrdersPage({
         rows={orders ?? []}
         rowKey={(o) => o.id}
         rowHref={(o) => `/dashboard/orders/${o.id}`}
-        empty="No orders yet."
+        empty={
+          <EmptyState
+            icon={ClipboardList}
+            title={searchParams.status ? 'No orders in this status' : 'No orders yet'}
+            description={
+              searchParams.status
+                ? 'Try a different filter, or create a new order.'
+                : 'New bookings and manually-added shoots will show up here.'
+            }
+            action={
+              <Link href="/dashboard/orders/new" className="btn-primary">
+                New order
+              </Link>
+            }
+          />
+        }
         error={error?.message ?? null}
       />
     </div>

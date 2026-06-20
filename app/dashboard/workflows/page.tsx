@@ -1,7 +1,9 @@
+import { Workflow } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,7 +57,14 @@ export default async function WorkflowsPage() {
           columns={RUN_COLUMNS}
           rows={runs ?? []}
           rowKey={(r) => r.id}
-          empty="No workflow runs yet."
+          empty={
+            <EmptyState
+              compact
+              icon={Workflow}
+              title="No workflow runs yet"
+              description="Runs executing a template on a job will appear here."
+            />
+          }
           error={runsError?.message ?? null}
         />
       </section>

@@ -1,7 +1,9 @@
+import { Boxes } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +33,13 @@ export default async function AssetsPage() {
         columns={COLUMNS}
         rows={assets ?? []}
         rowKey={(a) => a.id}
-        empty="No assets registered yet."
+        empty={
+          <EmptyState
+            icon={Boxes}
+            title="No assets registered yet"
+            description="Media indexed from local, NAS, and cloud storage will be listed here."
+          />
+        }
         error={error?.message ?? null}
       />
     </div>

@@ -1,6 +1,8 @@
+import { Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { NewClientForm } from '@/components/clients/NewClientForm';
 
 export const dynamic = 'force-dynamic';
@@ -31,7 +33,13 @@ export default async function ClientsPage() {
         columns={COLUMNS}
         rows={clients ?? []}
         rowKey={(c) => c.id}
-        empty="No clients yet."
+        empty={
+          <EmptyState
+            icon={Users}
+            title="No clients yet"
+            description="Add the agents you work with — use “Add client” above, or create one inline when you start a new listing."
+          />
+        }
         error={error?.message ?? null}
       />
     </div>

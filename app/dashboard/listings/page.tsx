@@ -1,9 +1,11 @@
 import Link from 'next/link';
+import { Home } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { fmtAddress } from '@/lib/utils/format';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +46,18 @@ export default async function ListingsPage() {
         rows={listings ?? []}
         rowKey={(l) => l.id}
         rowHref={(l) => `/dashboard/listings/${l.id}`}
-        empty="No listings yet."
+        empty={
+          <EmptyState
+            icon={Home}
+            title="No listings yet"
+            description="Every property you photograph or schedule will live here."
+            action={
+              <Link href="/dashboard/listings/new" className="btn-primary">
+                New listing
+              </Link>
+            }
+          />
+        }
         error={error?.message ?? null}
       />
     </div>
