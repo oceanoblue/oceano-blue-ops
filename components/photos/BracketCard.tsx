@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Camera, Loader2 } from 'lucide-react';
 import type { BracketGroup } from '@/lib/photos/bracket-grouping';
 import { isRawFilename } from '@/lib/photos/bracket-grouping';
+import { useInView } from '@/lib/hooks/use-in-view';
 
 interface BracketCardProps {
   bracket: BracketGroup;
@@ -29,25 +30,29 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
   // Guard so we attempt the preview exactly once per frame — a failed fetch
   // must NOT re-fire (that loop was hammering the endpoint and spinning forever).
   const previewTriedRef = useRef<string | null>(null);
+  const { ref: inViewRef, inView } = useInView<HTMLDivElement>();
 
   const allRaw = bracket.photos.every((p) => isRawFilename(p.filename));
   const middleFrame = bracket.photos[Math.floor(bracket.photos.length / 2)] ?? bracket.photos[0];
   const middleIsRaw = isRawFilename(middleFrame.filename);
 
-  // JPEG middle frame → fetch its regular signed URL.
+  // JPEG middle frame → fetch its regular signed URL (once scrolled near view).
   useEffect(() => {
+    if (!inView) return;
     if (middleIsRaw) return;
     if (urls[middleFrame.id] !== undefined) return;
     fetch(`/api/photo-url?photo_id=${middleFrame.id}`)
       .then((r) => r.json())
       .then((d) => setUrls((u) => ({ ...u, [middleFrame.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [middleFrame.id]: null })));
-  }, [middleFrame.id, middleIsRaw, urls, setUrls]);
+  }, [middleFrame.id, middleIsRaw, urls, setUrls, inView]);
 
-  // RAW middle frame → lazy-load the embedded-JPEG preview from the worker.
+  // RAW middle frame → lazy-load the embedded-JPEG preview from the worker
+  // (only once scrolled near view — these are worker calls).
   // If the worker isn't reachable/configured, give up after a short timeout
   // and fall back to the camera placeholder rather than spinning forever.
   useEffect(() => {
+    if (!inView) return;
     if (!middleIsRaw) return;
     // Only one attempt per middle frame, regardless of re-renders.
     if (previewTriedRef.current === middleFrame.id) return;
@@ -82,7 +87,7 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [middleIsRaw, middleFrame.id]);
+  }, [middleIsRaw, middleFrame.id, inView]);
 
   // Release the object URL when the component unmounts.
   useEffect(() => {
@@ -107,6 +112,7 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
 
   return (
     <div
+      ref={inViewRef}
       onClick={onToggle}
       className={`group relative rounded-lg overflow-hidden ring-2 transition cursor-pointer bg-slate-900 ${
         selected ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'
@@ -116,7 +122,7 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
       <div className="relative aspect-[3/2] bg-slate-800 overflow-hidden">
         {heroUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={heroUrl} alt={middleFrame.filename} className="h-full w-full object-cover" />
+          <img src={heroUrl} alt={middleFrame.filename} loading="lazy" decoding="async" className="h-full w-full object-cover" />
         ) : (
           <div className="h-full w-full grid place-items-center text-slate-500">
             {heroLoading ? (

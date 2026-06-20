@@ -39,6 +39,7 @@ import {
   type ExifSnapshot,
 } from '@/lib/photos/bracket-grouping';
 import { groupByRoom } from '@/lib/photos/rooms';
+import { useInView } from '@/lib/hooks/use-in-view';
 
 interface JobView {
   id: string;
@@ -1257,15 +1258,18 @@ function Stage2Thumb({
   setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
 }) {
   const url = urls[photo.id];
+  const { ref, inView } = useInView<HTMLButtonElement>();
   useEffect(() => {
+    if (!inView) return;
     if (url !== undefined) return;
     fetch(`/api/photo-url?photo_id=${photo.id}`)
       .then((r) => r.json())
       .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
-  }, [photo.id, url, setUrls]);
+  }, [photo.id, url, setUrls, inView]);
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onToggle}
       className={`relative aspect-[3/2] overflow-hidden rounded-md ring-2 transition ${
@@ -1274,7 +1278,7 @@ function Stage2Thumb({
     >
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt={photo.filename} className="h-full w-full object-cover" />
+        <img src={url} alt={photo.filename} loading="lazy" decoding="async" className="h-full w-full object-cover" />
       ) : (
         <div className="h-full w-full bg-slate-100 grid place-items-center text-slate-400">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -1584,6 +1588,7 @@ function SingleThumb({
 }) {
   const url = urls[photo.id];
   const raw = isRawFilename(photo.filename);
+  const { ref, inView } = useInView<HTMLDivElement>();
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
   const ext = (photo.filename.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toUpperCase();
@@ -1591,12 +1596,13 @@ function SingleThumb({
 
   useEffect(() => {
     if (raw) return;
+    if (!inView) return;
     if (url !== undefined) return;
     fetch(`/api/photo-url?photo_id=${photo.id}`)
       .then((r) => r.json())
       .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
-  }, [photo.id, url, setUrls, raw]);
+  }, [photo.id, url, setUrls, raw, inView]);
 
   async function convert() {
     setConverting(true);
@@ -1619,6 +1625,7 @@ function SingleThumb({
 
   return (
     <div
+      ref={ref}
       onClick={raw ? undefined : onOpen}
       className={`group relative aspect-square overflow-hidden rounded-md ring-2 transition ${
         raw ? '' : 'cursor-zoom-in'
@@ -1635,7 +1642,7 @@ function SingleThumb({
         </div>
       ) : url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt={photo.filename} className="h-full w-full object-cover" />
+        <img src={url} alt={photo.filename} loading="lazy" decoding="async" className="h-full w-full object-cover" />
       ) : (
         <div className="h-full w-full bg-slate-100 grid place-items-center text-slate-400">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -1706,15 +1713,17 @@ function ProcessedCard({
   onChange: () => void;
 }) {
   const url = urls[photo.id];
+  const { ref, inView } = useInView<HTMLDivElement>();
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!inView) return;
     if (url !== undefined) return;
     fetch(`/api/photo-url?photo_id=${photo.id}`)
       .then((r) => r.json())
       .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
-  }, [photo.id, url, setUrls]);
+  }, [photo.id, url, setUrls, inView]);
 
   async function decide(decision: 'approve' | 'reject' | 'reset') {
     setBusy(decision);
@@ -1792,6 +1801,7 @@ function ProcessedCard({
 
   return (
     <div
+      ref={ref}
       className={`group relative aspect-[3/2] overflow-hidden rounded-md ring-2 transition cursor-zoom-in ${
         isApproved
           ? 'ring-emerald-500'
@@ -1803,7 +1813,7 @@ function ProcessedCard({
     >
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt={photo.filename} className="h-full w-full object-cover" />
+        <img src={url} alt={photo.filename} loading="lazy" decoding="async" className="h-full w-full object-cover" />
       ) : (
         <div className="h-full w-full bg-slate-100 grid place-items-center text-slate-400">
           <Loader2 className="h-4 w-4 animate-spin" />
