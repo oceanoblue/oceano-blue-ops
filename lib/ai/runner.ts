@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getProvider } from './index';
 import { analyzePhoto, planEdits } from './vision-analyze';
+import { buildAutoEnhanceJobRow } from './auto-enhance';
 import { captureError } from '@/lib/observability/report';
 import type { AiJob, Photo } from '@/lib/supabase/database.types';
 import type { SourceImage } from './types';
@@ -232,6 +233,50 @@ export async function runAiJob(jobId: string): Promise<{
       } catch (chainErr) {
         // Don't fail the parent job over an auto-chain hiccup.
         captureError('ai.runner.autochain', chainErr, { jobId, orderId: job.order_id });
+      }
+    }
+
+    // Auto-enhance on upload (merged HDR bases). When an hdr_merge finishes and
+    // the org setting is on, kick the signature enhance on the merged base
+    // automatically — no manual "Run AI" click. Fires here so the timing is
+    // exact (the base now exists) and runs server-side via cron even if the
+    // photographer has left the page. Idempotent: skip any base that already has
+    // an enhance job. Singles take the /api/ai/auto-enhance path instead.
+    if (job.job_type === 'hdr_merge' && outputPhotoIds.length > 0) {
+      try {
+        const { data: bs } = await supabase
+          .from('business_settings')
+          .select('auto_enhance_on_upload')
+          .eq('id', true)
+          .maybeSingle();
+        if ((bs as any)?.auto_enhance_on_upload !== false) {
+          const enhanceProvider = getProvider('auto', 'enhance_single');
+          if (enhanceProvider.isConfigured()) {
+            const rows: any[] = [];
+            for (const baseId of outputPhotoIds) {
+              const { data: existing } = await supabase
+                .from('ai_jobs')
+                .select('id')
+                .eq('order_id', job.order_id)
+                .eq('job_type', 'enhance_single')
+                .contains('input_photo_ids', [baseId])
+                .limit(1);
+              if (existing && existing.length) continue;
+              rows.push(
+                buildAutoEnhanceJobRow({
+                  orderId: job.order_id,
+                  baseId,
+                  providerId: enhanceProvider.id,
+                  createdBy: job.created_by,
+                })
+              );
+            }
+            if (rows.length) await supabase.from('ai_jobs').insert(rows);
+          }
+        }
+      } catch (autoErr) {
+        // Auto-enhance is best-effort — never fail the merge over it.
+        captureError('ai.runner.autoenhance', autoErr, { jobId, orderId: job.order_id });
       }
     }
 

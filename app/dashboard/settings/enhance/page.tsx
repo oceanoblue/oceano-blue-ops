@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { SettingsNav } from '@/components/layout/SettingsNav';
 import { EnhanceSettingsForm } from '@/components/settings/EnhanceSettingsForm';
+import { AutoEnhanceToggle } from '@/components/settings/AutoEnhanceToggle';
 import { LUXURY_BASELINE } from '@/lib/ai/oceano-enhance/pipeline';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,13 @@ export default async function EnhanceSettingsPage() {
     )
     .eq('id', true)
     .maybeSingle();
+
+  const { data: bizSettings } = await supabase
+    .from('business_settings')
+    .select('auto_enhance_on_upload')
+    .eq('id', true)
+    .maybeSingle();
+  const autoEnhanceOnUpload = (bizSettings as any)?.auto_enhance_on_upload !== false;
 
   // Pull a handful of recent raw photos to use as preview samples.
   const { data: recentRaw } = await supabase
@@ -65,6 +73,7 @@ export default async function EnhanceSettingsPage() {
         </p>
       </div>
       <SettingsNav />
+      <AutoEnhanceToggle initial={autoEnhanceOnUpload} />
       <EnhanceSettingsForm initial={initial} recent={recent} />
     </div>
   );
