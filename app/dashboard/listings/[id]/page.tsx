@@ -1,12 +1,29 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MapPin, Home, User, Calendar, Camera } from 'lucide-react';
+import { MapPin, Home, User, Camera } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { fmtAddress, fmtCents, fmtDateTime, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
+import { fmtAddress, fmtCents, fmtDateTime } from '@/lib/utils/format';
 import { NewOrderButton } from '@/components/listings/NewOrderButton';
 import { isDeliverable } from '@/lib/photos/deliverable';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { DataTable, type Column } from '@/components/ui/DataTable';
+import { Tabs, type TabDef } from '@/components/ui/Tabs';
 
 export const dynamic = 'force-dynamic';
+
+const ORDER_COLUMNS: Column<any>[] = [
+  { key: 'order', header: 'Order', className: 'font-medium text-ocean-800', cell: (o) => `#${o.order_number}` },
+  { key: 'scheduled', header: 'Scheduled', className: 'text-slate-700', cell: (o) => fmtDateTime(o.scheduled_at) },
+  {
+    key: 'photographer',
+    header: 'Photographer',
+    className: 'text-slate-700',
+    cell: (o) => o.team_members?.full_name ?? 'Unassigned',
+  },
+  { key: 'total', header: 'Total', className: 'text-slate-700', cell: (o) => (o.total_cents > 0 ? fmtCents(o.total_cents) : '—') },
+  { key: 'status', header: 'Status', cell: (o) => <StatusBadge status={o.status} /> },
+];
 
 export default async function ListingDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -52,29 +69,13 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
     })
   );
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <Link href="/dashboard/listings" className="text-sm text-slate-500 hover:underline">
-          ← Listings
-        </Link>
-        <div className="mt-1 flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="h-10 w-10 rounded-lg bg-ocean-100 text-ocean-700 grid place-items-center shrink-0">
-              <Home className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold text-ocean-950">{fmtAddress(l)}</h1>
-              <p className="text-sm text-slate-600 capitalize">{l.status?.replace('_', ' ')}</p>
-            </div>
-          </div>
-          <NewOrderButton listingId={l.id} />
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          <section className="card p-6">
+  const tabs: TabDef[] = [
+    {
+      id: 'overview',
+      label: 'Overview',
+      content: (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <section className="card p-6 lg:col-span-2">
             <h2 className="font-semibold mb-4 inline-flex items-center gap-2">
               <MapPin className="h-4 w-4 text-slate-500" /> Property
             </h2>
@@ -96,60 +97,8 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
             )}
           </section>
 
-          <section className="card p-6">
-            <h2 className="font-semibold mb-4 inline-flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-slate-500" /> Orders ({orders?.length ?? 0})
-            </h2>
-            {(orders ?? []).length === 0 ? (
-              <p className="text-sm text-slate-500">No shoots booked for this listing yet.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 -mx-2">
-                {(orders ?? []).map((o: any) => (
-                  <li key={o.id} className="px-2 py-3 flex items-center justify-between">
-                    <Link
-                      href={`/dashboard/orders/${o.id}`}
-                      className="flex-1 min-w-0 hover:text-ocean-700"
-                    >
-                      <div className="font-medium">Order #{o.order_number}</div>
-                      <div className="text-xs text-slate-500">
-                        {fmtDateTime(o.scheduled_at)} ·{' '}
-                        {o.team_members?.full_name ? `📷 ${o.team_members.full_name}` : 'Unassigned'}
-                        {o.total_cents > 0 && ` · ${fmtCents(o.total_cents)}`}
-                      </div>
-                    </Link>
-                    <span className={`pill ${STATUS_COLOR[o.status]}`}>{STATUS_LABEL[o.status]}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {signed.length > 0 && (
-            <section className="card p-6">
-              <h2 className="font-semibold mb-4 inline-flex items-center gap-2">
-                <Camera className="h-4 w-4 text-slate-500" /> Delivered photos
-              </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {signed.map((p) => (
-                  <div key={p.id} className="aspect-[3/2] overflow-hidden rounded-md ring-1 ring-slate-200">
-                    {p.url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.url} alt={p.filename} className="h-full w-full object-cover" loading="lazy" />
-                    ) : (
-                      <div className="h-full w-full bg-slate-100 grid place-items-center text-xs text-slate-400">
-                        loading…
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-
-        <aside className="space-y-6">
           {l.clients && (
-            <section className="card p-6">
+            <section className="card p-6 h-fit">
               <h2 className="font-semibold mb-3 inline-flex items-center gap-2">
                 <User className="h-4 w-4 text-slate-500" /> Client
               </h2>
@@ -161,8 +110,76 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
               </dl>
             </section>
           )}
-        </aside>
-      </div>
+        </div>
+      ),
+    },
+    {
+      id: 'orders',
+      label: 'Orders',
+      count: orders?.length ?? 0,
+      content: (
+        <DataTable
+          columns={ORDER_COLUMNS}
+          rows={orders ?? []}
+          rowKey={(o) => o.id}
+          rowHref={(o) => `/dashboard/orders/${o.id}`}
+          empty="No shoots booked for this listing yet."
+        />
+      ),
+    },
+    {
+      id: 'photos',
+      label: 'Photos',
+      count: signed.length,
+      content:
+        signed.length > 0 ? (
+          <section className="card p-6">
+            <h2 className="font-semibold mb-4 inline-flex items-center gap-2">
+              <Camera className="h-4 w-4 text-slate-500" /> Delivered photos
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {signed.map((p) => (
+                <div key={p.id} className="aspect-[3/2] overflow-hidden rounded-md ring-1 ring-slate-200">
+                  {p.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.url} alt={p.filename} className="h-full w-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="h-full w-full bg-slate-100 grid place-items-center text-xs text-slate-400">
+                      loading…
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <div className="card p-8 text-center text-sm text-slate-500">
+            No delivered photos for this listing yet.
+          </div>
+        ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <Link href="/dashboard/listings" className="text-sm text-slate-500 hover:underline">
+        ← Listings
+      </Link>
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-3">
+            <span className="h-10 w-10 rounded-lg bg-ocean-100 text-ocean-700 grid place-items-center shrink-0">
+              <Home className="h-5 w-5" />
+            </span>
+            {fmtAddress(l)}
+          </span>
+        }
+        subtitle={<StatusBadge status={l.status} />}
+      >
+        <NewOrderButton listingId={l.id} />
+      </PageHeader>
+
+      <Tabs tabs={tabs} />
     </div>
   );
 }

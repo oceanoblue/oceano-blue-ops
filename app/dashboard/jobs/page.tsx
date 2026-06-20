@@ -1,11 +1,28 @@
-import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { DataTable, type Column } from '@/components/ui/DataTable';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 
 export const dynamic = 'force-dynamic';
 
+const COLUMNS: Column<any>[] = [
+  { key: 'num', header: '#', className: 'text-slate-500', cell: (j) => `#${j.job_number}` },
+  { key: 'title', header: 'Title', className: 'font-medium text-ocean-800', cell: (j) => j.title },
+  { key: 'type', header: 'Type', className: 'text-slate-700', cell: (j) => j.job_types?.name ?? '—' },
+  { key: 'client', header: 'Client', className: 'text-slate-700', cell: (j) => j.clients?.full_name ?? '—' },
+  { key: 'project', header: 'Project', className: 'text-slate-700', cell: (j) => j.projects?.name ?? '—' },
+  { key: 'status', header: 'Status', cell: (j) => <StatusBadge status={j.status} /> },
+  {
+    key: 'due',
+    header: 'Due',
+    className: 'text-slate-700',
+    cell: (j) => (j.due_date ? new Date(j.due_date).toLocaleDateString() : '—'),
+  },
+];
+
 export default async function JobsPage() {
   const supabase = createClient();
-  const { data: jobs } = await supabase
+  const { data: jobs, error } = await supabase
     .from('jobs')
     .select(
       'id, job_number, title, status, priority, due_date, clients(full_name), projects(name), job_types(name)'
@@ -15,52 +32,15 @@ export default async function JobsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-ocean-950">Jobs</h1>
-        <p className="text-sm text-slate-600">The main production unit across every job type.</p>
-      </div>
-
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-left">
-              <th className="table-head px-4 py-3">#</th>
-              <th className="table-head px-4 py-3">Title</th>
-              <th className="table-head px-4 py-3">Type</th>
-              <th className="table-head px-4 py-3">Client</th>
-              <th className="table-head px-4 py-3">Project</th>
-              <th className="table-head px-4 py-3">Status</th>
-              <th className="table-head px-4 py-3">Due</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {(jobs ?? []).map((j: any) => (
-              <tr key={j.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-slate-500">#{j.job_number}</td>
-                <td className="px-4 py-3">
-                  <Link href={`/dashboard/jobs/${j.id}`} className="font-medium text-ocean-800 hover:underline">
-                    {j.title}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-slate-700">{j.job_types?.name ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-700">{j.clients?.full_name ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-700">{j.projects?.name ?? '—'}</td>
-                <td className="px-4 py-3 capitalize">{j.status?.replace(/_/g, ' ')}</td>
-                <td className="px-4 py-3 text-slate-700">
-                  {j.due_date ? new Date(j.due_date).toLocaleDateString() : '—'}
-                </td>
-              </tr>
-            ))}
-            {(jobs ?? []).length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
-                  No jobs yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <PageHeader title="Jobs" subtitle="The main production unit across every job type." />
+      <DataTable
+        columns={COLUMNS}
+        rows={jobs ?? []}
+        rowKey={(j) => j.id}
+        rowHref={(j) => `/dashboard/jobs/${j.id}`}
+        empty="No jobs yet."
+        error={error?.message ?? null}
+      />
     </div>
   );
 }
