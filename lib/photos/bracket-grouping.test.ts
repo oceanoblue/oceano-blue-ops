@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { groupPhotosIntoBrackets } from './bracket-grouping';
+import {
+  groupPhotosIntoBrackets,
+  validateBracketsWithExif,
+  type ExifSnapshot,
+} from './bracket-grouping';
 import type { Photo } from '@/lib/supabase/database.types';
 
 /** Minimal Photo factory — only the fields the grouper reads. */
@@ -73,5 +77,55 @@ describe('groupPhotosIntoBrackets — fixed Count', () => {
     expect(brackets).toHaveLength(1);
     expect(brackets[0].detectedSize).toBe(5);
     expect(ids(singles)).toEqual(['OBM09525']);
+  });
+});
+
+describe('validateBracketsWithExif', () => {
+  // Attach EXIF exposure biases (in capture order) to a run of photos.
+  function withExif(photos: Photo[], evs: number[]): Record<string, ExifSnapshot> {
+    const exif: Record<string, ExifSnapshot> = {};
+    photos.forEach((p, i) => (exif[p.id] = { takenAt: 1000 + i, exposureBias: evs[i] }));
+    return exif;
+  }
+
+  it('splits an in-sequence detail single absorbed into a 7-run (3 + 1 + 3)', () => {
+    // Two 3-brackets (0,-2,+2) with a metered detail single (0) between them —
+    // 7 consecutive filenames the filename pass reads as one 7-shot bracket.
+    const photos = seq('OBM', 100, 106);
+    const base = groupPhotosIntoBrackets(photos);
+    expect(base.brackets).toHaveLength(1);
+    expect(base.brackets[0].photos).toHaveLength(7);
+
+    const exif = withExif(photos, [0, -2, 2, 0, 0, -2, 2]);
+    const fixed = validateBracketsWithExif(base, exif);
+    expect(fixed.brackets.map((b) => b.photos.length).sort()).toEqual([3, 3]);
+    expect(ids(fixed.singles)).toEqual(['OBM00103']); // the lone metered frame
+  });
+
+  it('leaves a clean 3-shot bracket untouched', () => {
+    const photos = seq('OBM', 100, 102);
+    const base = groupPhotosIntoBrackets(photos);
+    const fixed = validateBracketsWithExif(base, withExif(photos, [0, -2, 2]));
+    expect(fixed.brackets).toHaveLength(1);
+    expect(fixed.brackets[0].photos).toHaveLength(3);
+    expect(fixed.singles).toHaveLength(0);
+  });
+
+  it('keeps the original bracket when EXIF is missing for any frame', () => {
+    const photos = seq('OBM', 100, 106);
+    const base = groupPhotosIntoBrackets(photos);
+    const fixed = validateBracketsWithExif(base, {}); // no EXIF → no override
+    expect(fixed.brackets).toHaveLength(1);
+    expect(fixed.brackets[0].photos).toHaveLength(7);
+  });
+
+  it('does not destroy a clean bracket on an ambiguous EV pattern', () => {
+    // A single shot at a non-bracket EV (+1) makes the 4-run filename-group
+    // 3 + 1 single already; EXIF segmentation is not clean, so it falls back.
+    const photos = seq('OBM', 100, 103);
+    const base = groupPhotosIntoBrackets(photos); // 3-bracket + 1 single
+    const fixed = validateBracketsWithExif(base, withExif(photos, [0, -2, 2, 1]));
+    expect(fixed.brackets).toHaveLength(1);
+    expect(fixed.brackets[0].photos).toHaveLength(3);
   });
 });

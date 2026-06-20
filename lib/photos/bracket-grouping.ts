@@ -234,3 +234,89 @@ export function applyExifGrouping(
     singles: newSingles,
   };
 }
+
+// ─── EXIF exposure-bias validation ────────────────────────────────────────
+// The filename pass groups by consecutive numbering, which can absorb an
+// in-sequence detail single when the combined run happens to be a valid bracket
+// size (e.g. 3 + 1 + 3 = 7 consecutive numbers read as one 7-shot bracket).
+// This validator re-segments each detected bracket by the actual exposure-bias
+// cycle: a bracket repeats its EV set, and a detail single (a lone, normally-
+// metered exposure) shows up as a duplicate EV that breaks the cycle. Frames
+// that fall out become singles.
+//
+// It is deliberately conservative — it only overrides the filename grouping when
+// EXIF is present for EVERY frame AND the re-segmentation is clean (every piece
+// is a lone single or a distinct-EV 3/5/7 bracket). Otherwise the original
+// bracket is kept, so it can never make grouping worse.
+
+function segmentByExifCycle(
+  photos: Photo[],
+  exif: Record<string, ExifSnapshot>
+): Photo[][] | null {
+  const evs = photos.map((p) => exif[p.id]?.exposureBias);
+  if (evs.some((e) => typeof e !== 'number')) return null; // need EXIF for all frames
+
+  const groups: Photo[][] = [];
+  let cur: Photo[] = [];
+  let seen = new Set<number>();
+  for (let i = 0; i < photos.length; i++) {
+    const ev = evs[i] as number;
+    if (seen.has(ev)) {
+      groups.push(cur);
+      cur = [photos[i]];
+      seen = new Set([ev]);
+    } else {
+      cur.push(photos[i]);
+      seen.add(ev);
+    }
+  }
+  if (cur.length) groups.push(cur);
+
+  // Every piece must be clean: a lone single, or a distinct-EV bracket size.
+  for (const g of groups) {
+    if (g.length === 1) continue;
+    if (!BRACKET_SIZES.includes(g.length as 3 | 5 | 7)) return null;
+    const distinct = new Set(g.map((p) => exif[p.id]?.exposureBias));
+    if (distinct.size !== g.length) return null;
+  }
+  return groups;
+}
+
+/**
+ * Validate filename-detected brackets against EXIF exposure bias and split out
+ * any in-sequence singles the filename pass absorbed. Only adopts the EXIF
+ * segmentation when it cleanly splits a bracket into multiple pieces; otherwise
+ * the original bracket is preserved.
+ */
+export function validateBracketsWithExif(
+  result: GroupingResult,
+  exif: Record<string, ExifSnapshot>
+): GroupingResult {
+  const brackets: BracketGroup[] = [];
+  const singles: Photo[] = [...result.singles];
+
+  for (const b of result.brackets) {
+    const groups = segmentByExifCycle(b.photos, exif);
+    if (groups && groups.length > 1) {
+      for (const g of groups) {
+        if (g.length === 1) {
+          singles.push(g[0]);
+        } else {
+          // Keep darkest-first by exposure bias for downstream convention.
+          const sorted = [...g].sort(
+            (a, c) => (exif[a.id]?.exposureBias ?? 0) - (exif[c.id]?.exposureBias ?? 0)
+          );
+          brackets.push({
+            id: `bracket-${sorted[0].id}`,
+            photos: sorted,
+            detectedSize: sorted.length as 3 | 5 | 7,
+          });
+        }
+      }
+    } else {
+      brackets.push(b);
+    }
+  }
+
+  return { brackets, singles };
+}

@@ -19,6 +19,9 @@ const Body = z.object({
       byte_size: z.number().int().nonnegative(),
       width: z.number().int().positive().optional(),
       height: z.number().int().positive().optional(),
+      // Bracket-relevant EXIF extracted client-side at upload (ExposureBiasValue,
+      // DateTimeOriginal, camera/lens). Used to tell HDR sets from detail singles.
+      exif: z.record(z.any()).optional(),
     })
   ),
 });
@@ -53,7 +56,7 @@ export async function POST(request: Request) {
     width: p.width ?? null,
     height: p.height ?? null,
     byte_size: p.byte_size,
-    exif: {},
+    exif: p.exif ?? {},
     uploaded_by: user.id,
     processing_status: 'pending' as const,
   }));
