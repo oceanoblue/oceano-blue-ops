@@ -35,3 +35,7 @@ primary_region = "iad"   # change to your nearest Fly region
 
 [env]
   NODE_ENV = "production"
+  # Preview-first conversion is light on RAM, so several can run at once on the
+  # 2 GB machine (a rare dcraw fallback peaks ~400 MB; 3× still fits). Big
+  # throughput win for batches. Lower to 1 if you set RAW_CONVERT_MODE=demosaic.
+  WORKER_CONCURRENCY = "3"
