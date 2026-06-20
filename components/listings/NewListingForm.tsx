@@ -20,6 +20,10 @@ export function NewListingForm({ clients }: { clients: ClientOpt[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Existing client vs. create-one-inline. Default to "new" when there are no
+  // clients yet, so an empty system isn't a dead end.
+  const [clientMode, setClientMode] = useState<'existing' | 'new'>(clients.length ? 'existing' : 'new');
+  const [nc, setNc] = useState({ full_name: '', email: '', phone: '', brokerage: '' });
   const [f, setF] = useState({
     client_id: '',
     address_line1: '',
@@ -49,7 +53,16 @@ export function NewListingForm({ clients }: { clients: ClientOpt[] }) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          client_id: f.client_id,
+          ...(clientMode === 'existing'
+            ? { client_id: f.client_id }
+            : {
+                new_client: {
+                  full_name: nc.full_name.trim(),
+                  email: nc.email.trim(),
+                  phone: nc.phone.trim(),
+                  brokerage: nc.brokerage.trim(),
+                },
+              }),
           address_line1: f.address_line1.trim(),
           address_line2: f.address_line2.trim(),
           city: f.city.trim(),
@@ -73,8 +86,10 @@ export function NewListingForm({ clients }: { clients: ClientOpt[] }) {
     }
   }
 
+  const clientOk =
+    clientMode === 'existing' ? !!f.client_id : !!nc.full_name.trim() && !!nc.email.trim();
   const canSubmit =
-    f.client_id && f.address_line1.trim() && f.city.trim() && f.state.trim() && f.zip.trim();
+    clientOk && f.address_line1.trim() && f.city.trim() && f.state.trim() && f.zip.trim();
 
   return (
     <form onSubmit={submit} className="card max-w-2xl space-y-5 p-6">
@@ -85,16 +100,52 @@ export function NewListingForm({ clients }: { clients: ClientOpt[] }) {
       )}
 
       <div>
-        <label className="label">Client *</label>
-        <select className="input" value={f.client_id} onChange={(e) => set('client_id', e.target.value)} required>
-          <option value="">— pick the agent / client —</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.full_name}
-              {c.brokerage ? ` · ${c.brokerage}` : ''}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center justify-between">
+          <label className="label mb-0">Client *</label>
+          {clients.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setClientMode((m) => (m === 'existing' ? 'new' : 'existing'))}
+              className="text-xs font-medium text-ocean-700 hover:underline"
+            >
+              {clientMode === 'existing' ? '+ New client' : '← Pick existing'}
+            </button>
+          )}
+        </div>
+
+        {clientMode === 'existing' ? (
+          <select className="input mt-1.5" value={f.client_id} onChange={(e) => set('client_id', e.target.value)}>
+            <option value="">— pick the agent / client —</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.full_name}
+                {c.brokerage ? ` · ${c.brokerage}` : ''}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="mt-1.5 grid gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="label">Full name *</label>
+              <input className="input" value={nc.full_name} onChange={(e) => setNc((p) => ({ ...p, full_name: e.target.value }))} placeholder="Agent name" />
+            </div>
+            <div>
+              <label className="label">Email *</label>
+              <input className="input" type="email" value={nc.email} onChange={(e) => setNc((p) => ({ ...p, email: e.target.value }))} placeholder="agent@brokerage.com" />
+            </div>
+            <div>
+              <label className="label">Phone</label>
+              <input className="input" value={nc.phone} onChange={(e) => setNc((p) => ({ ...p, phone: e.target.value }))} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Brokerage</label>
+              <input className="input" value={nc.brokerage} onChange={(e) => setNc((p) => ({ ...p, brokerage: e.target.value }))} />
+            </div>
+            <p className="sm:col-span-2 text-xs text-slate-500">
+              Saved as a new client and attached to this listing. If the email already exists, that client is reused.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

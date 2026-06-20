@@ -8,7 +8,16 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
  * client + listing + order in one go).
  */
 const Body = z.object({
-  client_id: z.string().uuid(),
+  // Either attach to an existing client, or create one inline via new_client.
+  client_id: z.string().uuid().optional(),
+  new_client: z
+    .object({
+      full_name: z.string().min(1),
+      email: z.string().email(),
+      phone: z.string().optional().default(''),
+      brokerage: z.string().optional().default(''),
+    })
+    .optional(),
   address_line1: z.string().min(2),
   address_line2: z.string().optional().default(''),
   city: z.string().min(1),
@@ -37,10 +46,41 @@ export async function POST(request: Request) {
   const b = parsed.data;
 
   const admin = createAdminClient() as any;
+
+  // Resolve the client: use the given id, or create/reuse one from new_client.
+  let clientId = b.client_id;
+  if (!clientId) {
+    if (!b.new_client) {
+      return NextResponse.json(
+        { error: 'client_required', message: 'Pick an existing client or add a new one.' },
+        { status: 400 }
+      );
+    }
+    const nc = b.new_client;
+    const { data: client, error: cErr } = await admin
+      .from('clients')
+      .upsert(
+        {
+          full_name: nc.full_name.trim(),
+          email: nc.email.toLowerCase().trim(),
+          phone: nc.phone?.trim() || null,
+          brokerage: nc.brokerage?.trim() || null,
+          is_archived: false,
+        },
+        { onConflict: 'email' }
+      )
+      .select('id')
+      .single();
+    if (cErr || !client) {
+      return NextResponse.json({ error: cErr?.message ?? 'client_create_failed' }, { status: 500 });
+    }
+    clientId = (client as any).id;
+  }
+
   const { data: listing, error } = await admin
     .from('listings')
     .insert({
-      client_id: b.client_id,
+      client_id: clientId,
       address_line1: b.address_line1,
       address_line2: b.address_line2 || null,
       city: b.city,

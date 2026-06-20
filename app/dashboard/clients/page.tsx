@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { NewClientForm } from '@/components/clients/NewClientForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,11 @@ export default async function ClientsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Clients" subtitle="Real estate agents who've booked with you." />
+      <PageHeader title="Clients" subtitle="Real estate agents you work with.">
+        <div className="relative">
+          <NewClientForm />
+        </div>
+      </PageHeader>
 
       <DataTable
         columns={COLUMNS}
