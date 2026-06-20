@@ -5,6 +5,7 @@ import { detectBrackets } from '@/lib/ai/bracket-detect';
 import { runAiJob } from '@/lib/ai/runner';
 import { getProvider } from '@/lib/ai';
 import { buildPrompt, type EnhanceDirectives } from '@/lib/ai/prompts';
+import type { EnhanceRecipe } from '@/lib/ai/recipe';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
 
 const Body = z.object({
@@ -177,6 +178,27 @@ export async function POST(request: Request) {
     : prompt_extra;
   const promptText = buildPrompt(job_type as AiJobType, directives);
 
+  // The reproducible recipe: the structured choices behind this edit, not just
+  // the built prompt. Stored on params so the runner can stamp it onto every
+  // output (photos.ai_recipe) and the re-run endpoint can replay it exactly.
+  const recipe: EnhanceRecipe = {
+    job_type: job_type as AiJobType,
+    provider: resolvedProvider,
+    directives: hasDirectives
+      ? {
+          extra: prompt_extra,
+          skyStyle: sky_style,
+          enhancementStyle: enhancement_style,
+          windowPull: window_pull,
+          perspectiveCorrection: perspective_correction,
+          removeReflections: remove_reflections,
+          blurFaces: blur_faces,
+        }
+      : null,
+    prompt_extra: prompt_extra ?? null,
+    prompt: promptText,
+  };
+
   const { data: jobs, error: jobErr } = await admin
     .from('ai_jobs')
     .insert(
@@ -188,7 +210,10 @@ export async function POST(request: Request) {
         prompt: promptText,
         status: 'pending' as const,
         created_by: user.id,
-        params: auto_chain_fixes ? { auto_chain_fixes: true } : null,
+        params: {
+          ...(auto_chain_fixes ? { auto_chain_fixes: true } : {}),
+          recipe,
+        } as any,
       }))
     )
     .select('id');

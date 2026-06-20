@@ -158,6 +158,10 @@ export async function runAiJob(jobId: string): Promise<{
         ai_provider: job.provider ?? 'oceano-enhance',
         ai_prompt: resp.rawPromptUsed,
         ai_cost_cents: resp.costCents,
+        // Reproducibility: link the output to its job and stash the full recipe
+        // so this edit can be re-run, tweaked, or applied to other frames.
+        source_job_id: jobId,
+        ai_recipe: (job.params as any)?.recipe ?? null,
       });
       if (insErr) throw new Error(`Photo insert failed: ${insErr.message}`);
       outputPhotoIds.push(photoId);
