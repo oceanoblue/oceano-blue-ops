@@ -10,6 +10,7 @@ import { AssignTeamControl } from '@/components/orders/AssignTeamControl';
 import { PhotoManager } from '@/components/photos/PhotoManager';
 import { DeliveryControl } from '@/components/orders/DeliveryControl';
 import { RawCleanupControl } from '@/components/orders/RawCleanupControl';
+import { DeleteOrderControl } from '@/components/orders/DeleteOrderControl';
 import { CostSummary } from '@/components/orders/CostSummary';
 
 export const dynamic = 'force-dynamic';
@@ -154,6 +155,14 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               <p className="text-sm text-slate-700 whitespace-pre-wrap">{order.client_notes}</p>
             </section>
           )}
+
+          <section className="card border-rose-200 p-6">
+            <h2 className="mb-1 font-semibold text-rose-800">Danger zone</h2>
+            <p className="mb-3 text-xs text-slate-500">
+              Deletes the whole order and every file it owns (originals, JPEGs, processed). For duplicates and test shoots.
+            </p>
+            <DeleteOrderControl orderId={order.id} />
+          </section>
         </div>
       </div>
     </div>
