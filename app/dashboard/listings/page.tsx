@@ -37,7 +37,7 @@ export default async function ListingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Listings" subtitle="Every property the team has photographed or scheduled.">
+      <PageHeader eyebrow="Properties" title="Listings" subtitle="Every property the team has photographed or scheduled.">
         <Link href="/dashboard/listings/new" className="btn-primary">New listing</Link>
       </PageHeader>
 
