@@ -108,7 +108,43 @@ export async function POST(request: Request) {
       }
       return NextResponse.json({ error: msg }, { status: r.status });
     }
-    return NextResponse.json(data);
+
+    // Source dedupe: a concurrent/repeat convert can create more than one JPEG
+    // sibling for the same ARW. Duplicates share a sequence number, which breaks
+    // bracket detection. Collapse to one — keep a sibling already used downstream
+    // (has children) else the earliest — and delete the rest. Best-effort.
+    let resultPhotoId = (data as any).photo_id;
+    try {
+      const admin = createAdminClient();
+      const { data: sibs } = await admin
+        .from('photos')
+        .select('id, created_at')
+        .eq('parent_photo_id', parsed.data.photo_id)
+        .eq('kind', 'raw');
+      const list = (sibs ?? []) as { id: string; created_at: string }[];
+      if (list.length > 1) {
+        const { data: kids } = await admin
+          .from('photos')
+          .select('parent_photo_id')
+          .in(
+            'parent_photo_id',
+            list.map((s) => s.id)
+          );
+        const hasChild = new Set((kids ?? []).map((k: any) => k.parent_photo_id));
+        const sorted = [...list].sort((a, b) => {
+          const ca = hasChild.has(a.id) ? 0 : 1;
+          const cb = hasChild.has(b.id) ? 0 : 1;
+          if (ca !== cb) return ca - cb;
+          return a.created_at.localeCompare(b.created_at);
+        });
+        resultPhotoId = sorted[0].id;
+        const drop = sorted.slice(1).filter((s) => !hasChild.has(s.id)).map((s) => s.id);
+        if (drop.length) await admin.from('photos').delete().in('id', drop);
+      }
+    } catch {
+      /* dedupe is best-effort — never fail the convert over it */
+    }
+    return NextResponse.json({ ...data, photo_id: resultPhotoId });
   } catch (err: any) {
     return NextResponse.json(
       { error: 'worker_unreachable', detail: err?.message || String(err) },
