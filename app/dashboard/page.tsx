@@ -51,7 +51,7 @@ export default async function DashboardHome() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Overview" subtitle="What's moving through the pipeline today.">
+      <PageHeader eyebrow="Production OS" title="Overview" subtitle="What's moving through the pipeline today.">
         <BookingLinkButton />
       </PageHeader>
 

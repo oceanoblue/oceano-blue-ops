@@ -56,7 +56,7 @@ export default async function OrdersPage({
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Orders" subtitle="Every shoot in the pipeline.">
+      <PageHeader eyebrow="Pipeline" title="Orders" subtitle="Every shoot in the pipeline.">
         <Link href="/dashboard/orders/new" className="btn-primary">New order</Link>
       </PageHeader>
 

@@ -1,7 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { ClipboardList } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { fmtDateTime, fmtAddress, fmtCents, STATUS_LABEL, STATUS_COLOR } from '@/lib/utils/format';
+import { fmtDateTime, fmtAddress, fmtCents } from '@/lib/utils/format';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { OrderStatusControl } from '@/components/orders/OrderStatusControl';
 import { AssignTeamControl } from '@/components/orders/AssignTeamControl';
 import { PhotoManager } from '@/components/photos/PhotoManager';
@@ -55,13 +58,18 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <Link href="/dashboard/orders" className="text-sm text-slate-500 hover:underline">← Orders</Link>
-          <h1 className="mt-1 text-2xl font-semibold text-ocean-950">Order #{order.order_number}</h1>
-          <p className="text-sm text-slate-600">{order.listings && fmtAddress(order.listings)}</p>
+      <div>
+        <Link href="/dashboard/orders" className="text-sm text-slate-500 hover:underline">← Orders</Link>
+        <div className="mt-1">
+          <PageHeader
+            eyebrow="Order"
+            icon={ClipboardList}
+            title={`#${order.order_number}`}
+            subtitle={order.listings && fmtAddress(order.listings)}
+          >
+            <StatusBadge status={order.status} />
+          </PageHeader>
         </div>
-        <span className={`pill ${STATUS_COLOR[order.status]}`}>{STATUS_LABEL[order.status]}</span>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

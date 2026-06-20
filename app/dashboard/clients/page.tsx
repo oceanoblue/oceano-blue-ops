@@ -23,7 +23,7 @@ export default async function ClientsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Clients" subtitle="Real estate agents you work with.">
+      <PageHeader eyebrow="People" title="Clients" subtitle="Real estate agents you work with.">
         <div className="relative">
           <NewClientForm />
         </div>
