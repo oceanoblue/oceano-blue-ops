@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   X,
@@ -145,6 +146,16 @@ export function PhotoViewer({
   const prev = useCallback(() => {
     if (index > 0) onIndexChange(index - 1);
   }, [index, onIndexChange]);
+
+  // Lock background scroll while the full-screen editor is open so the page
+  // behind it can't scroll under the overlay.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -304,9 +315,14 @@ export function PhotoViewer({
   }, [photo]);
 
   if (!photo) return null;
+  // Portal to <body> so the overlay escapes any transformed/overflow-clipped
+  // ancestor — otherwise `fixed inset-0` is captured by that ancestor and the
+  // editor renders taller than the viewport (you'd have to scroll to reach the
+  // top bar / filmstrip). dvh keeps it correct under mobile browser chrome.
+  if (typeof document === 'undefined') return null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-50 text-slate-900 flex flex-col">
+  return createPortal(
+    <div className="fixed inset-0 z-50 h-[100dvh] w-screen bg-slate-50 text-slate-900 flex flex-col">
       {/* ─── Top bar ───────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 bg-white">
         <div className="flex items-center gap-3 min-w-0">
@@ -515,7 +531,8 @@ export function PhotoViewer({
         urls={urls}
         onSelect={onIndexChange}
       />
-    </div>
+    </div>,
+    document.body
   );
 }
 
