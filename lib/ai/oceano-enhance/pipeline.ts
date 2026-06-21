@@ -530,58 +530,68 @@ export async function mergeBrackets(
     .sort((a, b) => (a.bracketIndex ?? 0) - (b.bracketIndex ?? 0));
 
   // Normalize all brackets to the same dimensions (use the first as reference)
+  // and decode to raw sRGB bytes for a per-pixel blend.
   const refMeta = await sharp(sorted[0].bytes).metadata();
   if (!refMeta.width || !refMeta.height) throw new Error('Could not read bracket dimensions');
   const W = refMeta.width;
   const H = refMeta.height;
 
-  const normalized = await Promise.all(
+  const frames = await Promise.all(
     sorted.map((b) =>
       sharp(b.bytes)
         .resize({ width: W, height: H, fit: 'cover' })
         .toColorspace('srgb')
+        .removeAlpha()
+        .raw()
         .toBuffer()
     )
   );
 
-  // Build the well-exposedness weight for each bracket. We compute a per-pixel
-  // distance-from-mid-grey, invert it, and use that as the alpha for an
-  // additive composite. Brackets near the midtones contribute most where
-  // they're best exposed.
+  // Exposure fusion by well-exposedness (Mertens-style, single-scale).
   //
-  // For simplicity we use Sharp's `composite` with the brightest bracket as a
-  // base and overlay the others with a soft alpha derived from luminance.
-  // True Mertens fusion needs Laplacian pyramids — we'll add that in a later
-  // pass once we wire libraw + a worker queue.
-  const base = normalized[Math.floor(normalized.length / 2)]; // middle exposure
+  // The previous approach composited the darkest/brightest frame through a
+  // luminance mask, which — with extreme brackets — dumped the dark frame over
+  // large areas and left hard mask edges (dark, banded results). Instead we
+  // blend ALL frames per pixel, weighting each by how well-exposed THAT frame
+  // is at THAT pixel (a gaussian around mid-grey). So shadows are taken from
+  // the brighter frame (where they're well-exposed), blown highlights from the
+  // darker frame, and midtones from the 0 EV frame — a balanced, correctly-
+  // exposed result with smooth transitions and zero hallucination.
+  const px = W * H;
+  const out = Buffer.allocUnsafe(px * 3);
+  const sigma = 0.2 * 255;
+  const twoSigma2 = 2 * sigma * sigma;
+  const weightFor = new Float32Array(256);
+  for (let v = 0; v < 256; v++) {
+    const d = v - 127;
+    weightFor[v] = Math.exp(-(d * d) / twoSigma2) + 1e-3; // epsilon: never all-zero
+  }
 
-  // Overlay shadows (brightest bracket masked to dark areas of the base)
-  const brightest = normalized[normalized.length - 1];
-  const shadowMask = await sharp(base)
-    .greyscale()
-    .linear(-1, 255) // invert so dark = bright in the mask
-    .gamma(2.2)
-    .toBuffer();
-  const shadowOverlay = await sharp(brightest)
-    .composite([{ input: shadowMask, blend: 'dest-in' }])
-    .toBuffer();
+  for (let i = 0; i < px; i++) {
+    const o = i * 3;
+    let sr = 0;
+    let sg = 0;
+    let sb = 0;
+    let sw = 0;
+    for (let f = 0; f < frames.length; f++) {
+      const fb = frames[f];
+      const r = fb[o];
+      const g = fb[o + 1];
+      const b = fb[o + 2];
+      const lum = (r * 299 + g * 587 + b * 114) / 1000; // 0..255
+      const w = weightFor[lum | 0];
+      sr += r * w;
+      sg += g * w;
+      sb += b * w;
+      sw += w;
+    }
+    out[o] = Math.min(255, Math.round(sr / sw));
+    out[o + 1] = Math.min(255, Math.round(sg / sw));
+    out[o + 2] = Math.min(255, Math.round(sb / sw));
+  }
 
-  // Overlay highlights (darkest bracket masked to bright areas of the base)
-  const darkest = normalized[0];
-  const highlightMask = await sharp(base)
-    .greyscale()
-    .gamma(2.2)
-    .toBuffer();
-  const highlightOverlay = await sharp(darkest)
-    .composite([{ input: highlightMask, blend: 'dest-in' }])
-    .toBuffer();
-
-  // Stack: base + lifted shadows + recovered highlights
-  const fused = await sharp(base)
-    .composite([
-      { input: shadowOverlay, blend: 'over' },
-      { input: highlightOverlay, blend: 'over' },
-    ])
+  const fused = await sharp(out, { raw: { width: W, height: H, channels: 3 } })
+    .jpeg({ quality: 95, mozjpeg: true })
     .toBuffer();
 
   // Run through the single-image pipeline for final WB / tone / sharpen
