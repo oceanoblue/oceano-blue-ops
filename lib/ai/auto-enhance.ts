@@ -35,8 +35,9 @@ export function buildAutoEnhanceJobRow(opts: {
     prompt: recipe.prompt,
     status: 'pending' as const,
     created_by: opts.createdBy,
-    // auto_chain_fixes mirrors the Stage-2 default; auto_enhanced_on_upload marks
-    // the provenance; recipe makes the edit reproducible / re-runnable.
-    params: { auto_chain_fixes: true, recipe, auto_enhanced_on_upload: true } as any,
+    // auto_chain_fixes off: the signature enhance must not auto-apply sky /
+    // window / lawn / declutter / twilight (content-altering, opt-in per photo).
+    // auto_enhanced_on_upload marks provenance; recipe makes it re-runnable.
+    params: { auto_chain_fixes: false, recipe, auto_enhanced_on_upload: true } as any,
   };
 }
