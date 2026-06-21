@@ -43,6 +43,7 @@ import {
 } from '@/lib/photos/bracket-grouping';
 import { extractUploadExif } from '@/lib/photos/exif-extract';
 import { compressImageFile } from '@/lib/photos/compress-image';
+import { extractRawForUpload } from '@/lib/photos/raw-preview';
 import { groupByRoom } from '@/lib/photos/rooms';
 import { useInView } from '@/lib/hooks/use-in-view';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -472,6 +473,8 @@ export function PhotoManager({
         storage_path: string;
         mime_type: string;
         byte_size: number;
+        width?: number;
+        height?: number;
         exif?: Record<string, unknown>;
       };
       const registered: RegItem[] = [];
@@ -485,9 +488,33 @@ export function PhotoManager({
       async function uploadOne(original: File) {
         if (aborted) return;
         const photoId = crypto.randomUUID();
-        // Compress decodable images to web quality before upload (RAW/TIFF pass
-        // through unchanged). EXIF is read from the ORIGINAL below.
-        const file = compressUploads ? await compressImageFile(original) : original;
+
+        // RAW: upload the camera's embedded full-size JPEG preview (~6MB) instead
+        // of the 50MB original — the big upload-speed + storage win — and read
+        // exposure bias straight from the RAW header (the browser's exifr drops
+        // it on Sony ARW). Falls back to the original RAW when there's no usable
+        // preview, in which case the worker converts + backfills bias as before.
+        // Decodable non-RAW images are compressed to web quality.
+        let file: File;
+        let presetExif: Record<string, unknown> | null = null;
+        let dims: { width: number; height: number } | null = null;
+        if (isRawFilename(original.name)) {
+          const prev = await extractRawForUpload(original).catch(() => null);
+          if (prev) {
+            file = prev.file;
+            dims = { width: prev.width, height: prev.height };
+            presetExif = {};
+            if (typeof prev.exif.ExposureBiasValue === 'number') presetExif.ExposureBiasValue = prev.exif.ExposureBiasValue;
+            if (prev.exif.DateTimeOriginal) presetExif.DateTimeOriginal = prev.exif.DateTimeOriginal;
+            if (prev.exif.Make) presetExif.Make = prev.exif.Make;
+            if (prev.exif.Model) presetExif.Model = prev.exif.Model;
+          } else {
+            file = original; // no usable preview → upload the raw original
+          }
+        } else {
+          file = compressUploads ? await compressImageFile(original) : original;
+        }
+
         const safeName = file.name.replace(/[^\w.\-]+/g, '_');
         const storagePath = `${orderId}/${photoId}-${safeName}`;
         const contentType = file.type || 'application/octet-stream';
@@ -506,8 +533,7 @@ export function PhotoManager({
           setRunError(`Upload failed: ${err?.message || err}`);
           return;
         }
-        // Register immediately; extract bracket-relevant EXIF in the background
-        // (so detection can tell HDR sets from in-sequence detail singles).
+
         const entry: RegItem = {
           photo_id: photoId,
           filename: file.name,
@@ -515,14 +541,25 @@ export function PhotoManager({
           mime_type: contentType,
           byte_size: file.size,
         };
+        if (dims) {
+          entry.width = dims.width;
+          entry.height = dims.height;
+        }
         registered.push(entry);
-        exifJobs.push(
-          extractUploadExif(original)
-            .then((exif) => {
-              if (Object.keys(exif).length) entry.exif = exif as Record<string, unknown>;
-            })
-            .catch(() => {})
-        );
+        if (presetExif) {
+          // Exposure bias already read from the RAW header — no background job.
+          if (Object.keys(presetExif).length) entry.exif = presetExif;
+        } else {
+          // Extract bracket-relevant EXIF in the background (so detection can
+          // tell HDR sets from in-sequence detail singles).
+          exifJobs.push(
+            extractUploadExif(original)
+              .then((exif) => {
+                if (Object.keys(exif).length) entry.exif = exif as Record<string, unknown>;
+              })
+              .catch(() => {})
+          );
+        }
         done += 1;
         setUploadProgress({ done, total: files.length });
       }
