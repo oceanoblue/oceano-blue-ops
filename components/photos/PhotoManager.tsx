@@ -2316,15 +2316,16 @@ function ProcessedCard({
 
       {/* Bottom action area: approve/reject + chips. pointer-events-none while
           hidden so clicks fall through to the card (open viewer); re-enabled on
-          hover so the buttons work. opacity-0 alone still captures clicks. */}
+          hover so the buttons work. We do NOT stop propagation on the container —
+          only the buttons do — so clicking the empty gradient still opens the
+          loupe instead of being swallowed. */}
       <div
         className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-2 opacity-0 transition pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex gap-1">
             <button
-              onClick={() => decide(isApproved ? 'reset' : 'approve')}
+              onClick={(e) => { e.stopPropagation(); decide(isApproved ? 'reset' : 'approve'); }}
               disabled={busy !== null}
               title={isApproved ? 'Un-approve' : 'Approve'}
               className={`p-1.5 rounded-md text-white text-xs transition ${
@@ -2338,7 +2339,7 @@ function ProcessedCard({
               )}
             </button>
             <button
-              onClick={() => decide(isRejected ? 'reset' : 'reject')}
+              onClick={(e) => { e.stopPropagation(); decide(isRejected ? 'reset' : 'reject'); }}
               disabled={busy !== null}
               title={isRejected ? 'Un-reject' : 'Reject'}
               className={`p-1.5 rounded-md text-white text-xs transition ${
@@ -2353,7 +2354,7 @@ function ProcessedCard({
             </button>
           </div>
           <button
-            onClick={rerunRecipe}
+            onClick={(e) => { e.stopPropagation(); rerunRecipe(); }}
             disabled={busy !== null}
             title={
               recipeSummary
@@ -2375,7 +2376,7 @@ function ProcessedCard({
             return (
               <button
                 key={e.id}
-                onClick={() => applyExtra(e.id)}
+                onClick={(ev) => { ev.stopPropagation(); applyExtra(e.id); }}
                 disabled={busy !== null}
                 title={e.label}
                 className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-medium bg-white/15 text-white hover:bg-white/25 transition"
