@@ -11,9 +11,11 @@ import type { AiJobType } from '@/lib/supabase/database.types';
  */
 
 const LUXURY_REAL_ESTATE_BASE = `
-Your task is to recreate and professionally finish the image as if it were
-edited by a top-tier architectural photography studio for luxury real estate
-marketing.
+Your task is to professionally retouch and finish the image — NEVER regenerate,
+redraw, or reimagine it — as if it were edited by a top-tier architectural
+photography studio for luxury real estate marketing. Treat the input as a real
+photograph of a real property: keep its exact contents and only improve the
+photographic quality.
 
 Editing style must be: clean, neutral, ultra-natural, bright, realistic,
 true-to-life, magazine-quality.
@@ -175,6 +177,34 @@ Most important rule: maintain realism, neutrality, MLS-accurate authenticity,
 and the property's true condition above everything else.
 `.trim();
 
+/**
+ * Front-loaded fidelity lock for the plain enhance pass. Generative editors will
+ * happily "improve" a room by swapping appliances, repainting walls, or moving
+ * furniture unless told — in the strongest terms, first — that this is a retouch
+ * and the content is sacred. Prepended to the enhance_single prompt.
+ */
+const FIDELITY_LOCK = `
+FIDELITY LOCK — THIS IS A RETOUCH, NOT A REGENERATION (ABSOLUTE TOP PRIORITY)
+You are retouching one existing photograph. The output must be the SAME photo of
+the SAME room with the SAME contents — only better exposed, color-correct,
+cleaner, and sharper. A viewer comparing the input and output must see the
+identical room, just professionally finished. Reproduce every element exactly:
+- Every piece of furniture, appliance, cabinet, countertop, sink, faucet,
+  fixture, outlet, switch, vent, and hardware — same design, position, and count.
+- Every material, finish, pattern and COLOR — wall paint color, flooring type,
+  tile, wood tone, stone veining, fabric, counters — kept identical. Never
+  change a wall's color, a floor's material, or a cabinet's finish.
+- Every number, letter, label, screen, clock and thermostat reading, and brand
+  mark — kept exactly, sharp and legible.
+- Room geometry, layout, and the position of every window and door — unchanged.
+Do NOT add, remove, move, swap, restyle, duplicate, or reimagine anything. If an
+area cannot be improved without altering its content, leave it exactly as-is.
+Improve ONLY the photographic qualities: exposure and brightness, white balance
+(clean, truly neutral whites), contrast, color accuracy and depth, shadow and
+highlight recovery, haze/noise reduction, and crisp-but-natural sharpness and
+clarity — for a bright, clean, luxury MLS look that stays loyal to the original.
+`.trim();
+
 export const PROMPTS: Record<AiJobType, string> = {
   hdr_merge: `${LUXURY_REAL_ESTATE_BASE}
 
@@ -182,10 +212,14 @@ JOB: Merge these bracketed exposures of the same scene into a single
 natural-looking image. Pull window detail from the dark frames. Lift shadows
 from the bright frames. Produce one final 16:9 image suitable for MLS.`,
 
-  enhance_single: `${LUXURY_REAL_ESTATE_BASE}
+  enhance_single: `${FIDELITY_LOCK}
 
-JOB: This is a single-exposure photo. Apply the full luxury edit pass
-above. Respect the original composition. Do not crop or reframe.`,
+${LUXURY_REAL_ESTATE_BASE}
+
+JOB: This is a single-exposure photo. Apply the full luxury finishing pass
+above while obeying the FIDELITY LOCK absolutely — same room, same contents,
+only better photographic quality. Respect the original composition. Do not crop
+or reframe.`,
 
   sky_replace: `${LUXURY_REAL_ESTATE_BASE}
 
