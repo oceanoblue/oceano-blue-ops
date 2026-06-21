@@ -16,6 +16,17 @@ const DELIVERY_LONG_EDGE = (() => {
   return Number.isFinite(v) ? v : 3840;
 })();
 
+// Long edge the inputs are fed to the pipeline / AI providers at. This MUST be
+// at least the delivery size — feeding a small image makes the deterministic
+// merge low-res AND, crucially, gives a generative model too little detail to
+// "see" the scene, so it invents appliances/walls/rooms. Override with
+// AI_INPUT_LONG_EDGE. Default 4096 keeps full detail while staying within
+// provider payload limits (~2-3 MB at q90).
+const AI_INPUT_LONG_EDGE = (() => {
+  const v = parseInt(process.env.AI_INPUT_LONG_EDGE || '4096', 10);
+  return Number.isFinite(v) && v > 0 ? Math.max(v, DELIVERY_LONG_EDGE) : 4096;
+})();
+
 /**
  * Runs a single ai_jobs row end-to-end:
  *   1. Mark job + input photos as running
@@ -72,11 +83,21 @@ export async function runAiJob(jobId: string): Promise<{
           .download(p.storage_path);
         if (error || !data) throw new Error(`Download failed: ${p.storage_path}`);
         const raw = Buffer.from(await data.arrayBuffer());
-        // Preprocess: ensure JPEG ≤ ~4MB for AI providers
+        // Preprocess: normalize orientation + cap the long edge. Keep this at
+        // full delivery resolution so the deterministic merge stays sharp and a
+        // generative enhance gets enough detail to stay faithful (a downscaled
+        // input is what makes it hallucinate). Constrain by the LONG edge so
+        // portrait frames aren't left oversized.
         const processed = await sharp(raw)
           .rotate()
-          .resize({ width: 2048, withoutEnlargement: true })
-          .jpeg({ quality: 88, mozjpeg: true })
+          .resize({
+            width: AI_INPUT_LONG_EDGE,
+            height: AI_INPUT_LONG_EDGE,
+            fit: 'inside',
+            withoutEnlargement: true,
+            kernel: 'lanczos3',
+          })
+          .jpeg({ quality: 92, mozjpeg: true })
           .toBuffer();
         return {
           bytes: processed,
