@@ -140,7 +140,9 @@ export function PhotoManager({
 
   // Stage 2 config
   const [aiProvider, setAiProvider] = useState<AiProvider>('openai-gpt-image');
-  const [autoDetect, setAutoDetect] = useState(true);
+  // Off by default: the signature enhance should NOT auto-apply sky / window /
+  // lawn / declutter / twilight. Those alter content and stay opt-in per photo.
+  const [autoDetect, setAutoDetect] = useState(false);
   const [stage2Selection, setStage2Selection] = useState<Set<string>>(new Set());
 
   // Stage 2 enhance preferences. Defaults match the

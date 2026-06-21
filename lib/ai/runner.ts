@@ -27,6 +27,24 @@ const AI_INPUT_LONG_EDGE = (() => {
   return Number.isFinite(v) && v > 0 ? Math.max(v, DELIVERY_LONG_EDGE) : 4096;
 })();
 
+const GENERATED_PREFIX =
+  /^(hdr_merge|enhance_single|sky_replace|window_pull|lawn_enhance|declutter|twilight_convert|virtual_stage)-\d+.*$/i;
+
+/**
+ * Derive a clean, human delivery name from a source filename. Strips the
+ * extension, our own `-enhanced` suffix, and any generated job prefix
+ * (`hdr_merge-1782…`, `enhance_single-…`, etc.) so outputs stay named after the
+ * ORIGINAL frame (e.g. OBM03968) rather than the job type. Falls back to
+ * "photo" if nothing usable remains.
+ */
+function cleanBaseName(filename: string): string {
+  let n = (filename || '').replace(/\.[^.]+$/, '');
+  n = n.replace(/-enhanced$/i, '');
+  n = n.replace(GENERATED_PREFIX, '');
+  n = n.trim();
+  return n || 'photo';
+}
+
 /**
  * Runs a single ai_jobs row end-to-end:
  *   1. Mark job + input photos as running
@@ -127,7 +145,15 @@ export async function runAiJob(jobId: string): Promise<{
       // passthroughs are intermediates (re-enhanced later), so they're left as-is.
       let bytes = out.bytes;
       let mimeType = out.mimeType;
-      let filename = out.filename;
+      // Name the output after the ORIGINAL frame, not the job type. The merged
+      // base keeps the plain name (e.g. OBM03968.jpg); every enhanced output
+      // gets a single "-enhanced" suffix (OBM03968-enhanced.jpg) — never
+      // "enhance_single-1782…", "declutter-…", etc.
+      const srcName =
+        [...inputs].sort((a: Photo, b: Photo) => (a.filename || '').localeCompare(b.filename || ''))[0]
+          ?.filename ?? out.filename;
+      const baseName = cleanBaseName(srcName);
+      let filename = job.job_type === 'hdr_merge' ? `${baseName}.jpg` : `${baseName}-enhanced.jpg`;
       if (job.job_type !== 'hdr_merge') {
         try {
           const src = await sharp(out.bytes).metadata();
@@ -143,7 +169,6 @@ export async function runAiJob(jobId: string): Promise<{
               .jpeg({ quality: 90, mozjpeg: true })
               .toBuffer();
             mimeType = 'image/jpeg';
-            filename = out.filename.replace(/\.[^.]+$/, '') + '.jpg';
           }
         } catch {
           bytes = out.bytes; // any sharp hiccup → ship the model output as-is
