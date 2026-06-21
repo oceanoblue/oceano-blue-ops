@@ -2314,9 +2314,11 @@ function ProcessedCard({
         </div>
       )}
 
-      {/* Bottom action area: approve/reject + chips */}
+      {/* Bottom action area: approve/reject + chips. pointer-events-none while
+          hidden so clicks fall through to the card (open viewer); re-enabled on
+          hover so the buttons work. opacity-0 alone still captures clicks. */}
       <div
-        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-2 opacity-0 group-hover:opacity-100 transition"
+        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-2 opacity-0 transition pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-1.5">
