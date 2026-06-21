@@ -392,11 +392,14 @@ async function applyBlacks(buf: Buffer, amount: number): Promise<Buffer> {
  */
 async function applySharpening(buf: Buffer, amount: number): Promise<Buffer> {
   if (amount <= 0.01) return buf;
+  // Edge-focused: keep m1 (flat-area sharpening) at ~0 so we don't amplify
+  // sensor noise into visible grain in smooth/shadow regions; put the strength
+  // on m2 (edges) for crisp detail. m1 was the main cause of grain on dark shots.
   return sharp(buf)
     .sharpen({
-      sigma: 0.6 + amount * 0.8,
-      m1: 0.4 + amount * 0.8,
-      m2: 1.0 + amount * 1.5,
+      sigma: 0.5 + amount * 0.6,
+      m1: 0,
+      m2: 1.2 + amount * 1.6,
     })
     .toBuffer();
 }
@@ -547,47 +550,38 @@ export async function mergeBrackets(
     )
   );
 
-  // Exposure fusion by well-exposedness (Mertens-style, single-scale).
+  // Base-preserving exposure recovery.
   //
-  // The previous approach composited the darkest/brightest frame through a
-  // luminance mask, which — with extreme brackets — dumped the dark frame over
-  // large areas and left hard mask edges (dark, banded results). Instead we
-  // blend ALL frames per pixel, weighting each by how well-exposed THAT frame
-  // is at THAT pixel (a gaussian around mid-grey). So shadows are taken from
-  // the brighter frame (where they're well-exposed), blown highlights from the
-  // darker frame, and midtones from the 0 EV frame — a balanced, correctly-
-  // exposed result with smooth transitions and zero hallucination.
+  // A plain well-exposedness average pulls every pixel toward mid-grey, which
+  // flattens contrast (washed-out, lifted blacks). Instead we KEEP the
+  // well-exposed middle (≈0 EV) frame in the midtones — preserving its natural
+  // contrast — and only borrow from the extremes where the middle frame fails:
+  //   • blown highlights  → pull from the DARKEST frame (recovers window/sky)
+  //   • blocked shadows   → pull from the BRIGHTEST frame (clean shadow detail,
+  //                          which also avoids the grain you get from lifting the
+  //                          dark frame's own noisy shadows)
+  // Midtones come straight from the base, so contrast and a true black point are
+  // retained. Weights ramp smoothly so there are no hard seams.
+  const darkest = frames[0];
+  const brightest = frames[frames.length - 1];
+  const base = frames[Math.floor(frames.length / 2)];
   const px = W * H;
   const out = Buffer.allocUnsafe(px * 3);
-  const sigma = 0.2 * 255;
-  const twoSigma2 = 2 * sigma * sigma;
-  const weightFor = new Float32Array(256);
-  for (let v = 0; v < 256; v++) {
-    const d = v - 127;
-    weightFor[v] = Math.exp(-(d * d) / twoSigma2) + 1e-3; // epsilon: never all-zero
-  }
+  const HI_START = 170; // base luminance where highlight recovery begins
+  const LO_START = 85; // base luminance where shadow recovery begins
+  const MAX_W = 0.85; // cap so the base never fully disappears at the extremes
 
   for (let i = 0; i < px; i++) {
     const o = i * 3;
-    let sr = 0;
-    let sg = 0;
-    let sb = 0;
-    let sw = 0;
-    for (let f = 0; f < frames.length; f++) {
-      const fb = frames[f];
-      const r = fb[o];
-      const g = fb[o + 1];
-      const b = fb[o + 2];
-      const lum = (r * 299 + g * 587 + b * 114) / 1000; // 0..255
-      const w = weightFor[lum | 0];
-      sr += r * w;
-      sg += g * w;
-      sb += b * w;
-      sw += w;
-    }
-    out[o] = Math.min(255, Math.round(sr / sw));
-    out[o + 1] = Math.min(255, Math.round(sg / sw));
-    out[o + 2] = Math.min(255, Math.round(sb / sw));
+    const L = (base[o] * 299 + base[o + 1] * 587 + base[o + 2] * 114) / 1000;
+    let wH = 0;
+    let wS = 0;
+    if (L > HI_START) wH = ((L - HI_START) / (255 - HI_START)) * MAX_W;
+    else if (L < LO_START) wS = ((LO_START - L) / LO_START) * MAX_W;
+    const wB = 1 - wH - wS;
+    out[o] = ((base[o] * wB + darkest[o] * wH + brightest[o] * wS) + 0.5) | 0;
+    out[o + 1] = ((base[o + 1] * wB + darkest[o + 1] * wH + brightest[o + 1] * wS) + 0.5) | 0;
+    out[o + 2] = ((base[o + 2] * wB + darkest[o + 2] * wH + brightest[o + 2] * wS) + 0.5) | 0;
   }
 
   const fused = await sharp(out, { raw: { width: W, height: H, channels: 3 } })
