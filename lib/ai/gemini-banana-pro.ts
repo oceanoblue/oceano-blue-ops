@@ -15,6 +15,15 @@ import { buildPrompt } from './prompts';
 const ENDPOINT = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Pull Google's suggested retry delay (seconds) out of a 429/503 body. */
+function parseRetryDelayMs(body: string): number | null {
+  const m = body.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/);
+  if (m) return Math.ceil(parseFloat(m[1]) * 1000);
+  return null;
+}
+
 function isConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
@@ -72,15 +81,29 @@ function makeGeminiProvider(opts: {
         generationConfig: { responseModalities: ['IMAGE'] },
       };
 
-      const r = await fetch(`${ENDPOINT(model)}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (!r.ok) {
+      // Retry on rate-limit (429) / transient overload (503): Google returns a
+      // suggested retryDelay (the per-minute window resets), so wait that long
+      // (capped) and try again rather than failing the job. Up to 4 attempts.
+      const MAX_ATTEMPTS = 4;
+      const MAX_WAIT_MS = 45_000;
+      let r: Response;
+      let attempt = 0;
+      for (;;) {
+        r = await fetch(`${ENDPOINT(model)}?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (r.ok) break;
         const errBody = await r.text();
-        throw new Error(`Gemini ${model} HTTP ${r.status}: ${errBody.slice(0, 500)}`);
+        const retryable = r.status === 429 || r.status === 503;
+        attempt += 1;
+        if (!retryable || attempt >= MAX_ATTEMPTS) {
+          throw new Error(`Gemini ${model} HTTP ${r.status}: ${errBody.slice(0, 500)}`);
+        }
+        const suggested = parseRetryDelayMs(errBody);
+        const backoff = Math.min(suggested ?? attempt * 12_000, MAX_WAIT_MS);
+        await sleep(backoff);
       }
 
       const data: any = await r.json();
