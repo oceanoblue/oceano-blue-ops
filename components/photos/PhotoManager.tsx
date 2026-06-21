@@ -1815,33 +1815,47 @@ function Stage3({
         </div>
       )}
 
-      {shown.length === 0 && (showArchived || processingJobs.length === 0) ? (
-        <div className="card">
-          {showArchived ? (
-            <EmptyState
-              compact
-              icon={Archive}
-              title="Nothing archived"
-              description="Rejected or de-duplicated photos will collect here, out of the way."
-            />
-          ) : (
-            <EmptyState
-              compact
-              icon={Sparkles}
-              title="Nothing to review yet"
-              description="Enhanced photos will show up here as they finish."
-            />
-          )}
+      {/* Calm background progress. Enhancement runs server-side, so instead of
+          a screen full of churning skeleton tiles we show one quiet line and let
+          finished photos fill in. */}
+      {!showArchived && processingJobs.length > 0 && (
+        <div className="card flex items-center gap-3 p-3.5 text-sm">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ocean-600" />
+          <div className="min-w-0">
+            <div className="font-medium text-slate-800">
+              Enhancing {processingJobs.length} photo{processingJobs.length === 1 ? '' : 's'} in the background…
+            </div>
+            <div className="text-xs text-slate-500">
+              {shown.length} ready so far — finished photos appear below. You can leave this page; it keeps going.
+            </div>
+          </div>
         </div>
+      )}
+
+      {shown.length === 0 ? (
+        // While work is in flight the progress line above is enough — don't also
+        // show an empty state. Only show it when there's genuinely nothing.
+        processingJobs.length > 0 && !showArchived ? null : (
+          <div className="card">
+            {showArchived ? (
+              <EmptyState
+                compact
+                icon={Archive}
+                title="Nothing archived"
+                description="Rejected or de-duplicated photos will collect here, out of the way."
+              />
+            ) : (
+              <EmptyState
+                compact
+                icon={Sparkles}
+                title="Nothing to review yet"
+                description="Enhanced photos will show up here as they finish."
+              />
+            )}
+          </div>
+        )
       ) : byRoom && hasRooms && !showArchived ? (
         <div className="space-y-8">
-          {processingJobs.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {processingJobs.map((j) => (
-                <ProcessingTile key={j.id} job={j} />
-              ))}
-            </div>
-          )}
           {roomGroups.map((g) => (
             <section key={g.label}>
               <h3 className="mb-2 flex items-baseline gap-2 border-b border-slate-100 pb-1.5">
@@ -1867,8 +1881,6 @@ function Stage3({
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {!showArchived &&
-            processingJobs.map((j) => <ProcessingTile key={j.id} job={j} />)}
           {shown.map((p) => (
             <ProcessedCard
               key={p.id}
