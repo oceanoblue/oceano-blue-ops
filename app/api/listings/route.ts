@@ -57,24 +57,35 @@ export async function POST(request: Request) {
       );
     }
     const nc = b.new_client;
-    const { data: client, error: cErr } = await admin
+    const email = nc.email.toLowerCase().trim();
+    // Reuse an existing client with this email — do NOT upsert/overwrite. An
+    // email-keyed upsert would clobber the existing client's name/phone/brokerage
+    // (silently "losing" a previously-added client when an email is reused or
+    // left as a placeholder). Look up first; only insert when it's truly new.
+    const { data: existing } = await admin
       .from('clients')
-      .upsert(
-        {
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+    if (existing) {
+      clientId = (existing as any).id;
+    } else {
+      const { data: client, error: cErr } = await admin
+        .from('clients')
+        .insert({
           full_name: nc.full_name.trim(),
-          email: nc.email.toLowerCase().trim(),
+          email,
           phone: nc.phone?.trim() || null,
           brokerage: nc.brokerage?.trim() || null,
           is_archived: false,
-        },
-        { onConflict: 'email' }
-      )
-      .select('id')
-      .single();
-    if (cErr || !client) {
-      return NextResponse.json({ error: cErr?.message ?? 'client_create_failed' }, { status: 500 });
+        })
+        .select('id')
+        .single();
+      if (cErr || !client) {
+        return NextResponse.json({ error: cErr?.message ?? 'client_create_failed' }, { status: 500 });
+      }
+      clientId = (client as any).id;
     }
-    clientId = (client as any).id;
   }
 
   const { data: listing, error } = await admin
