@@ -18,15 +18,19 @@ const PROVIDERS: Record<AiProviderId, AiProvider> = {
 /**
  * Default provider per job type. Editable in /dashboard/settings.
  *
- * GPT Image 2.0 is the default signature enhance engine. Oceano Smart Enhance
- * (deterministic base + auto generative fixes) remains selectable and tunable
- * via the enhance settings panel, but is off by default pending grade tuning.
- * Pure exposure fusion (hdr_merge) + lawn green-up stay on the deterministic
- * Oceano pipeline.
+ * The signature enhance (enhance_single) and the exposure fusion (hdr_merge)
+ * run on the deterministic Oceano pipeline so the output stays FAITHFUL to the
+ * original photo — tone, colour, exposure and sharpening only, never a
+ * regenerated scene. (GPT Image is a generative model: asked to "enhance" a
+ * room it re-invents appliances, walls, floors and furniture, which is
+ * misrepresentation for a real listing.) The genuinely generative jobs —
+ * sky_replace / window_pull / twilight / staging / destructive declutter —
+ * still use a generative provider, but they're opt-in per-photo tools the
+ * operator triggers deliberately, never part of the automatic enhance.
  */
 const DEFAULTS: Record<AiJobType, AiProviderId> = {
   hdr_merge: 'oceano-enhance',
-  enhance_single: 'openai-gpt-image',
+  enhance_single: 'oceano-enhance',
   lawn_enhance: 'oceano-enhance',
   declutter: 'openai-gpt-image',
   sky_replace: 'openai-gpt-image',

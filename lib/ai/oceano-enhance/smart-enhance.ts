@@ -189,6 +189,14 @@ export async function smartEnhance(
   const settings = await loadEnhanceSettings();
   const base = await enhanceSingle(inputBuf, { ...LUXURY_BASELINE, ...settings, ...options });
 
+  // The generative auto-chain (sky / window / lawn / declutter / twilight) is
+  // OFF by default. Those edits alter content, and the automatic enhance must
+  // stay faithful to the real listing — the operator applies them deliberately
+  // per photo. Opt in with OCEANO_ENHANCE_AUTO_CHAIN=true.
+  if (process.env.OCEANO_ENHANCE_AUTO_CHAIN !== 'true') {
+    return { bytes: base.bytes, analysis: null, editsApplied: [], costCents: 0 };
+  }
+
   // 2. Analyze the base to decide what generative edits are worth it.
   const analysis = await analyze(base.bytes);
 
