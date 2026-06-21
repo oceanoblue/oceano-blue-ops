@@ -18,19 +18,20 @@ const PROVIDERS: Record<AiProviderId, AiProvider> = {
 /**
  * Default provider per job type. Editable in /dashboard/settings.
  *
- * The signature enhance (enhance_single) and the exposure fusion (hdr_merge)
- * run on the deterministic Oceano pipeline so the output stays FAITHFUL to the
- * original photo — tone, colour, exposure and sharpening only, never a
- * regenerated scene. (GPT Image is a generative model: asked to "enhance" a
- * room it re-invents appliances, walls, floors and furniture, which is
- * misrepresentation for a real listing.) The genuinely generative jobs —
- * sky_replace / window_pull / twilight / staging / destructive declutter —
- * still use a generative provider, but they're opt-in per-photo tools the
- * operator triggers deliberately, never part of the automatic enhance.
+ * enhance_single runs on Nano Banana Pro (Gemini 3 Pro Image) — a true
+ * image-to-image editor ("keep the scene, enhance it"), driven by the
+ * front-loaded FIDELITY LOCK prompt so it stays loyal to the original (same
+ * appliances, walls, floors, furniture, colours, numbers) while improving
+ * exposure, neutral whites, colour, and sharpness for a luxury finish. This
+ * replaces GPT Image, which regenerated rooms instead of retouching them.
+ * The deterministic Oceano pipeline remains selectable as the guaranteed-
+ * faithful, zero-cost fallback (and still owns the exposure fusion hdr_merge).
+ * The genuinely generative jobs (sky / window / twilight / staging / destructive
+ * declutter) are opt-in per-photo tools, never part of the automatic enhance.
  */
 const DEFAULTS: Record<AiJobType, AiProviderId> = {
   hdr_merge: 'oceano-enhance',
-  enhance_single: 'oceano-enhance',
+  enhance_single: 'gemini-nano-banana-pro',
   lawn_enhance: 'oceano-enhance',
   declutter: 'openai-gpt-image',
   sky_replace: 'openai-gpt-image',
