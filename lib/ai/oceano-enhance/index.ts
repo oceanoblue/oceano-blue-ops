@@ -92,19 +92,25 @@ export const oceanoEnhance: AiProvider = {
         // faithful finishing grade (auto WB, denoise, local contrast, tone /
         // black point, gentle saturation, edge-aware sharpen). No hallucination.
         if (editEngineConfigured()) {
-          const bytes = await runEditEngine([{ bytes: buf, filename: src.filename }], {
-            mode: 'grade',
-            targetLongEdge: opts.targetLongEdge ?? 4000,
-            quality: opts.jpegQuality ?? 90,
-          });
-          return {
-            outputs: [{ bytes, mimeType: 'image/jpeg', filename: `enhance_single-${Date.now()}.jpg` }],
-            model: 'oceano-edit-engine/grade-v1',
-            costCents: 0,
-            rawPromptUsed: '(deterministic edit engine: grade)',
-          };
+          try {
+            const bytes = await runEditEngine([{ bytes: buf, filename: src.filename }], {
+              mode: 'grade',
+              targetLongEdge: opts.targetLongEdge ?? 4000,
+              quality: opts.jpegQuality ?? 90,
+            });
+            return {
+              outputs: [{ bytes, mimeType: 'image/jpeg', filename: `enhance_single-${Date.now()}.jpg` }],
+              model: 'oceano-edit-engine/grade-v1',
+              costCents: 0,
+              rawPromptUsed: '(deterministic edit engine: grade)',
+            };
+          } catch (e) {
+            // Engine unreachable/erroring → don't fail the job; use the legacy
+            // pipeline. The model tag below ('oceano-enhance/...') reveals this.
+            console.error('[oceano-enhance] edit engine grade failed, falling back:', e);
+          }
         }
-        // Fallback (engine not configured): legacy JS smart-enhance.
+        // Fallback (engine not configured or unreachable): legacy JS smart-enhance.
         const result = await smartEnhance(buf, src.filename, opts);
         const editLog = result.editsApplied.length
           ? `applied: ${result.editsApplied.join(' → ')}`
@@ -154,21 +160,27 @@ export const oceanoEnhance: AiProvider = {
         // Preferred path: proper Mertens multi-scale exposure fusion on the edit
         // engine (preserves local contrast — no flat/washed merges).
         if (editEngineConfigured()) {
-          const ordered = [...brackets].sort(
-            (a, b) => (a.bracketIndex ?? 0) - (b.bracketIndex ?? 0)
-          );
-          const bytes = await runEditEngine(
-            ordered.map((b) => ({ bytes: b.bytes, filename: b.filename })),
-            { mode: 'fuse', targetLongEdge: 4096, quality: 95 }
-          );
-          return {
-            outputs: [{ bytes, mimeType: 'image/jpeg', filename: `hdr_merge-${Date.now()}.jpg` }],
-            model: 'oceano-edit-engine/fuse-v1',
-            costCents: 0,
-            rawPromptUsed: '(deterministic edit engine: Mertens fusion)',
-          };
+          try {
+            const ordered = [...brackets].sort(
+              (a, b) => (a.bracketIndex ?? 0) - (b.bracketIndex ?? 0)
+            );
+            const bytes = await runEditEngine(
+              ordered.map((b) => ({ bytes: b.bytes, filename: b.filename })),
+              { mode: 'fuse', targetLongEdge: 4096, quality: 95 }
+            );
+            return {
+              outputs: [{ bytes, mimeType: 'image/jpeg', filename: `hdr_merge-${Date.now()}.jpg` }],
+              model: 'oceano-edit-engine/fuse-v1',
+              costCents: 0,
+              rawPromptUsed: '(deterministic edit engine: Mertens fusion)',
+            };
+          } catch (e) {
+            // Engine unreachable/erroring → fall back to legacy fusion instead
+            // of failing the merge. Model tag below reveals the fallback ran.
+            console.error('[oceano-enhance] edit engine fuse failed, falling back:', e);
+          }
         }
-        // Fallback (engine not configured): legacy JS exposure fusion.
+        // Fallback (engine not configured or unreachable): legacy JS exposure fusion.
         const result = await mergeBrackets(brackets, opts);
         return {
           outputs: [
