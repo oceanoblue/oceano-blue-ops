@@ -100,14 +100,14 @@ const DEFAULTS: Required<EnhanceOptions> = {
  * Override per-deployment via DB settings.
  */
 export const LUXURY_BASELINE: EnhanceOptions = {
-  exposure: 0.25, // airy lift, moderate so exteriors don't blow
-  contrast: 0.08, // gentle S, not an HDR slam
+  exposure: 0.1, // gentle lift — enough air without hazing the midtones
+  contrast: 0.22, // real tonal separation + depth; also anchors the black point
   temp: 0.0, // neutral — white-patch WB sets the white point; no warm cast
-  saturation: 0.1, // modest + realistic; oversaturation looks fake
-  highlights: 0.35, // strong recovery: hold window & sunlit-exterior detail
-  shadows: 0.3, // open the corners for the bright/airy look (don't crush wood)
-  whites: 0.0, // keep the brightest whites just below clip
-  blacks: -0.03, // a hair of lift for "airy"; contrast keeps a true black point
+  saturation: 0.16, // rich but realistic; oversaturation looks fake
+  highlights: 0.45, // strong recovery: hold window & sunlit-exterior detail
+  shadows: 0.12, // open the corners gently — NOT a global lift (that washes out)
+  whites: -0.02, // hold the brightest whites just below clip
+  blacks: 0.1, // set a true black point for depth (never lift blacks → haze)
   sharpening: 0.3, // crisp, edge-aware, no crunch
 };
 
