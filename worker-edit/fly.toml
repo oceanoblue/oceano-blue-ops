@@ -1,0 +1,33 @@
+# Fly.io config for the Oceano Edit Engine (deterministic photo pipeline).
+# Deploy:
+#   cd worker-edit
+#   fly launch --copy-config --no-deploy   # first time only (name: oceano-edit-engine)
+#   fly secrets set EDIT_WORKER_SECRET=$(openssl rand -hex 32)
+#   fly deploy
+# Then in Vercel set:
+#   EDIT_ENGINE_URL = https://oceano-edit-engine.fly.dev
+#   EDIT_WORKER_SECRET = <same value as the Fly secret>
+
+app = "oceano-edit-engine"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"   # save money when idle
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  # Mertens fusion of 3-7 frames at ~4096px holds several full-res float buffers
+  # in memory; 2 GB is comfortable headroom for one fuse at a time.
+  memory_mb = 2048
+
+[env]
+  PYTHONUNBUFFERED = "1"

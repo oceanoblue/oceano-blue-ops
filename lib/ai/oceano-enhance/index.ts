@@ -4,6 +4,7 @@ import { loadEnhanceSettings } from './settings';
 import { smartEnhance } from './smart-enhance';
 import { geminiBananaPro } from '../gemini-banana-pro';
 import { openaiGptImage } from '../openai-gpt-image';
+import { editEngineConfigured, runEditEngine } from '../edit-engine';
 
 /**
  * Oceano Enhance — our internal real-estate retouch provider.
@@ -85,10 +86,25 @@ export const oceanoEnhance: AiProvider = {
 
     switch (req.jobType) {
       case 'enhance_single': {
-        // The "do everything" mode: deterministic pipeline + vision analysis
-        // + selective generative edits chained together.
         const src = req.inputs[0];
         const buf = await bufFromSource(src);
+        // Preferred path: the deterministic Python edit engine applies the
+        // faithful finishing grade (auto WB, denoise, local contrast, tone /
+        // black point, gentle saturation, edge-aware sharpen). No hallucination.
+        if (editEngineConfigured()) {
+          const bytes = await runEditEngine([{ bytes: buf, filename: src.filename }], {
+            mode: 'grade',
+            targetLongEdge: opts.targetLongEdge ?? 4000,
+            quality: opts.jpegQuality ?? 90,
+          });
+          return {
+            outputs: [{ bytes, mimeType: 'image/jpeg', filename: `enhance_single-${Date.now()}.jpg` }],
+            model: 'oceano-edit-engine/grade-v1',
+            costCents: 0,
+            rawPromptUsed: '(deterministic edit engine: grade)',
+          };
+        }
+        // Fallback (engine not configured): legacy JS smart-enhance.
         const result = await smartEnhance(buf, src.filename, opts);
         const editLog = result.editsApplied.length
           ? `applied: ${result.editsApplied.join(' → ')}`
@@ -132,8 +148,27 @@ export const oceanoEnhance: AiProvider = {
           req.inputs.map(async (src) => ({
             bytes: await bufFromSource(src),
             bracketIndex: src.bracketIndex,
+            filename: src.filename,
           }))
         );
+        // Preferred path: proper Mertens multi-scale exposure fusion on the edit
+        // engine (preserves local contrast — no flat/washed merges).
+        if (editEngineConfigured()) {
+          const ordered = [...brackets].sort(
+            (a, b) => (a.bracketIndex ?? 0) - (b.bracketIndex ?? 0)
+          );
+          const bytes = await runEditEngine(
+            ordered.map((b) => ({ bytes: b.bytes, filename: b.filename })),
+            { mode: 'fuse', targetLongEdge: 4096, quality: 95 }
+          );
+          return {
+            outputs: [{ bytes, mimeType: 'image/jpeg', filename: `hdr_merge-${Date.now()}.jpg` }],
+            model: 'oceano-edit-engine/fuse-v1',
+            costCents: 0,
+            rawPromptUsed: '(deterministic edit engine: Mertens fusion)',
+          };
+        }
+        // Fallback (engine not configured): legacy JS exposure fusion.
         const result = await mergeBrackets(brackets, opts);
         return {
           outputs: [
