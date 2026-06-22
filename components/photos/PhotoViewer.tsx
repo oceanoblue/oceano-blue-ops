@@ -92,6 +92,9 @@ export function PhotoViewer({
   const [showBefore, setShowBefore] = useState(false);
   const [parentUrl, setParentUrl] = useState<string | null>(null);
   const [parentFetching, setParentFetching] = useState(false);
+  // Full-resolution URL for the current photo. The grids populate `urls` with
+  // small thumbnails (for memory), so the loupe fetches the full image itself.
+  const [fullUrl, setFullUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | 'rotate' | 'save' | 'ai'>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -126,6 +129,23 @@ export function PhotoViewer({
       .finally(() => setParentFetching(false));
   }, [photo?.id, photo?.parent_photo_id]);
 
+  // Fetch the full-resolution image for the current photo (grids only cache
+  // thumbnails). The thumbnail shows instantly underneath while this loads.
+  useEffect(() => {
+    setFullUrl(null);
+    if (!photo?.id) return;
+    let cancelled = false;
+    fetch(`/api/photo-url?photo_id=${photo.id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled && d.url) setFullUrl(d.url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [photo?.id]);
+
   // Reset slider state when navigating
   useEffect(() => {
     setAdjust(ZERO);
@@ -133,7 +153,9 @@ export function PhotoViewer({
     setPreviewB64(null);
   }, [photo?.id]);
 
-  const url = photo ? urls[photo.id] : null;
+  // Prefer the full-res image; fall back to the cached thumbnail so something
+  // shows instantly while the full image downloads.
+  const url = photo ? fullUrl ?? urls[photo.id] : null;
   const displayUrl = previewB64
     ? `data:image/jpeg;base64,${previewB64}`
     : showBefore && parentUrl

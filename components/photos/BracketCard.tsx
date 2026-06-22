@@ -41,7 +41,7 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
     if (!inView) return;
     if (middleIsRaw) return;
     if (urls[middleFrame.id] !== undefined) return;
-    fetch(`/api/photo-url?photo_id=${middleFrame.id}`)
+    fetch(`/api/photo-url?photo_id=${middleFrame.id}&w=640`)
       .then((r) => r.json())
       .then((d) => setUrls((u) => ({ ...u, [middleFrame.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [middleFrame.id]: null })));
