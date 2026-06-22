@@ -1484,7 +1484,7 @@ function Stage2Thumb({
   useEffect(() => {
     if (!inView) return;
     if (url !== undefined) return;
-    fetch(`/api/photo-url?photo_id=${photo.id}`)
+    fetch(`/api/photo-url?photo_id=${photo.id}&w=640`)
       .then((r) => r.json())
       .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
@@ -1943,7 +1943,7 @@ function SingleThumb({
     if (raw) return;
     if (!inView) return;
     if (url !== undefined) return;
-    fetch(`/api/photo-url?photo_id=${photo.id}`)
+    fetch(`/api/photo-url?photo_id=${photo.id}&w=640`)
       .then((r) => r.json())
       .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
@@ -2221,7 +2221,7 @@ function ProcessedCard({
   useEffect(() => {
     if (!inView) return;
     if (url !== undefined) return;
-    fetch(`/api/photo-url?photo_id=${photo.id}`)
+    fetch(`/api/photo-url?photo_id=${photo.id}&w=640`)
       .then((r) => r.json())
       .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
       .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
