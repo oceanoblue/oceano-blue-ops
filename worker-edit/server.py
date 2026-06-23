@@ -64,7 +64,7 @@ def fuse(images: List[np.ndarray]) -> np.ndarray:
     # well-exposedness for an even, natural, magazine-soft base; keep contrast and
     # saturation low so the fusion doesn't bake in a vivid/"HDR" punch (that punch
     # was the main thing reading as not-luxury). The grade adds the airy finish.
-    merge = cv2.createMergeMertens(0.5, 0.3, 1.0)
+    merge = cv2.createMergeMertens(0.4, 0.3, 1.0)
     res = merge.process(images)  # float32 in [0, 1]
     return np.clip(res * 255.0, 0, 255).astype(np.uint8)
 
@@ -123,7 +123,7 @@ def tone_curve(
     img: np.ndarray,
     black_point: float = 2.0,
     contrast: float = 1.0,
-    airy_gamma: float = 0.92,
+    airy_gamma: float = 0.88,
 ) -> np.ndarray:
     # Luxury = bright & airy, not contrasty. Light black point (just off muddy),
     # NO added contrast S, plus a gentle gamma lift that opens the midtones so the
@@ -172,6 +172,18 @@ def correct_lens(img: np.ndarray, k1: float = None) -> np.ndarray:
         return img
 
 
+def soften_sky(img: np.ndarray, sat_scale: float = 0.88, lift: float = 12.0) -> np.ndarray:
+    # Lighten + gently desaturate blue-sky pixels toward the airy, light-blue look
+    # (deep/dark blue reads less luxury). Targets only blue hues, so greens and
+    # neutrals are untouched.
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
+    h = hsv[..., 0]  # OpenCV hue 0..179; sky blue ~ 98..132
+    mask = (h >= 98) & (h <= 132)
+    hsv[..., 1] = np.where(mask, hsv[..., 1] * sat_scale, hsv[..., 1])
+    hsv[..., 2] = np.where(mask, np.clip(hsv[..., 2] + lift, 0, 255), hsv[..., 2])
+    return cv2.cvtColor(np.clip(hsv, 0, 255).astype(np.uint8), cv2.COLOR_HSV2BGR)
+
+
 def grade(img: np.ndarray) -> np.ndarray:
     img = correct_lens(img)  # geometric correction first, before tone/colour
     img = auto_white_balance(img)
@@ -179,6 +191,7 @@ def grade(img: np.ndarray) -> np.ndarray:
     img = local_contrast(img)
     img = tone_curve(img)
     img = saturate(img)
+    img = soften_sky(img)
     img = sharpen(img)
     return img
 
