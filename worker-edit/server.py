@@ -60,8 +60,11 @@ def fuse(images: List[np.ndarray]) -> np.ndarray:
             images = aligned
     except Exception:
         pass
-    # Mertens: contrast + saturation weights, exposure weight 0 (we grade later).
-    merge = cv2.createMergeMertens(1.0, 1.0, 0.0)
+    # Mertens weights (contrast, saturation, well-exposedness). Favor
+    # well-exposedness for an even, natural, magazine-soft base; keep contrast and
+    # saturation low so the fusion doesn't bake in a vivid/"HDR" punch (that punch
+    # was the main thing reading as not-luxury). The grade adds the airy finish.
+    merge = cv2.createMergeMertens(0.5, 0.3, 1.0)
     res = merge.process(images)  # float32 in [0, 1]
     return np.clip(res * 255.0, 0, 255).astype(np.uint8)
 
@@ -134,7 +137,7 @@ def tone_curve(
     return cv2.LUT(img, lut)
 
 
-def saturate(img: np.ndarray, scale: float = 1.05) -> np.ndarray:
+def saturate(img: np.ndarray, scale: float = 1.0) -> np.ndarray:
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
     hsv[..., 1] = np.clip(hsv[..., 1] * scale, 0, 255)
     return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
