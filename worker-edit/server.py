@@ -149,7 +149,31 @@ def sharpen(img: np.ndarray, amount: float = 0.35) -> np.ndarray:
     return cv2.addWeighted(img, 1.0 + amount, blur, -amount, 0)
 
 
+# Barrel-distortion correction strength. Negative = remove barrel (the outward
+# bowing of a wide 16mm lens, straightening edges/walls). Tunable; env override.
+LENS_K1 = float(os.environ.get("LENS_K1", "-0.16"))
+
+
+def correct_lens(img: np.ndarray, k1: float = None) -> np.ndarray:
+    # Parametric radial-distortion correction. Tuned for a ~16mm full-frame wide
+    # lens; precise per-lens (lensfun) correction can replace this later. alpha=0
+    # zooms to the valid region so there are no black corners after the warp.
+    k1 = LENS_K1 if k1 is None else k1
+    if abs(k1) < 0.001:
+        return img
+    try:
+        h, w = img.shape[:2]
+        f = float(max(w, h))
+        K = np.array([[f, 0, w / 2.0], [0, f, h / 2.0], [0, 0, 1.0]], dtype=np.float64)
+        dist = np.array([k1, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)
+        new_k, _ = cv2.getOptimalNewCameraMatrix(K, dist, (w, h), 0.0, (w, h))
+        return cv2.undistort(img, K, dist, None, new_k)
+    except Exception:
+        return img
+
+
 def grade(img: np.ndarray) -> np.ndarray:
+    img = correct_lens(img)  # geometric correction first, before tone/colour
     img = auto_white_balance(img)
     img = denoise(img)
     img = local_contrast(img)
