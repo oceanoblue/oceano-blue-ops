@@ -13,3 +13,7 @@ next-env.d.ts
 supabase/.branches
 supabase/.temp
 DEPLOY_CREDENTIALS.md
+
+# Python
+__pycache__/
+*.pyc
