@@ -107,14 +107,15 @@ def denoise(img: np.ndarray) -> np.ndarray:
 
 
 def local_contrast(img: np.ndarray) -> np.ndarray:
-    # Gentle CLAHE on the L channel only — local pop without colour shift or halos.
+    # Very gentle CLAHE on L only — a touch of depth without the "HDR" punch.
+    # Low clip + large tiles keep it soft (luxury reads as restraint, not grit).
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
-    l = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(l)
+    l = cv2.createCLAHE(clipLimit=1.2, tileGridSize=(16, 16)).apply(l)
     return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
 
 
-def tone_curve(img: np.ndarray, black_point: float = 6.0, contrast: float = 1.10) -> np.ndarray:
+def tone_curve(img: np.ndarray, black_point: float = 4.0, contrast: float = 1.04) -> np.ndarray:
     # Anchor a true black point (kills the washed/hazy look) + gentle contrast.
     x = np.arange(256, dtype=np.float32)
     y = (x - black_point) * (255.0 / (255.0 - black_point))  # set black point
@@ -123,13 +124,13 @@ def tone_curve(img: np.ndarray, black_point: float = 6.0, contrast: float = 1.10
     return cv2.LUT(img, lut)
 
 
-def saturate(img: np.ndarray, scale: float = 1.10) -> np.ndarray:
+def saturate(img: np.ndarray, scale: float = 1.06) -> np.ndarray:
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
     hsv[..., 1] = np.clip(hsv[..., 1] * scale, 0, 255)
     return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
 
 
-def sharpen(img: np.ndarray, amount: float = 0.5) -> np.ndarray:
+def sharpen(img: np.ndarray, amount: float = 0.4) -> np.ndarray:
     # Edge-aware unsharp: blur the base, add back the high-frequency difference.
     blur = cv2.GaussianBlur(img, (0, 0), 1.2)
     return cv2.addWeighted(img, 1.0 + amount, blur, -amount, 0)
