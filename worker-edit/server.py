@@ -64,7 +64,7 @@ def fuse(images: List[np.ndarray]) -> np.ndarray:
     # well-exposedness for an even, natural, magazine-soft base; keep contrast and
     # saturation low so the fusion doesn't bake in a vivid/"HDR" punch (that punch
     # was the main thing reading as not-luxury). The grade adds the airy finish.
-    merge = cv2.createMergeMertens(0.4, 0.3, 1.0)
+    merge = cv2.createMergeMertens(0.15, 0.25, 1.0)
     res = merge.process(images)  # float32 in [0, 1]
     return np.clip(res * 255.0, 0, 255).astype(np.uint8)
 
@@ -121,13 +121,13 @@ def local_contrast(img: np.ndarray) -> np.ndarray:
 
 def tone_curve(
     img: np.ndarray,
-    black_point: float = 2.0,
-    contrast: float = 1.0,
+    black_point: float = 1.0,
+    contrast: float = 0.90,
     airy_gamma: float = 0.88,
 ) -> np.ndarray:
-    # Luxury = bright & airy, not contrasty. Light black point (just off muddy),
-    # NO added contrast S, plus a gentle gamma lift that opens the midtones so the
-    # property feels light and expensive.
+    # Luxury = bright & airy, low contrast. A hair of black point (just off muddy),
+    # an actual DE-contrast (<1 compresses the tonal range = softer), plus a gentle
+    # gamma lift opening the midtones so the property feels light and expensive.
     x = np.arange(256, dtype=np.float32)
     y = (x - black_point) * (255.0 / (255.0 - black_point))  # light black point
     y = (y - 128.0) * contrast + 128.0  # contrast (1.0 = none)
@@ -143,7 +143,7 @@ def saturate(img: np.ndarray, scale: float = 1.0) -> np.ndarray:
     return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
 
 
-def sharpen(img: np.ndarray, amount: float = 0.35) -> np.ndarray:
+def sharpen(img: np.ndarray, amount: float = 0.25) -> np.ndarray:
     # Edge-aware unsharp: blur the base, add back the high-frequency difference.
     blur = cv2.GaussianBlur(img, (0, 0), 1.2)
     return cv2.addWeighted(img, 1.0 + amount, blur, -amount, 0)
@@ -188,7 +188,9 @@ def grade(img: np.ndarray) -> np.ndarray:
     img = correct_lens(img)  # geometric correction first, before tone/colour
     img = auto_white_balance(img)
     img = denoise(img)
-    img = local_contrast(img)
+    # (local_contrast/CLAHE intentionally omitted — it was adding the gritty
+    #  micro-contrast that read as too contrasty; the soft de-contrast curve gives
+    #  the airy luxury look instead.)
     img = tone_curve(img)
     img = saturate(img)
     img = soften_sky(img)
