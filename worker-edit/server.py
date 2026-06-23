@@ -71,28 +71,53 @@ def fuse(images: List[np.ndarray]) -> np.ndarray:
 
 # ── Faithful finishing grade ───────────────────────────────────────────────
 def auto_white_balance(img: np.ndarray) -> np.ndarray:
-    # White-patch WB on bright, near-neutral pixels (real-estate scenes have white
-    # trim / ceilings / driveways that SHOULD be neutral). Gray-world balances the
-    # whole-scene average, so a dominant colour — e.g. green lawns/foliage —
-    # over-corrects into a pink/magenta cast. Anchoring to bright neutrals avoids
-    # that. Gains are clamped + blended so we never shift wildly.
+    # White-patch WB anchored on bright pixels that are ALSO genuinely neutral
+    # (low chroma). Real-estate scenes have white trim / ceilings / clouds /
+    # driveways that SHOULD be neutral — those are our reference.
+    #
+    # Why the neutral filter matters: a plain "brightest pixels" white-patch gets
+    # dragged by the sky. On exteriors the brightest pixels are usually BLUE sky;
+    # neutralising blue means removing blue + adding red, so the whole image
+    # drifts WARM (and whites stop being white). Excluding chromatic pixels (sky,
+    # coloured walls, foliage) leaves only true neutrals, so we can correct nearly
+    # fully (blend 0.9) and land whites actually neutral without a warm cast.
     try:
         small = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32)
         b, g, r = small[..., 0], small[..., 1], small[..., 2]
         lum = 0.114 * b + 0.587 * g + 0.299 * r
-        thresh = np.percentile(lum, 85)
-        mask = (lum >= thresh) & (lum < 250)  # bright but not clipped
+        maxc = np.maximum(np.maximum(r, g), b)
+        minc = np.minimum(np.minimum(r, g), b)
+        chroma = (maxc - minc) / (maxc + 1e-6)  # 0 = perfectly grey
+        # Blue-dominance: positive when blue is the strongest channel (sky / cool
+        # surfaces). We must exclude sky from the reference even when it's pale,
+        # so we test blueness directly rather than relying on chroma alone.
+        blueness = (b - np.maximum(r, g)) / (maxc + 1e-6)
+
+        bright = lum >= np.percentile(lum, 80)
+        unclipped = lum < 250
+        # Keep should-be-white surfaces that carry a cast (chroma up to ~0.35 lets
+        # a warm/cool white still count as the reference) but drop saturated
+        # colour (foliage, painted walls) and anything blue-dominant (sky).
+        neutral = (chroma < 0.35) & (blueness < 0.08)
+        mask = bright & unclipped & neutral
         if int(mask.sum()) < 50:
-            return img
+            # No clear neutral patch (e.g. heavily coloured scene) — fall back to
+            # bright-only with a gentler blend so we don't introduce a cast.
+            mask = bright & unclipped
+            if int(mask.sum()) < 50:
+                return img
+            blend = 0.5
+        else:
+            blend = 0.9  # confident neutral reference → correct nearly fully
+
         rm = float(r[mask].mean())
         gm = float(g[mask].mean())
         bm = float(b[mask].mean())
-        blend = 0.6
 
         def gain(c: float) -> float:
             if c <= 0:
                 return 1.0
-            return float(np.clip(1.0 + (gm / c - 1.0) * blend, 0.85, 1.18))
+            return float(np.clip(1.0 + (gm / c - 1.0) * blend, 0.80, 1.25))
 
         rg, bg = gain(rm), gain(bm)
         out = img.astype(np.float32)
