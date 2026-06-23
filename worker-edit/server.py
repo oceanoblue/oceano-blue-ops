@@ -68,10 +68,34 @@ def fuse(images: List[np.ndarray]) -> np.ndarray:
 
 # ── Faithful finishing grade ───────────────────────────────────────────────
 def auto_white_balance(img: np.ndarray) -> np.ndarray:
+    # White-patch WB on bright, near-neutral pixels (real-estate scenes have white
+    # trim / ceilings / driveways that SHOULD be neutral). Gray-world balances the
+    # whole-scene average, so a dominant colour — e.g. green lawns/foliage —
+    # over-corrects into a pink/magenta cast. Anchoring to bright neutrals avoids
+    # that. Gains are clamped + blended so we never shift wildly.
     try:
-        wb = cv2.xphoto.createGrayworldWB()
-        wb.setSaturationThreshold(0.95)  # ignore near-clipped pixels (dominant-colour safe)
-        return wb.balanceWhite(img)
+        small = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32)
+        b, g, r = small[..., 0], small[..., 1], small[..., 2]
+        lum = 0.114 * b + 0.587 * g + 0.299 * r
+        thresh = np.percentile(lum, 85)
+        mask = (lum >= thresh) & (lum < 250)  # bright but not clipped
+        if int(mask.sum()) < 50:
+            return img
+        rm = float(r[mask].mean())
+        gm = float(g[mask].mean())
+        bm = float(b[mask].mean())
+        blend = 0.6
+
+        def gain(c: float) -> float:
+            if c <= 0:
+                return 1.0
+            return float(np.clip(1.0 + (gm / c - 1.0) * blend, 0.85, 1.18))
+
+        rg, bg = gain(rm), gain(bm)
+        out = img.astype(np.float32)
+        out[..., 2] = np.clip(out[..., 2] * rg, 0, 255)  # R
+        out[..., 0] = np.clip(out[..., 0] * bg, 0, 255)  # B
+        return out.astype(np.uint8)
     except Exception:
         return img
 
