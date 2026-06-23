@@ -107,30 +107,40 @@ def denoise(img: np.ndarray) -> np.ndarray:
 
 
 def local_contrast(img: np.ndarray) -> np.ndarray:
-    # Very gentle CLAHE on L only — a touch of depth without the "HDR" punch.
-    # Low clip + large tiles keep it soft (luxury reads as restraint, not grit).
+    # Whisper of CLAHE on L only — just enough to avoid total flatness. Kept very
+    # low because local contrast on textured surfaces (the building/foreground) is
+    # what made the property read gritty/heavy instead of airy luxury.
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
-    l = cv2.createCLAHE(clipLimit=1.2, tileGridSize=(16, 16)).apply(l)
+    l = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(16, 16)).apply(l)
     return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
 
 
-def tone_curve(img: np.ndarray, black_point: float = 4.0, contrast: float = 1.04) -> np.ndarray:
-    # Anchor a true black point (kills the washed/hazy look) + gentle contrast.
+def tone_curve(
+    img: np.ndarray,
+    black_point: float = 2.0,
+    contrast: float = 1.0,
+    airy_gamma: float = 0.92,
+) -> np.ndarray:
+    # Luxury = bright & airy, not contrasty. Light black point (just off muddy),
+    # NO added contrast S, plus a gentle gamma lift that opens the midtones so the
+    # property feels light and expensive.
     x = np.arange(256, dtype=np.float32)
-    y = (x - black_point) * (255.0 / (255.0 - black_point))  # set black point
-    y = (y - 128.0) * contrast + 128.0  # gentle S around mid-grey
+    y = (x - black_point) * (255.0 / (255.0 - black_point))  # light black point
+    y = (y - 128.0) * contrast + 128.0  # contrast (1.0 = none)
+    y = np.clip(y, 0, 255)
+    y = 255.0 * np.power(y / 255.0, airy_gamma)  # airy midtone lift (<1 brightens)
     lut = np.clip(y, 0, 255).astype(np.uint8)
     return cv2.LUT(img, lut)
 
 
-def saturate(img: np.ndarray, scale: float = 1.06) -> np.ndarray:
+def saturate(img: np.ndarray, scale: float = 1.05) -> np.ndarray:
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
     hsv[..., 1] = np.clip(hsv[..., 1] * scale, 0, 255)
     return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
 
 
-def sharpen(img: np.ndarray, amount: float = 0.4) -> np.ndarray:
+def sharpen(img: np.ndarray, amount: float = 0.35) -> np.ndarray:
     # Edge-aware unsharp: blur the base, add back the high-frequency difference.
     blur = cv2.GaussianBlur(img, (0, 0), 1.2)
     return cv2.addWeighted(img, 1.0 + amount, blur, -amount, 0)
