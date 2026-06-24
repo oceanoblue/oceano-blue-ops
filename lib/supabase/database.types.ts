@@ -1552,6 +1552,72 @@ export type Database = {
         }
         Relationships: []
       }
+      order_footage: {
+        Row: {
+          bucket: string
+          byte_size: number | null
+          client_id: string
+          created_at: string
+          duration_seconds: number | null
+          filename: string
+          height: number | null
+          id: string
+          mime_type: string | null
+          notes: string | null
+          order_id: string
+          role: string | null
+          storage_path: string
+          width: number | null
+        }
+        Insert: {
+          bucket?: string
+          byte_size?: number | null
+          client_id: string
+          created_at?: string
+          duration_seconds?: number | null
+          filename: string
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          notes?: string | null
+          order_id: string
+          role?: string | null
+          storage_path: string
+          width?: number | null
+        }
+        Update: {
+          bucket?: string
+          byte_size?: number | null
+          client_id?: string
+          created_at?: string
+          duration_seconds?: number | null
+          filename?: string
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          notes?: string | null
+          order_id?: string
+          role?: string | null
+          storage_path?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_footage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_footage_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
@@ -1658,6 +1724,7 @@ export type Database = {
           internal_notes: string | null
           job_id: string | null
           listing_id: string
+          order_kind: Database["public"]["Enums"]["order_kind"]
           order_number: number
           package_name: string | null
           photographer_id: string | null
@@ -1682,6 +1749,7 @@ export type Database = {
           internal_notes?: string | null
           job_id?: string | null
           listing_id: string
+          order_kind?: Database["public"]["Enums"]["order_kind"]
           order_number?: number
           package_name?: string | null
           photographer_id?: string | null
@@ -1706,6 +1774,7 @@ export type Database = {
           internal_notes?: string | null
           job_id?: string | null
           listing_id?: string
+          order_kind?: Database["public"]["Enums"]["order_kind"]
           order_number?: number
           package_name?: string | null
           photographer_id?: string | null
@@ -1758,6 +1827,44 @@ export type Database = {
             columns: ["photographer_id"]
             isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_qc_reports: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          findings: Json
+          id: string
+          order_id: string
+          status: string
+          summary: Json
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          findings?: Json
+          id?: string
+          order_id: string
+          status?: string
+          summary?: Json
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          findings?: Json
+          id?: string
+          order_id?: string
+          status?: string
+          summary?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_qc_reports_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -1873,6 +1980,13 @@ export type Database = {
             columns: ["parent_photo_id"]
             isOneToOne: false
             referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photos_source_job_id_fkey"
+            columns: ["source_job_id"]
+            isOneToOne: false
+            referencedRelation: "ai_jobs"
             referencedColumns: ["id"]
           },
           {
@@ -2515,6 +2629,74 @@ export type Database = {
           key?: string
         }
         Relationships: []
+      }
+      reel_briefs: {
+        Row: {
+          aspect: string
+          brand_kit: Json
+          brief: Json
+          captions: boolean
+          created_at: string
+          edit_instructions: Json | null
+          id: string
+          length_target_s: number | null
+          lower_third: boolean
+          music: boolean
+          must_avoid: string | null
+          must_include: string | null
+          order_id: string
+          reel_type: Database["public"]["Enums"]["reel_type"]
+          subject_name: string | null
+          subject_title: string | null
+          updated_at: string
+        }
+        Insert: {
+          aspect?: string
+          brand_kit?: Json
+          brief?: Json
+          captions?: boolean
+          created_at?: string
+          edit_instructions?: Json | null
+          id?: string
+          length_target_s?: number | null
+          lower_third?: boolean
+          music?: boolean
+          must_avoid?: string | null
+          must_include?: string | null
+          order_id: string
+          reel_type?: Database["public"]["Enums"]["reel_type"]
+          subject_name?: string | null
+          subject_title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aspect?: string
+          brand_kit?: Json
+          brief?: Json
+          captions?: boolean
+          created_at?: string
+          edit_instructions?: Json | null
+          id?: string
+          length_target_s?: number | null
+          lower_third?: boolean
+          music?: boolean
+          must_avoid?: string | null
+          must_include?: string | null
+          order_id?: string
+          reel_type?: Database["public"]["Enums"]["reel_type"]
+          subject_name?: string | null
+          subject_title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reel_briefs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       resolve_projects: {
         Row: {
@@ -3351,6 +3533,21 @@ export type Database = {
       }
     }
     Functions: {
+      add_reel_footage: {
+        Args: {
+          p_byte_size?: number
+          p_duration_seconds?: number
+          p_filename: string
+          p_height?: number
+          p_mime_type?: string
+          p_notes?: string
+          p_order_id: string
+          p_role?: string
+          p_storage_path: string
+          p_width?: number
+        }
+        Returns: string
+      }
       bump_rate_limit: { Args: { p_key: string }; Returns: number }
       create_booking_v2: {
         Args: {
@@ -3367,7 +3564,7 @@ export type Database = {
           p_items: Json
           p_lat: number
           p_lng: number
-          p_photographer_id?: string | null
+          p_photographer_id?: string
           p_scheduled_at: string
           p_sqft: number
           p_state: string
@@ -3395,6 +3592,7 @@ export type Database = {
         }
         Returns: string
       }
+      create_reel_order: { Args: { p_brief?: Json }; Returns: string }
       current_client_id: { Args: never; Returns: string }
       is_internal_user: { Args: never; Returns: boolean }
       is_team_member: { Args: never; Returns: boolean }
@@ -3431,6 +3629,7 @@ export type Database = {
           requeued: number
         }[]
       }
+      submit_reel_order: { Args: { p_order_id: string }; Returns: undefined }
     }
     Enums: {
       ai_job_type:
@@ -3449,6 +3648,7 @@ export type Database = {
         | "in_production"
         | "delivered"
         | "archived"
+      order_kind: "shoot" | "reel_edit"
       order_status:
         | "draft"
         | "booked"
@@ -3469,6 +3669,7 @@ export type Database = {
         | "failed"
         | "skipped"
       product_kind: "photo" | "video" | "floor_plan" | "tour" | "fee" | "addon"
+      reel_type: "monologue" | "qa" | "testimonial" | "montage"
       service_type:
         | "photos_hdr"
         | "photos_standard"
@@ -3627,6 +3828,7 @@ export const Constants = {
         "delivered",
         "archived",
       ],
+      order_kind: ["shoot", "reel_edit"],
       order_status: [
         "draft",
         "booked",
@@ -3649,6 +3851,7 @@ export const Constants = {
         "skipped",
       ],
       product_kind: ["photo", "video", "floor_plan", "tour", "fee", "addon"],
+      reel_type: ["monologue", "qa", "testimonial", "montage"],
       service_type: [
         "photos_hdr",
         "photos_standard",
