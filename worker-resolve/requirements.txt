@@ -1,0 +1,4 @@
+# The daemon's only third-party dependency. DaVinci Resolve's Python scripting
+# module (DaVinciResolveScript) ships with Resolve Studio — it is NOT pip-installed;
+# the runner adds it to sys.path at runtime.
+requests==2.32.3
