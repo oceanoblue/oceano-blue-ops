@@ -16,6 +16,9 @@ const COLUMNS: Column<any>[] = [
     cell: (o) => (
       <>
         <span className="font-medium text-ocean-800">#{o.order_number}</span>
+        {o.order_kind === 'reel_edit' && (
+          <span className="ml-2 pill bg-ocean-100 text-ocean-700">REEL</span>
+        )}
         {o.rush && <span className="ml-2 pill bg-rose-100 text-rose-700">RUSH</span>}
       </>
     ),
@@ -39,18 +42,19 @@ const COLUMNS: Column<any>[] = [
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: { status?: string; q?: string };
+  searchParams: { status?: string; q?: string; kind?: string };
 }) {
   const supabase = createClient();
   let query = supabase
     .from('orders')
     .select(
-      'id, order_number, status, scheduled_at, rush, listing_id, client_id, listings(address_line1, city, state, zip), clients(full_name, brokerage)'
+      'id, order_number, status, scheduled_at, rush, order_kind, listing_id, client_id, listings(address_line1, city, state, zip), clients(full_name, brokerage)'
     )
     .order('updated_at', { ascending: false })
     .limit(50);
 
   if (searchParams.status) query = query.eq('status', searchParams.status as any);
+  if (searchParams.kind === 'reel') query = query.eq('order_kind', 'reel_edit');
 
   const { data: orders, error } = await query;
 
@@ -61,7 +65,8 @@ export default async function OrdersPage({
       </PageHeader>
 
       <div className="flex flex-wrap gap-2">
-        <FilterPill label="All" href="/dashboard/orders" active={!searchParams.status} />
+        <FilterPill label="All" href="/dashboard/orders" active={!searchParams.status && !searchParams.kind} />
+        <FilterPill label="Reels" href="/dashboard/orders?kind=reel" active={searchParams.kind === 'reel'} />
         {['draft', 'booked', 'scheduled', 'shooting', 'uploaded', 'processing', 'editing', 'ready', 'delivered'].map((s) => (
           <FilterPill
             key={s}

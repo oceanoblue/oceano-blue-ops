@@ -12,6 +12,10 @@ import { DeliveryControl } from '@/components/orders/DeliveryControl';
 import { RawCleanupControl } from '@/components/orders/RawCleanupControl';
 import { DeleteOrderControl } from '@/components/orders/DeleteOrderControl';
 import { CostSummary } from '@/components/orders/CostSummary';
+import { EditInstructionsEditor } from '@/components/orders/EditInstructionsEditor';
+import { ReelFootageList, type FootageView } from '@/components/orders/ReelFootageList';
+import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
+import type { Json } from '@/lib/supabase/database.types';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +28,8 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       listings(*),
       clients(*),
       order_services(*),
+      reel_briefs(*),
+      order_footage(*),
       ai_jobs(id, job_type, status, provider, model, cost_cents, duration_ms, created_at, completed_at, error_message)
     `)
     .eq('id', params.id)
@@ -31,6 +37,51 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
   if (error || !data) notFound();
   const order = data as any;
+
+  // ── Reel order extras: the brief, signed footage previews, and a starter
+  //    edit-instructions plan for the team to refine. ────────────────────────
+  const isReel = order.order_kind === 'reel_edit';
+  const brief = Array.isArray(order.reel_briefs) ? order.reel_briefs[0] : order.reel_briefs;
+  let footageViews: FootageView[] = [];
+  let starterPlan: Json = {};
+  if (isReel) {
+    const footage = (order.order_footage ?? []) as any[];
+    footageViews = await Promise.all(
+      footage.map(async (f) => {
+        const { data: signed } = await supabase.storage
+          .from(f.bucket)
+          .createSignedUrl(f.storage_path, 3600);
+        return {
+          id: f.id,
+          filename: f.filename,
+          role: f.role,
+          notes: f.notes,
+          byte_size: f.byte_size,
+          duration_seconds: f.duration_seconds,
+          url: signed?.signedUrl ?? null,
+        } satisfies FootageView;
+      })
+    );
+    starterPlan = {
+      reel: order.id,
+      reel_type: brief?.reel_type ?? 'monologue',
+      aspect: brief?.aspect ?? '1080x1920',
+      timeline: (footage ?? []).map((f) => ({
+        op: 'clip',
+        source: f.filename,
+        role: f.role || undefined,
+        trim: brief?.reel_type === 'qa' ? 'auto_answer' : 'auto',
+        crop: 'chest_up',
+        captions: brief?.captions ?? true,
+      })),
+      lower_third: {
+        show: brief?.lower_third ?? true,
+        scope: brief?.reel_type === 'qa' ? 'answers_only' : 'persistent',
+        name: brief?.subject_name ?? null,
+        title: brief?.subject_title ?? null,
+      },
+    };
+  }
 
   // Count camera-RAW originals so the cleanup button can show the number and
   // hide itself when there are none left.
@@ -80,10 +131,53 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             <OrderStatusControl orderId={order.id} status={order.status} />
           </section>
 
-          <section className="card p-6">
-            <h2 className="font-semibold mb-4">Photos</h2>
-            <PhotoManager orderId={order.id} autoEnhanceOnUpload={autoEnhanceOnUpload} />
-          </section>
+          {isReel ? (
+            <>
+              <section className="card p-6">
+                <h2 className="font-semibold mb-4">Reel brief</h2>
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <Row label="Type">{REEL_TYPES.find((t) => t.value === brief?.reel_type)?.label ?? '—'}</Row>
+                  <Row label="Aspect">{ASPECTS.find((a) => a.value === brief?.aspect)?.label ?? brief?.aspect ?? '—'}</Row>
+                  <Row label="Target length">{brief?.length_target_s ? `${brief.length_target_s}s` : '—'}</Row>
+                  <Row label="Captions">{brief?.captions ? 'Yes' : 'No'}</Row>
+                  <Row label="Music">{brief?.music ? 'Yes' : 'No'}</Row>
+                  <Row label="Lower-third">{brief?.lower_third ? 'Yes' : 'No'}</Row>
+                  <Row label="Subject">{brief?.subject_name || '—'}</Row>
+                  <Row label="Title">{brief?.subject_title || '—'}</Row>
+                </dl>
+                {(brief?.about || brief?.must_include || brief?.must_avoid) && (
+                  <div className="mt-4 space-y-3 border-t border-slate-100 pt-4 text-sm">
+                    {brief?.about && <Block label="About">{brief.about}</Block>}
+                    {brief?.must_include && <Block label="Must include">{brief.must_include}</Block>}
+                    {brief?.must_avoid && <Block label="Must avoid">{brief.must_avoid}</Block>}
+                  </div>
+                )}
+              </section>
+
+              <section className="card p-6">
+                <h2 className="font-semibold mb-4">Footage ({footageViews.length})</h2>
+                <ReelFootageList items={footageViews} />
+              </section>
+
+              <section className="card p-6">
+                <h2 className="font-semibold mb-1">Edit plan</h2>
+                <p className="mb-4 text-xs text-slate-500">
+                  Structured cut plan for the reel. Seeded from the brief + footage; refine before
+                  the editor (or the future Resolve compiler) runs it.
+                </p>
+                <EditInstructionsEditor
+                  orderId={order.id}
+                  initial={(brief?.edit_instructions ?? null) as Json | null}
+                  starter={starterPlan}
+                />
+              </section>
+            </>
+          ) : (
+            <section className="card p-6">
+              <h2 className="font-semibold mb-4">Photos</h2>
+              <PhotoManager orderId={order.id} autoEnhanceOnUpload={autoEnhanceOnUpload} />
+            </section>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -174,6 +268,15 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div className="flex justify-between gap-3">
       <dt className="text-slate-500">{label}</dt>
       <dd className="text-right">{children}</dd>
+    </div>
+  );
+}
+
+function Block({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
+      <p className="mt-0.5 whitespace-pre-wrap text-slate-700">{children}</p>
     </div>
   );
 }
