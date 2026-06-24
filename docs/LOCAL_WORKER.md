@@ -71,7 +71,8 @@ Buttons on the Photo Production page:
 - **Generate thumbnails** — backfill previews for indexed photos missing them.
 - **Auto-classify scenes** — AI scene tags (needs `OPENAI_API_KEY`).
 - **Queue processing** — sends reviewed brackets and active singles to a local
-  worker with `process_photos`; outputs are indexed as processed assets.
+  worker with `process_photos`; RAW sources are read from camera-embedded
+  previews when available, and outputs are indexed as processed assets.
 
 ## Troubleshooting (lessons learned)
 
@@ -85,8 +86,9 @@ Buttons on the Photo Production page:
 | Scan `completed, file_count: 0` | No supported media at that path (or it's empty). `find "<path>" -type f` to check; supported: jpg/png/tiff/heic/webp, raw arw/cr2/cr3/nef/dng/raf/rw2/orf, video mp4/mov/m4v/mkv/mxf/…, audio wav/mp3/m4a/… |
 | 0 files on a NAS even though files exist | SMB/AFP report dirent types as UNKNOWN; the walker now `lstat`s each entry (PR #12). Update the worker: `git pull` + restart. |
 | Thumbnails blank | Assets indexed before auto-thumbnailing, or RAW without an embedded preview. Use **Generate thumbnails**. Check the worker log `generate_thumbnails -> completed { thumbnails, failed }`. |
-| Queue processing says nothing to process | Groups still need review, source assets have no `local_path`, assets are RAW files that need conversion/export first, or the same source set was already processed. |
+| Queue processing says nothing to process | Groups still need review, source assets have no `local_path`, or the same source set was already processed. RAW files are supported when they include an embedded preview. |
 | `process_photos` never runs | Restart the worker with `WORKER_OUTPUT_ROOT` set; the heartbeat advertises `process_photos` only when an output root is configured. |
+| `raw_preview_not_found` | The RAW file does not expose a usable embedded JPEG preview. Export a JPEG/TIFF from the RAW and re-run, or test a different camera RAW setting that embeds previews. |
 
 ## Safety guarantees
 - Source-safe: scan/thumbnail tasks are read-only; processing writes only new

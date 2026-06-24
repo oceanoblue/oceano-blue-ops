@@ -52,16 +52,65 @@ function luma(r, g, b) {
   return (r * 299 + g * 587 + b * 114) / 1000;
 }
 
+function findJpegEnd(buf, start) {
+  for (let i = start + 2; i < buf.length - 1; i++) {
+    if (buf[i] === 0xff && buf[i + 1] === 0xd9) return i + 2;
+  }
+  return -1;
+}
+
+function extractLargestEmbeddedJpeg(buf) {
+  const soi = Buffer.from([0xff, 0xd8, 0xff]);
+  let cursor = 0;
+  let best = null;
+
+  while (cursor < buf.length) {
+    const start = buf.indexOf(soi, cursor);
+    if (start === -1) break;
+
+    const end = findJpegEnd(buf, start);
+    if (end === -1) {
+      cursor = start + soi.length;
+      continue;
+    }
+
+    const length = end - start;
+    if (length > 128 && (!best || length > best.length)) {
+      best = { start, length };
+    }
+    cursor = end;
+  }
+
+  return best ? Buffer.from(buf.subarray(best.start, best.start + best.length)) : null;
+}
+
+async function readRawPreview(fullPath) {
+  const fileBuffer = await fs.readFile(fullPath);
+  const embedded = extractLargestEmbeddedJpeg(fileBuffer);
+  if (embedded) return embedded;
+
+  const exifr = (await import('exifr')).default;
+  const thumb = await exifr.thumbnail(fullPath).catch(() => null);
+  return thumb ? Buffer.from(thumb) : null;
+}
+
+async function sharpInputForFile(fullPath) {
+  if (!isRawFile(fullPath)) return { input: fullPath, kind: 'file' };
+
+  const preview = await readRawPreview(fullPath);
+  if (!preview) throw new Error(`raw_preview_not_found: ${path.basename(fullPath)}`);
+
+  return { input: preview, kind: 'raw_preview' };
+}
+
 async function readNormalized(file, size) {
   const resolved = safeResolveWithinRoots(config.roots, file.local_path);
   if (!resolved) throw new Error(`outside_allowlist: ${file.local_path}`);
-  if (isRawFile(resolved)) {
-    throw new Error(`raw_not_supported_by_local_process: ${path.basename(resolved)}`);
-  }
   const meta = await fs.stat(resolved);
   if (!meta.isFile()) throw new Error(`not_a_file: ${resolved}`);
 
-  let img = sharp(resolved, { failOn: 'none' })
+  const source = await sharpInputForFile(resolved);
+  let img = sharp(source.input, { failOn: 'none' })
     .rotate()
     .resize(size ? { width: size.width, height: size.height, fit: 'fill' } : {
       width: 4096,
@@ -74,7 +123,14 @@ async function readNormalized(file, size) {
     .toColorspace('srgb');
 
   const { data, info } = await img.raw().toBuffer({ resolveWithObject: true });
-  return { data, width: info.width, height: info.height, channels: info.channels, filename: file.filename };
+  return {
+    data,
+    width: info.width,
+    height: info.height,
+    channels: info.channels,
+    filename: file.filename,
+    source_input_kind: source.kind,
+  };
 }
 
 function mergeRaw(frames) {
@@ -126,13 +182,17 @@ async function processItem(item, jobId, profile) {
 
   let baseBuffer;
   let mode = 'single';
+  const sourceInputKinds = [];
 
   if (item.kind === 'bracket' && files.length > 1) {
     const first = await readNormalized(files[0]);
+    sourceInputKinds.push(first.source_input_kind);
     const frames = [{ raw: first, exposure_bias: files[0].exposure_bias ?? 0 }];
     for (const f of files.slice(1)) {
+      const raw = await readNormalized(f, { width: first.width, height: first.height });
+      sourceInputKinds.push(raw.source_input_kind);
       frames.push({
-        raw: await readNormalized(f, { width: first.width, height: first.height }),
+        raw,
         exposure_bias: f.exposure_bias ?? 0,
       });
     }
@@ -144,8 +204,9 @@ async function processItem(item, jobId, profile) {
   } else {
     const resolved = safeResolveWithinRoots(config.roots, files[0].local_path);
     if (!resolved) throw new Error(`outside_allowlist: ${files[0].local_path}`);
-    if (isRawFile(resolved)) throw new Error(`raw_not_supported_by_local_process: ${path.basename(resolved)}`);
-    baseBuffer = await sharp(resolved, { failOn: 'none' })
+    const source = await sharpInputForFile(resolved);
+    sourceInputKinds.push(source.kind);
+    baseBuffer = await sharp(source.input, { failOn: 'none' })
       .rotate()
       .resize({ width: 4096, height: 4096, fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
       .jpeg({ quality: 94, mozjpeg: true })
@@ -178,6 +239,7 @@ async function processItem(item, jobId, profile) {
       process_task_item_id: item.id ?? null,
       group_id: item.group_id ?? null,
       source_filenames: files.map((f) => f.filename),
+      source_input_kinds: sourceInputKinds,
     },
   };
 }

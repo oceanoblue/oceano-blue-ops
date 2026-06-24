@@ -62,9 +62,9 @@ outside the allowlist (or via symlink/`..`) is rejected without touching disk.
   (≤ 20 per task). Builds ~512px JPEG previews (camera-embedded preview for RAW)
   and posts them; the server stores them in the private `thumbnails` bucket.
 - **process_photos** — payload `{ "profile", "items" }`. Reads reviewed Photo
-  Rescue source files, writes derivative JPEGs to `WORKER_OUTPUT_ROOT`, then
-  reports those paths so the server indexes them as processed `assets` and
-  queues thumbnails.
+  Production source files, uses camera-embedded previews for RAW files when
+  available, writes derivative JPEGs to `WORKER_OUTPUT_ROOT`, then reports those
+  paths so the server indexes them as processed `assets` and queues thumbnails.
 
 ## Safety guarantees
 - Source-safe: only derivative writes under `WORKER_OUTPUT_ROOT`; no deletes,

@@ -28,8 +28,6 @@ type ProcessItem = {
   }>;
 };
 
-const RAW_EXT = /\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i;
-
 function exposureBias(exif: any): number | null {
   const v = exif?.ExposureBiasValue;
   if (v == null) return null;
@@ -137,10 +135,6 @@ export async function POST(request: Request) {
       skipped.push({ id: group.id, reason: 'not_enough_local_files' });
       continue;
     }
-    if (files.some((f: any) => RAW_EXT.test(f.filename || f.local_path))) {
-      skipped.push({ id: group.id, reason: 'raw_requires_conversion_first' });
-      continue;
-    }
 
     const sourceIds = files.map((f: any) => f.asset_id);
     if (!force && alreadyProcessed.has(signature(sourceIds))) {
@@ -165,10 +159,6 @@ export async function POST(request: Request) {
       if (asset.status === 'rejected') continue;
       if (!asset.local_path) {
         skipped.push({ id: asset.id, reason: 'missing_local_path' });
-        continue;
-      }
-      if (RAW_EXT.test(asset.filename ?? asset.local_path)) {
-        skipped.push({ id: asset.id, reason: 'raw_requires_conversion_first' });
         continue;
       }
       if (!force && alreadyProcessed.has(signature([asset.id]))) {
@@ -198,7 +188,7 @@ export async function POST(request: Request) {
       {
         error: 'nothing_to_process',
         skipped,
-        hint: 'Review all bracket groups and make sure source files are local JPEG/TIFF/HEIC/PNG/WebP assets.',
+        hint: 'Review bracket groups and make sure source files have local paths inside the worker allowlist. RAW files are supported when they include an embedded preview.',
       },
       { status: 400 }
     );
