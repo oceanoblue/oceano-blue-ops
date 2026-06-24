@@ -998,6 +998,78 @@ export type Database = {
           },
         ]
       }
+      edit_jobs: {
+        Row: {
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          edit_plan: Json
+          error: string | null
+          id: string
+          order_id: string
+          result_bucket: string | null
+          result_byte_size: number | null
+          result_duration_seconds: number | null
+          result_filename: string | null
+          result_path: string | null
+          started_at: string | null
+          status: string
+          worker_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          edit_plan?: Json
+          error?: string | null
+          id?: string
+          order_id: string
+          result_bucket?: string | null
+          result_byte_size?: number | null
+          result_duration_seconds?: number | null
+          result_filename?: string | null
+          result_path?: string | null
+          started_at?: string | null
+          status?: string
+          worker_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          edit_plan?: Json
+          error?: string | null
+          id?: string
+          order_id?: string
+          result_bucket?: string | null
+          result_byte_size?: number | null
+          result_duration_seconds?: number | null
+          result_filename?: string | null
+          result_path?: string | null
+          started_at?: string | null
+          status?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "edit_jobs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "edit_jobs_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "local_workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       edit_recipes: {
         Row: {
           approved_at: string | null
@@ -3648,7 +3720,7 @@ export type Database = {
         | "in_production"
         | "delivered"
         | "archived"
-      order_kind: "shoot" | "reel_edit"
+      order_kind: "shoot" | "reel_edit" | "long_form_edit"
       order_status:
         | "draft"
         | "booked"
@@ -3828,7 +3900,7 @@ export const Constants = {
         "delivered",
         "archived",
       ],
-      order_kind: ["shoot", "reel_edit"],
+      order_kind: ["shoot", "reel_edit", "long_form_edit"],
       order_status: [
         "draft",
         "booked",

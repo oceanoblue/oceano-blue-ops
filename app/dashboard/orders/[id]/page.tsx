@@ -13,6 +13,7 @@ import { RawCleanupControl } from '@/components/orders/RawCleanupControl';
 import { DeleteOrderControl } from '@/components/orders/DeleteOrderControl';
 import { CostSummary } from '@/components/orders/CostSummary';
 import { EditInstructionsEditor } from '@/components/orders/EditInstructionsEditor';
+import { SendToEditEngine } from '@/components/orders/SendToEditEngine';
 import { ReelFootageList, type FootageView } from '@/components/orders/ReelFootageList';
 import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
 import type { Json } from '@/lib/supabase/database.types';
@@ -81,6 +82,38 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         title: brief?.subject_title ?? null,
       },
     };
+  }
+
+  // Latest edit-engine job for this order (status + signed render URL).
+  let editJobView: {
+    status: 'queued' | 'running' | 'done' | 'failed' | 'canceled';
+    error: string | null;
+    resultUrl: string | null;
+    resultFilename: string | null;
+  } | null = null;
+  if (isReel) {
+    const { data: ej } = await supabase
+      .from('edit_jobs')
+      .select('status, error, result_bucket, result_path, result_filename')
+      .eq('order_id', params.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (ej) {
+      let resultUrl: string | null = null;
+      if (ej.status === 'done' && ej.result_bucket && ej.result_path) {
+        const { data: signed } = await supabase.storage
+          .from(ej.result_bucket)
+          .createSignedUrl(ej.result_path, 3600);
+        resultUrl = signed?.signedUrl ?? null;
+      }
+      editJobView = {
+        status: ej.status as any,
+        error: ej.error,
+        resultUrl,
+        resultFilename: ej.result_filename,
+      };
+    }
   }
 
   // Count camera-RAW originals so the cleanup button can show the number and
@@ -169,6 +202,19 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                   orderId={order.id}
                   initial={(brief?.edit_instructions ?? null) as Json | null}
                   starter={starterPlan}
+                />
+              </section>
+
+              <section className="card p-6">
+                <h2 className="font-semibold mb-1">Edit engine</h2>
+                <p className="mb-4 text-xs text-slate-500">
+                  Runs the saved plan on the office-Mac DaVinci Resolve daemon, then drops the
+                  render here for review before delivery.
+                </p>
+                <SendToEditEngine
+                  orderId={order.id}
+                  hasPlan={Boolean(brief?.edit_instructions)}
+                  job={editJobView}
                 />
               </section>
             </>
