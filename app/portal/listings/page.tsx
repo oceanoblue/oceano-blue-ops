@@ -40,6 +40,12 @@ export default async function ClientListingsPage() {
         subtitle="View galleries, download finished photos, and book your next shoot."
       >
         <Link
+          href="/portal/reels"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3.5 py-2 text-sm font-medium text-white ring-1 ring-white/20 transition hover:bg-white/20"
+        >
+          Reels
+        </Link>
+        <Link
           href="/book"
           className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-sm font-medium text-ink-900 shadow-soft transition hover:-translate-y-px hover:shadow-lift"
         >
