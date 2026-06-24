@@ -13,7 +13,7 @@ import { createHash, randomBytes } from 'crypto';
 const PREFIX = 'obw_'; // Oceano Blue Worker
 
 /** Every task type the server dispatches — the only capabilities a worker may claim. */
-export const WORKER_CAPS = ['scan_folder', 'generate_thumbnails'] as const;
+export const WORKER_CAPS = ['scan_folder', 'generate_thumbnails', 'process_photos'] as const;
 
 export function hashWorkerKey(key: string): string {
   return createHash('sha256').update(key.trim()).digest('hex');

@@ -35,7 +35,7 @@ export default async function ContactSheetPage({ params }: { params: { id: strin
     <div className="space-y-6">
       <div>
         <Link href={`/dashboard/jobs/${j.id}/photo-rescue`} className="inline-flex items-center gap-1 text-sm text-ocean-700 hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back to rescue
+          <ArrowLeft className="h-4 w-4" /> Back to production
         </Link>
         <h1 className="mt-1 text-2xl font-semibold text-ocean-950">Contact sheet</h1>
         <p className="text-sm text-slate-600">

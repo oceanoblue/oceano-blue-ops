@@ -32,7 +32,7 @@ export function NewReJobButton() {
   return (
     <button className="btn-primary" disabled={busy} onClick={create}>
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-      New RE photo job
+      New photo job
     </button>
   );
 }

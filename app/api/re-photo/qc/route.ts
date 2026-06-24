@@ -46,14 +46,14 @@ export async function POST(request: Request) {
 
   const { data: assets } = await admin
     .from('assets')
-    .select('id, filename, status, exif')
+    .select('id, filename, status, exif, asset_type')
     .eq('job_id', job_id);
   const { data: groups } = await admin
     .from('asset_groups')
     .select('id, review_required')
     .eq('job_id', job_id);
 
-  const all = assets ?? [];
+  const all = (assets ?? []).filter((a: any) => a.asset_type !== 'processed');
   const grps = groups ?? [];
   const active = all.filter((a: any) => a.status !== 'rejected');
 

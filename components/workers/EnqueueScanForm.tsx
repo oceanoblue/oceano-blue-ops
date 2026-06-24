@@ -47,7 +47,7 @@ export function EnqueueScanForm({ jobs }: { jobs: JobOption[] }) {
   if (jobs.length === 0) {
     return (
       <div className="card p-4 text-sm text-slate-500">
-        Create a job first (e.g. in Photo Rescue) to queue a folder scan against it.
+        Create a real estate photo job first to queue a folder scan against it.
       </div>
     );
   }

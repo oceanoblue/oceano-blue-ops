@@ -13,7 +13,8 @@ export const dynamic = 'force-dynamic';
  *  - scan_folder       → upsert `assets` (indexed) under a `storage_locations` row
  *  - generate_thumbnails → upload posted preview bytes to the private
  *    `thumbnails` bucket and set `assets.thumbnail_url`
- * Read-only on the worker's disk; no deletes/overwrites of source files anywhere.
+ *  - process_photos    → index local derivative files produced by the worker
+ * No deletes/overwrites of source files anywhere.
  */
 const Body = z.object({
   task_id: z.string().uuid(),
@@ -39,6 +40,24 @@ const Body = z.object({
     .array(z.object({ asset_id: z.string().uuid(), content_base64: z.string().min(1), mime: z.string().optional() }))
     .max(20)
     .optional(),
+  processed_assets: z
+    .array(
+      z.object({
+        filename: z.string(),
+        local_path: z.string(),
+        byte_size: z.number().int().nonnegative().optional(),
+        mime_type: z.string().optional(),
+        width: z.number().int().positive().nullable().optional(),
+        height: z.number().int().positive().nullable().optional(),
+        source_asset_ids: z.array(z.string().uuid()).optional(),
+        processing_kind: z.string().optional(),
+        provider: z.string().optional(),
+        profile: z.string().optional(),
+        metadata: z.record(z.any()).optional(),
+      })
+    )
+    .optional(),
+  failed: z.array(z.record(z.any())).optional(),
 });
 
 export async function POST(request: Request) {
@@ -190,6 +209,67 @@ export async function POST(request: Request) {
       event_type: 'thumbnails_generated',
       summary: `Stored ${stored} thumbnail(s)`,
       details: { task_id: task.id, count: stored },
+    });
+  }
+
+  // ---- process_photos: index local derivative outputs ----
+  if (task.task_type === 'process_photos' && body.processed_assets) {
+    const rows = body.processed_assets.map((asset) => ({
+      job_id: task.job_id,
+      asset_type: 'processed',
+      media_type: 'photo',
+      status: 'processed',
+      filename: asset.filename,
+      local_path: asset.local_path,
+      byte_size: asset.byte_size ?? 0,
+      mime_type: asset.mime_type ?? 'image/jpeg',
+      width: asset.width ?? null,
+      height: asset.height ?? null,
+      metadata: {
+        source: 'local_worker',
+        provider: asset.provider ?? 'local_worker',
+        processing_kind: asset.processing_kind ?? 'enhance_single',
+        profile: asset.profile ?? null,
+        source_asset_ids: asset.source_asset_ids ?? [],
+        ...(asset.metadata ?? {}),
+      },
+    }));
+
+    let inserted: any[] = [];
+    if (rows.length) {
+      const { data } = await admin
+        .from('assets')
+        .insert(rows)
+        .select('id, filename, local_path, media_type');
+      inserted = data ?? [];
+    }
+
+    summary.processed_assets = inserted.length;
+    summary.failed = body.failed?.length ?? 0;
+
+    const thumbItems = inserted
+      .filter((a: any) => a.local_path)
+      .map((a: any) => ({ asset_id: a.id, local_path: a.local_path }));
+    let thumbTasks = 0;
+    for (let i = 0; i < thumbItems.length; i += 20) {
+      await admin.from('worker_tasks').insert({
+        job_id: task.job_id,
+        worker_id: worker.id,
+        task_type: 'generate_thumbnails',
+        status: 'queued',
+        payload: { items: thumbItems.slice(i, i + 20) },
+      });
+      thumbTasks++;
+    }
+    summary.thumbnail_tasks = thumbTasks;
+
+    await admin.from('production_events').insert({
+      job_id: task.job_id,
+      actor_type: 'worker',
+      actor_id: worker.id,
+      event_type: 'photos_processed',
+      summary: `Processed ${inserted.length} photo derivative(s)`,
+      details: { task_id: task.id, processed_assets: inserted.length, failed: body.failed ?? [] },
     });
   }
 

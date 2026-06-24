@@ -10,6 +10,8 @@ import { QcPanel } from '@/components/photos/rescue/QcPanel';
 import { ClassifyButton } from '@/components/photos/rescue/ClassifyButton';
 import { GenerateThumbsButton } from '@/components/photos/rescue/GenerateThumbsButton';
 import { RedetectButton } from '@/components/photos/rescue/RedetectButton';
+import { ProcessPanel, type ProcessedAsset, type ProcessTask } from '@/components/photos/rescue/ProcessPanel';
+import { ProductionFlowSummary } from '@/components/photos/rescue/ProductionFlowSummary';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,14 +36,17 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
   if (!job) notFound();
   const j = job as any;
 
-  const [{ data: groupsData }, { data: assetsData }, { data: qcData }] = await Promise.all([
+  const [{ data: groupsData }, { data: assetsData }, { data: qcData }, { data: processTasksData }] = await Promise.all([
     supabase
       .from('asset_groups')
       .select(
         'id, name, confidence_score, review_required, metadata, items:asset_group_items(asset_id, role, sort_order, asset:assets(filename, status, exif, thumbnail_url, metadata))'
       )
       .eq('job_id', params.id),
-    supabase.from('assets').select('id, filename, status, thumbnail_url, metadata').eq('job_id', params.id),
+    supabase
+      .from('assets')
+      .select('id, filename, status, thumbnail_url, metadata, asset_type')
+      .eq('job_id', params.id),
     supabase
       .from('qc_reports')
       .select('status, quality_score, checks, created_at')
@@ -49,6 +54,13 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
       .eq('qc_type', 'real_estate_photo_qc')
       .order('created_at', { ascending: false })
       .limit(1),
+    supabase
+      .from('worker_tasks')
+      .select('id, status, error, result, created_at')
+      .eq('job_id', params.id)
+      .eq('task_type', 'process_photos')
+      .order('created_at', { ascending: false })
+      .limit(8),
   ]);
 
   // Sign every thumbnail path once.
@@ -57,6 +69,8 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
     ...(groupsData ?? []).flatMap((g: any) => (g.items ?? []).map((it: any) => it.asset?.thumbnail_url)),
   ];
   const thumbs = await signThumbnails(supabase, allPaths);
+  const sourceAssets = (assetsData ?? []).filter((a: any) => a.asset_type !== 'processed');
+  const outputAssets = (assetsData ?? []).filter((a: any) => a.asset_type === 'processed');
 
   const groupedAssetIds = new Set<string>();
   const groups: ReviewGroup[] = (groupsData ?? []).map((g: any) => {
@@ -85,7 +99,7 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
   // Surface uncertain groups first.
   groups.sort((a, b) => Number(b.review_required) - Number(a.review_required));
 
-  const singles: Single[] = (assetsData ?? [])
+  const singles: Single[] = sourceAssets
     .filter((a: any) => !groupedAssetIds.has(a.id))
     .map((a: any) => ({
       id: a.id,
@@ -94,6 +108,23 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
       thumb_url: a.thumbnail_url ? thumbs[a.thumbnail_url] ?? null : null,
       scene: a.metadata?.scene ?? null,
     }));
+
+  const processedOutputs: ProcessedAsset[] = outputAssets.map((a: any) => ({
+    id: a.id,
+    filename: a.filename ?? a.id,
+    status: a.status,
+    thumb_url: a.thumbnail_url ? thumbs[a.thumbnail_url] ?? null : null,
+    processing_kind: a.metadata?.processing_kind ?? null,
+    profile: a.metadata?.profile ?? null,
+  }));
+
+  const processTasks: ProcessTask[] = (processTasksData ?? []).map((t: any) => ({
+    id: t.id,
+    status: t.status,
+    error: t.error ?? null,
+    created_at: t.created_at,
+    result: t.result ?? null,
+  }));
 
   const latestQc = (qcData ?? [])[0]
     ? {
@@ -110,8 +141,8 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
         <ArrowLeft className="h-4 w-4" /> Back to job
       </Link>
       <PageHeader
-        eyebrow="Photo Rescue"
-        title="Real Estate Photo Rescue"
+        eyebrow="Photo Production"
+        title="Real Estate Photo Production"
         subtitle={<>{j.title} · <span className="capitalize">{j.status?.replace(/_/g, ' ')}</span></>}
         icon={Images}
       >
@@ -123,8 +154,20 @@ export default async function PhotoRescuePage({ params }: { params: { id: string
         </Link>
       </PageHeader>
 
+      <ProductionFlowSummary
+        counts={{
+          sources: sourceAssets.length,
+          groups: groups.length,
+          groupsNeedingReview: groups.filter((g) => g.review_required).length,
+          singles: singles.filter((s) => s.status !== 'rejected').length,
+          outputs: processedOutputs.length,
+          qcStatus: latestQc?.status ?? null,
+        }}
+      />
+
       <IngestPanel jobId={j.id} />
       <GroupReviewList jobId={j.id} groups={groups} singles={singles} />
+      <ProcessPanel jobId={j.id} outputs={processedOutputs} tasks={processTasks} />
       <QcPanel jobId={j.id} latest={latestQc} />
     </div>
   );

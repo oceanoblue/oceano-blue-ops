@@ -2,9 +2,10 @@
 
 A small Node service that runs on a local machine or NAS, connects to Production
 OS, and indexes local media into `assets` (plus generates lightweight
-thumbnails). **It is read-only on disk** — it never deletes, moves, or
-overwrites your files, and only ever reads inside an explicit allowlist of
-folders.
+thumbnails). By default it is read-only on disk. If `WORKER_OUTPUT_ROOT` is set,
+it can also create non-destructive processed photo derivatives in that output
+folder. It never deletes, moves, or overwrites source files, and only reads
+inside an explicit allowlist of folders.
 
 ## How it works
 
@@ -19,7 +20,7 @@ when you register it in `/dashboard/workers`. The Supabase service key never
 touches this machine — the worker only talks to the Production OS worker API,
 which performs the database/storage writes server-side.
 
-Capabilities in v1: `scan_folder`, `generate_thumbnails`.
+Capabilities: `scan_folder`, `generate_thumbnails`, and opt-in `process_photos`.
 
 ## Setup
 
@@ -32,6 +33,7 @@ Capabilities in v1: `scan_folder`, `generate_thumbnails`.
    POS_BASE_URL=https://<your-app-domain> \
    WORKER_API_KEY=obw_xxxxxxxx \
    WORKER_ROOTS=/Volumes/Media/Shoots,/Volumes/NAS/Podcasts \
+   WORKER_OUTPUT_ROOT=/Volumes/Media/Oceano-Processed \
    npm start
    ```
 
@@ -41,6 +43,7 @@ Capabilities in v1: `scan_folder`, `generate_thumbnails`.
 | `POS_BASE_URL` | yes | Production OS base URL |
 | `WORKER_API_KEY` | yes | the `obw_…` key from registration |
 | `WORKER_ROOTS` | yes | comma-separated allowlist of root dirs the worker may read |
+| `WORKER_OUTPUT_ROOT` | no | enables `process_photos`; derivative JPEGs are written here |
 | `WORKER_NAME` | no | display name (default: hostname) |
 | `WORKER_STORAGE_KIND` | no | `local` \| `nas` \| `external_drive` (default `local`) |
 | `POLL_INTERVAL_MS` | no | default `15000` |
@@ -58,9 +61,14 @@ outside the allowlist (or via symlink/`..`) is rejected without touching disk.
 - **generate_thumbnails** — payload `{ "items": [{ "asset_id", "local_path" }] }`
   (≤ 20 per task). Builds ~512px JPEG previews (camera-embedded preview for RAW)
   and posts them; the server stores them in the private `thumbnails` bucket.
+- **process_photos** — payload `{ "profile", "items" }`. Reads reviewed Photo
+  Rescue source files, writes derivative JPEGs to `WORKER_OUTPUT_ROOT`, then
+  reports those paths so the server indexes them as processed `assets` and
+  queues thumbnails.
 
 ## Safety guarantees
-- Read-only: only `stat` / `readdir` / `readFile`. No writes, deletes, moves.
+- Source-safe: only derivative writes under `WORKER_OUTPUT_ROOT`; no deletes,
+  moves, overwrites, or source edits.
 - Allowlist-enforced paths; symlinks are never followed.
 - No DaVinci automation, no publishing, no destructive operations.
 - Holds only its own scoped API key — never the Supabase service key.

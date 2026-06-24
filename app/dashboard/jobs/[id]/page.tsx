@@ -153,7 +153,7 @@ async function TabContent({ tab, jobId, job }: { tab: string; jobId: string; job
         href={`/dashboard/jobs/${jobId}/photo-rescue`}
         className="btn-secondary mb-3 inline-flex w-fit"
       >
-        Open Photo Rescue (ingest + bracket review + QC) →
+        Open Photo Production →
       </Link>
     ) : null;
     if (!assets || assets.length === 0)

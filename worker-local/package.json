@@ -6,7 +6,7 @@
   "description": "Oceano Blue local worker — scans local/NAS folders and indexes assets into Production OS. Read-only on disk.",
   "scripts": {
     "start": "node src/index.mjs",
-    "check": "node --check src/index.mjs && node --check src/scan.mjs && node --check src/thumbnail.mjs && node --check src/safety.mjs && node --check src/api.mjs && node --check src/config.mjs"
+    "check": "node --check src/index.mjs && node --check src/scan.mjs && node --check src/thumbnail.mjs && node --check src/process.mjs && node --check src/safety.mjs && node --check src/api.mjs && node --check src/config.mjs"
   },
   "dependencies": {
     "exifr": "^7.1.3",

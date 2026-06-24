@@ -2,8 +2,10 @@
 
 Connects Production OS to local/NAS media. A small Node client (`worker-local/`)
 runs on a machine that can see your files, polls the POS worker API, and indexes
-media into `assets` + generates thumbnails. **Read-only on disk** — it never
-deletes, moves, or overwrites files, and only reads inside an explicit allowlist.
+media into `assets` + generates thumbnails. By default it is read-only on disk.
+When `WORKER_OUTPUT_ROOT` is set, it can also write non-destructive processed
+photo derivatives there. It never deletes, moves, or overwrites source files,
+and only reads inside an explicit allowlist.
 
 ## Architecture
 
@@ -18,7 +20,8 @@ POS applies side-effects server-side (assets, thumbnails bucket, groups, events)
   (`local_workers.api_key_hash`); the plaintext is shown once at registration.
 - The Supabase **service-role key never leaves the server** — the worker holds
   only its own scoped key.
-- Capabilities (v1): `scan_folder`, `generate_thumbnails`.
+- Capabilities: `scan_folder`, `generate_thumbnails`, and opt-in
+  `process_photos`.
 
 ## One-time setup (operator)
 
@@ -37,6 +40,7 @@ POS applies side-effects server-side (assets, thumbnails bucket, groups, events)
    export POS_BASE_URL=https://your-dashboard-domain   # no trailing slash
    export WORKER_API_KEY=obw_your_key
    export WORKER_ROOTS=/Volumes/home/WORKFLOW          # comma-separated allowlist
+   export WORKER_OUTPUT_ROOT=/Volumes/home/WORKFLOW/_oceano_processed
    npm start
    ```
    Leave this terminal running — it is the worker. To run other commands, open a
@@ -49,6 +53,7 @@ POS applies side-effects server-side (assets, thumbnails bucket, groups, events)
 | `POS_BASE_URL` | yes | dashboard domain, no trailing slash |
 | `WORKER_API_KEY` | yes | the `obw_…` key from registration |
 | `WORKER_ROOTS` | yes | comma-separated allowlist; worker refuses to start without it |
+| `WORKER_OUTPUT_ROOT` | no | enables `process_photos`; derivative JPEGs are written here |
 | `WORKER_NAME` | no | display name (default hostname) |
 | `WORKER_STORAGE_KIND` | no | `local` \| `nas` \| `external_drive` (default `local`) |
 | `POLL_INTERVAL_MS` | no | default 15000 |
@@ -59,12 +64,14 @@ POS applies side-effects server-side (assets, thumbnails bucket, groups, events)
 `/dashboard/workers` → **Queue a folder scan** → pick a job + a **full folder
 path inside an allowlisted root** (e.g. `/Volumes/home/WORKFLOW/113 Hunley`).
 The worker indexes media; for `real_estate_photo` jobs it also detects brackets,
-and thumbnails are auto-generated. Results appear on the job's Photo Rescue page.
+and thumbnails are auto-generated. Results appear on the job's Photo Production page.
 
-Buttons on the Photo Rescue page:
+Buttons on the Photo Production page:
 - **Re-detect brackets** — re-group currently-ungrouped photos.
 - **Generate thumbnails** — backfill previews for indexed photos missing them.
 - **Auto-classify scenes** — AI scene tags (needs `OPENAI_API_KEY`).
+- **Queue processing** — sends reviewed brackets and active singles to a local
+  worker with `process_photos`; outputs are indexed as processed assets.
 
 ## Troubleshooting (lessons learned)
 
@@ -78,16 +85,19 @@ Buttons on the Photo Rescue page:
 | Scan `completed, file_count: 0` | No supported media at that path (or it's empty). `find "<path>" -type f` to check; supported: jpg/png/tiff/heic/webp, raw arw/cr2/cr3/nef/dng/raf/rw2/orf, video mp4/mov/m4v/mkv/mxf/…, audio wav/mp3/m4a/… |
 | 0 files on a NAS even though files exist | SMB/AFP report dirent types as UNKNOWN; the walker now `lstat`s each entry (PR #12). Update the worker: `git pull` + restart. |
 | Thumbnails blank | Assets indexed before auto-thumbnailing, or RAW without an embedded preview. Use **Generate thumbnails**. Check the worker log `generate_thumbnails -> completed { thumbnails, failed }`. |
+| Queue processing says nothing to process | Groups still need review, source assets have no `local_path`, assets are RAW files that need conversion/export first, or the same source set was already processed. |
+| `process_photos` never runs | Restart the worker with `WORKER_OUTPUT_ROOT` set; the heartbeat advertises `process_photos` only when an output root is configured. |
 
 ## Safety guarantees
-- Read-only: `stat`/`readdir`/`readFile` only — no writes/deletes/moves.
+- Source-safe: scan/thumbnail tasks are read-only; processing writes only new
+  derivative JPEGs under `WORKER_OUTPUT_ROOT`.
 - Allowlist-enforced paths; symlinks are never followed.
 - No DaVinci automation, no publishing, no destructive operations.
 - Worker key is hashed + shown once; revoke by deleting the `local_workers` row
   and re-registering.
 
 ## Code map
-- `worker-local/src/{index,api,config,scan,thumbnail,safety}.mjs` — the client.
+- `worker-local/src/{index,api,config,scan,thumbnail,process,safety}.mjs` — the client.
 - `app/api/worker/{register,heartbeat,tasks/claim,tasks/result,tasks/enqueue,tasks/enqueue-thumbnails}` — the API.
 - `lib/worker/{auth,path-safety}.ts` — server auth + tested path helpers.
 - `lib/photos/persist-bracket-groups.ts` — shared detect+persist.

@@ -7,6 +7,7 @@ import path from 'node:path';
 //   WORKER_ROOTS      comma-separated allowlist of root dirs the worker may read
 //   WORKER_NAME       display name (default: hostname)
 //   WORKER_STORAGE_KIND  local|nas|external_drive (default: local)
+//   WORKER_OUTPUT_ROOT optional derivative output folder; enables process_photos
 //   POLL_INTERVAL_MS  default 15000
 //   CLAIM_MAX         tasks per poll (default 2)
 
@@ -19,19 +20,31 @@ function required(name) {
   return v;
 }
 
+const roots = (process.env.WORKER_ROOTS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+  .map((p) => path.resolve(p));
+const outputRoot = process.env.WORKER_OUTPUT_ROOT ? path.resolve(process.env.WORKER_OUTPUT_ROOT) : null;
+if (outputRoot && !roots.some((root) => {
+  const rel = path.relative(root, outputRoot);
+  return rel === '' || (rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+})) {
+  roots.push(outputRoot);
+}
+
 export const config = {
   baseUrl: required('POS_BASE_URL').replace(/\/+$/, ''),
   apiKey: required('WORKER_API_KEY'),
-  roots: (process.env.WORKER_ROOTS ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((p) => path.resolve(p)),
+  roots,
+  outputRoot,
   name: process.env.WORKER_NAME ?? os.hostname(),
   storageKind: process.env.WORKER_STORAGE_KIND ?? 'local',
   pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 15000),
   claimMax: Number(process.env.CLAIM_MAX ?? 2),
-  capabilities: ['scan_folder', 'generate_thumbnails'],
+  capabilities: outputRoot
+    ? ['scan_folder', 'generate_thumbnails', 'process_photos']
+    : ['scan_folder', 'generate_thumbnails'],
 };
 
 if (config.roots.length === 0) {

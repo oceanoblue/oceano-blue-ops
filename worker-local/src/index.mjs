@@ -2,6 +2,7 @@ import { config } from './config.mjs';
 import { api } from './api.mjs';
 import { handleScan } from './scan.mjs';
 import { handleThumbnails } from './thumbnail.mjs';
+import { handleProcessPhotos } from './process.mjs';
 
 // Oceano Blue local worker — heartbeat → claim → execute → report, on a loop.
 // Read-only on disk; only ever touches paths inside WORKER_ROOTS.
@@ -9,6 +10,7 @@ import { handleThumbnails } from './thumbnail.mjs';
 const HANDLERS = {
   scan_folder: handleScan,
   generate_thumbnails: handleThumbnails,
+  process_photos: handleProcessPhotos,
 };
 
 let running = true;
@@ -49,6 +51,7 @@ async function tick() {
 
 console.log(`[worker] "${config.name}" starting → ${config.baseUrl}`);
 console.log(`[worker] roots: ${config.roots.join(', ')}`);
+if (config.outputRoot) console.log(`[worker] output root: ${config.outputRoot}`);
 console.log(`[worker] capabilities: ${config.capabilities.join(', ')}`);
 
 while (running) {

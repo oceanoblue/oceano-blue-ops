@@ -21,8 +21,8 @@ export default async function PhotoRescueIndex() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Production"
-        title="Real Estate Photo Rescue"
-        subtitle="Ingest a shoot, auto-detect HDR brackets with confidence scores, fix uncertain groups, and run delivery QC."
+        title="Real Estate Photo Production"
+        subtitle="Organize bracket sets, process internal HDR outputs, review results, and run delivery QC."
         icon={Images}
       >
         <NewReJobButton />
@@ -54,7 +54,7 @@ export default async function PhotoRescueIndex() {
             {(jobs ?? []).length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-10 text-center text-slate-500">
-                  No real estate photo jobs yet. Create one to start a rescue.
+                  No real estate photo jobs yet.
                 </td>
               </tr>
             )}

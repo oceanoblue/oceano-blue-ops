@@ -35,6 +35,7 @@ export type Single = {
 };
 
 const ROLES = ['base_exposure', 'flash', 'ambient', 'drone', 'manual_review'] as const;
+const VALID_SINGLE_SET_SIZES = new Set([2, 3, 5, 7]);
 
 function Thumb({ url, alt }: { url: string | null; alt: string }) {
   if (!url) {
@@ -83,11 +84,7 @@ export function GroupReviewList({
   async function act(payload: Record<string, unknown>) {
     setBusy(true);
     try {
-      const res = await fetch('/api/re-photo/groups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const res = await postGroupAction(payload);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         alert(`Action failed: ${j.error ?? res.status}`);
@@ -96,6 +93,44 @@ export function GroupReviewList({
         setSelectedSingles(new Set());
         router.refresh();
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function postGroupAction(payload: Record<string, unknown>) {
+    return fetch('/api/re-photo/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async function createFixedBrackets(size: 3 | 5 | 7) {
+    const ordered = activeSingles.filter((single) => selectedSingles.has(single.id));
+    if (ordered.length < size || ordered.length % size !== 0) {
+      alert(`Select photos in complete ${size}-shot sets.`);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      for (let index = 0; index < ordered.length; index += size) {
+        const chunk = ordered.slice(index, index + size);
+        const res = await postGroupAction({
+          action: 'create_group',
+          job_id: jobId,
+          asset_ids: chunk.map((single) => single.id),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          alert(`Action failed: ${j.error ?? res.status}`);
+          return;
+        }
+      }
+      setSelectedGroups(new Set());
+      setSelectedSingles(new Set());
+      router.refresh();
     } finally {
       setBusy(false);
     }
@@ -122,23 +157,25 @@ export function GroupReviewList({
   };
 
   const needsReview = groups.filter((g) => g.review_required).length;
+  const oneBracketSelectionIsValid = VALID_SINGLE_SET_SIZES.has(selectedSingles.size);
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-semibold text-slate-900">
-          Bracket review
+          Bracket sets
           <span className="ml-2 text-sm font-normal text-slate-500">
-            {groups.length} groups · {needsReview} need review · {activeSingles.length} singles
+            {groups.length} sets · {needsReview} need review · {activeSingles.length} ungrouped
           </span>
         </h2>
         <button
           className="btn-secondary"
           disabled={busy || selectedGroups.size < 2}
           onClick={() => act({ action: 'merge', job_id: jobId, group_ids: [...selectedGroups] })}
+          title="Use only when auto-detection split one bracket across multiple groups"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitMerge className="h-4 w-4" />}
-          Merge selected ({selectedGroups.size})
+          Combine groups ({selectedGroups.size})
         </button>
       </div>
 
@@ -167,7 +204,10 @@ export function GroupReviewList({
                   />
                   <span className="font-medium text-slate-900">
                     <Layers className="mr-1 inline h-4 w-4 text-ocean-700" />
-                    {g.name ?? 'Bracket'}
+                    {g.name ?? 'Bracket set'}
+                    <span className="ml-1 text-xs font-normal text-slate-400">
+                      {g.items.length} frames
+                    </span>
                   </span>
                 </label>
                 <ConfidenceBadge score={g.confidence_score} manual={manual} />
@@ -252,7 +292,7 @@ export function GroupReviewList({
       {singles.length > 0 && (
         <div className="card p-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-900">Singles ({activeSingles.length})</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Ungrouped sources ({activeSingles.length})</h3>
             <div className="flex items-center gap-2">
               {archivedSingles.length > 0 && (
                 <button
@@ -265,10 +305,18 @@ export function GroupReviewList({
               )}
               <button
                 className="btn-secondary !px-2.5 !py-1.5 text-xs"
-                disabled={busy || selectedSingles.size < 2}
+                disabled={busy || !oneBracketSelectionIsValid}
                 onClick={() => act({ action: 'create_group', job_id: jobId, asset_ids: [...selectedSingles] })}
+                title="Create one bracket set from 2, 3, 5, or 7 selected frames"
               >
-                <Layers className="h-3.5 w-3.5" /> Group selected ({selectedSingles.size})
+                <Layers className="h-3.5 w-3.5" /> One set ({selectedSingles.size})
+              </button>
+              <button
+                className="btn-primary !px-2.5 !py-1.5 text-xs"
+                disabled={busy || selectedSingles.size < 3 || selectedSingles.size % 3 !== 0}
+                onClick={() => createFixedBrackets(3)}
+              >
+                <Layers className="h-3.5 w-3.5" /> 3-frame sets ({selectedSingles.size})
               </button>
             </div>
           </div>
