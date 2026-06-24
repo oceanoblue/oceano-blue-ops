@@ -12,8 +12,10 @@ import { createHash, randomBytes } from 'crypto';
 
 const PREFIX = 'obw_'; // Oceano Blue Worker
 
-/** Every task type the server dispatches — the only capabilities a worker may claim. */
-export const WORKER_CAPS = ['scan_folder', 'generate_thumbnails', 'process_photos'] as const;
+/** Every task type the server dispatches — the only capabilities a worker may claim.
+ *  'edit_video' is the office-Mac DaVinci Resolve daemon (reel + long-form edits;
+ *  it works the dedicated edit_jobs queue, not the photo worker_tasks queue). */
+export const WORKER_CAPS = ['scan_folder', 'generate_thumbnails', 'process_photos', 'edit_video'] as const;
 
 export function hashWorkerKey(key: string): string {
   return createHash('sha256').update(key.trim()).digest('hex');
