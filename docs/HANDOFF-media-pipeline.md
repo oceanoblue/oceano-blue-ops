@@ -22,8 +22,9 @@ plans the edit; an engine renders; a human approves before delivery.
 - **Reel + long-form video** → office-Mac **DaVinci Resolve daemon** (built, see §4).
 - **Podcasts** → existing **Make.com** pipeline (`podcast_shows/episodes/deliverables`,
   Transistor + YouTube). **Untouched on purpose** — do not reroute without asking.
-- **Real-estate photos** → existing deterministic edit engine (`worker-edit/`).
-  **PAUSED** by the owner (output not dialed in yet); resume later, don't touch now.
+- **Real-estate photos** → deterministic edit engine (`worker-edit/`) + optional
+  generative edits (gpt-image-2). **RESUMED** — being dialed in. See §8 (resolution
+  audit) and §9 (RAW + generative fidelity) for the June 2026 quality work.
 
 ## 2. What's shipped (Phase 1 + Phase 2 engine)
 | PR | What |
@@ -101,3 +102,46 @@ Runs on the Mac (Resolve is desktop-only). See `worker-resolve/README.md`.
   uploaded as `RESOLVE_MCP_HANDOFF.md` in the original chat (not in repo) — the daemon's
   `cutplan.py` already implements §5–6.
 - This repo's CI check is named `verify` (typecheck only); tests via `vitest run` (121 passing).
+
+## 8. Photo resolution audit (June 2026 — PR #141)
+**Symptom:** finals looked soft/wrong after the V3 Photo Production changes.
+**Root cause:** full-res detail was discarded in *stacked* stages, then the result
+was *upscaled back up* (interpolated = fake detail). Path was 8K → 4096 (ingest) →
+4096 (AI input prep) → 3000/4000 (enhance) → upscaled to 3840 ("delivery").
+
+**Fixed (PR #141, no new infra):**
+- `lib/ai/runner.ts`: `DELIVERY_LONG_EDGE` 3840→**0** (never upscale); `AI_INPUT_LONG_EDGE` 4096→**6144**.
+- `lib/ai/oceano-enhance/pipeline.ts`: `targetLongEdge` 3000→**0** (native; resize guarded for ≤0).
+- `lib/ai/oceano-enhance/index.ts`: fuse/grade `targetLongEdge`→**0** (native), grade q90→95.
+- `worker-local/src/process.mjs`: resize caps 4096→**8192** safety bound; base JPEG q94→95.
+- `lib/photos/compress-image.ts` + `PhotoManager.tsx`: ingest compression **OFF by default**
+  (full-size originals); when on, ≤6144px @ q0.95 (was 4096/0.88).
+- Display-only thumbnails (`photo-url` w=640/2000, 512px grids) were **not** the cause — unchanged.
+
+**Operational:** larger/slower uploads now (full-size). Toggle in the uploader re-enables
+compression per shoot. App + ingest changes are live on Vercel; `worker-local` needs a
+`git pull` on the office Mac.
+
+## 9. RAW decode + generative fidelity (June 2026 — PR #142)
+- **Generative model = `gpt-image-2`** (`lib/ai/openai-gpt-image.ts`, default; env
+  `OPENAI_IMAGE_MODEL`). NOT gpt-image-1.
+- **`input_fidelity: 'high'`** now set on every `images.edit` call (env `OPENAI_INPUT_FIDELITY`).
+  This is THE switch that makes API edits preserve structure/fixtures/windows like the chat
+  surface does — without it the model drifts. Falls back gracefully if a model rejects the param.
+- **Full RAW decode** in `worker-edit` (`rawpy`/libraw): `_decode()` tries cv2 first, then a
+  full libraw demosaic + camera WB for `.arw/.cr2/.nef/.dng/…`. `/health` reports `"raw": true`.
+  `worker-edit` default `target_long_edge` 4000→0 (native), q90→95.
+- **`runner.ts` is RAW-safe**: RAW inputs pass original bytes straight to the deterministic
+  engine (sharp can't decode RAW). Generative providers can't ingest RAW → RAW should target
+  the deterministic path.
+- **Delivery presets** (`app/api/delivery/[token]/download`): added **`?size=4k`** (4096px q95)
+  alongside `full` (native master), `print` (3000), `web` (2048) → native + 4K-floor dual delivery.
+
+**Needs deploy:** `worker-edit` must be redeployed to Fly for RAW decode (`fly deploy` in
+`worker-edit/`). gpt-image + delivery + runner changes are Vercel-side (live on merge).
+
+**OPEN DECISION (ingest of RAW originals):** RAW full decode only helps end-to-end once the
+RAW *original* reaches the engine. Ingest currently uploads the camera's embedded JPEG preview
+(~6MB) for RAW, not the RAW file. Flipping ingest to store RAW originals (25–50MB each) enables
+true RAW quality but means much slower uploads / more storage — confirm with owner before changing
+`PhotoManager.tsx` RAW upload path.

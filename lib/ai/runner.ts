@@ -102,6 +102,18 @@ export async function runAiJob(jobId: string): Promise<{
           .download(p.storage_path);
         if (error || !data) throw new Error(`Download failed: ${p.storage_path}`);
         const raw = Buffer.from(await data.arrayBuffer());
+        // Camera RAW (.arw/.cr2/.nef/.dng/…): sharp can't decode it. Pass the
+        // original bytes straight through so the deterministic edit engine
+        // (libraw/rawpy in worker-edit) does a full RAW decode. Generative
+        // providers can't ingest RAW, so RAW should target the deterministic path.
+        if (/\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(p.filename || '')) {
+          return {
+            bytes: raw,
+            filename: p.filename,
+            mimeType: 'image/x-raw',
+            bracketIndex: (p.exif as any)?.ExposureBiasValue,
+          };
+        }
         // Preprocess: normalize orientation + cap the long edge. Keep this at
         // full delivery resolution so the deterministic merge stays sharp and a
         // generative enhance gets enough detail to stay faithful (a downscaled

@@ -19,6 +19,7 @@ pyramids, preserving local contrast and avoiding halos. (Mertens, Kautz,
 Van Reeth 2007.)
 """
 
+import io
 import os
 from typing import List, Optional
 
@@ -26,15 +27,45 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, Header, HTTPException, Response, UploadFile
 
+try:
+    import rawpy  # libraw-backed full RAW decode
+    _HAS_RAWPY = True
+except Exception:  # pragma: no cover - import guard
+    _HAS_RAWPY = False
+
 app = FastAPI()
 SECRET = os.environ.get("EDIT_WORKER_SECRET", "")
 
 
+def _decode_raw(data: bytes) -> Optional[np.ndarray]:
+    """Full RAW decode via libraw: real demosaic + camera white balance, so the
+    merge/grade works on the sensor's actual data (and its highlight/shadow
+    headroom) instead of the small baked-in JPEG preview. Returns BGR uint8, or
+    None if the bytes aren't a RAW this build can read."""
+    if not _HAS_RAWPY:
+        return None
+    try:
+        with rawpy.imread(io.BytesIO(data)) as raw:
+            rgb = raw.postprocess(
+                use_camera_wb=True,      # honor the camera's WB, not a guess
+                no_auto_bright=False,    # sane baseline exposure; grade refines it
+                output_bps=8,            # matches the uint8 BGR grade pipeline
+                gamma=(2.222, 4.5),      # standard display gamma
+            )
+        return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    except Exception:
+        return None
+
+
 def _decode(data: bytes) -> np.ndarray:
+    # Browser-decodable formats first (fast path), then full RAW via libraw.
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
-    if img is None:
-        raise HTTPException(status_code=400, detail="decode_failed")
-    return img
+    if img is not None:
+        return img
+    raw = _decode_raw(data)
+    if raw is not None:
+        return raw
+    raise HTTPException(status_code=400, detail="decode_failed")
 
 
 def _match_sizes(images: List[np.ndarray]) -> List[np.ndarray]:
@@ -236,15 +267,15 @@ def resize_long_edge(img: np.ndarray, target: int) -> np.ndarray:
 
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "oceano-edit-engine"}
+    return {"ok": True, "service": "oceano-edit-engine", "raw": _HAS_RAWPY}
 
 
 @app.post("/edit")
 async def edit(
     files: List[UploadFile] = File(...),
     mode: str = Form("grade"),
-    target_long_edge: int = Form(4000),
-    quality: int = Form(90),
+    target_long_edge: int = Form(0),  # 0 = keep native resolution (no downscale)
+    quality: int = Form(95),
     x_edit_secret: Optional[str] = Header(None),
 ):
     if not SECRET or x_edit_secret != SECRET:

@@ -8,6 +8,10 @@ export const dynamic = 'force-dynamic';
 // Client-selectable delivery resolutions. "full" ships the original finals
 // untouched; "print" and "web" are resized derivatives generated on the fly.
 const SIZE_PRESETS: Record<string, { longEdge: number; quality: number; suffix: string }> = {
+  // 4K floor: the standard high-quality deliverable. 4096px long edge at q95 —
+  // big enough for premium web/portal use and large screens, smaller than the
+  // full-res master. Pairs with the untouched "full" (native master) download.
+  '4k': { longEdge: 4096, quality: 95, suffix: '-4k' },
   // Print: large long edge at high quality — good for flyers, brochures, large
   // prints. Roughly 3000px keeps it sharp at A4/letter without shipping the
   // full-res master.
@@ -18,9 +22,10 @@ const SIZE_PRESETS: Record<string, { longEdge: number; quality: number; suffix: 
 
 /**
  * Streams a zip of all selected delivered photos for the order.
+ *   ?size=4k    → each photo resized to 4096px long edge JPEG q95 (standard hi-res)
  *   ?size=print → each photo resized to 3000px long edge JPEG q92 (print)
  *   ?size=web   → each photo resized to 2048px long edge JPEG q85 (MLS upload)
- *   default     → full-resolution originals
+ *   default     → full-resolution native masters
  *
  * For very large galleries you'll want to pre-build the zip and serve via
  * signed URL instead; this works fine for the typical 30-50 photo listing.

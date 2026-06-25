@@ -90,23 +90,46 @@ export const openaiGptImage: AiProvider = {
     const size = await pickOutputSize(buffers[0]);
     const image = imageFiles.length === 1 ? imageFiles[0] : imageFiles;
 
+    // input_fidelity:'high' is THE key to faithful edits: it tells gpt-image to
+    // preserve the input's structure, fixtures, windows, faces and fine detail
+    // and only change what the prompt asks (e.g. add furniture for staging).
+    // Without it the model drifts — altering walls/fixtures — which is exactly the
+    // gap between the consistent chat results and earlier API output. Override with
+    // OPENAI_INPUT_FIDELITY=low to disable.
+    const inputFidelity = (process.env.OPENAI_INPUT_FIDELITY || 'high').toLowerCase();
+
     // gpt-image-2 accepts custom sizes; if a size is ever rejected, fall back to
-    // the known-good landscape size so the enhance still succeeds.
-    async function edit(outSize: string) {
-      return client.images.edit({
+    // the known-good landscape size so the enhance still succeeds. Likewise if
+    // input_fidelity is ever rejected (older model), retry without it.
+    async function edit(outSize: string, withFidelity: boolean) {
+      const body: Record<string, unknown> = {
         model,
         image, // OpenAI SDK accepts File | File[] at runtime
         prompt,
         size: outSize,
         n: 1,
-      } as never);
+      };
+      if (withFidelity && inputFidelity !== 'low') body.input_fidelity = inputFidelity;
+      return client.images.edit(body as never);
     }
     let result;
     try {
-      result = await edit(size);
+      result = await edit(size, true);
     } catch (e: any) {
-      if (size !== SIZE_FALLBACK && /size|dimension|invalid|unsupported/i.test(e?.message ?? '')) {
-        result = await edit(SIZE_FALLBACK);
+      const msg = e?.message ?? '';
+      if (/input_fidelity|unknown.*param|unexpected.*param/i.test(msg)) {
+        // Param unsupported by this model — retry honoring only the size fallback.
+        try {
+          result = await edit(size, false);
+        } catch (e2: any) {
+          if (size !== SIZE_FALLBACK && /size|dimension|invalid|unsupported/i.test(e2?.message ?? '')) {
+            result = await edit(SIZE_FALLBACK, false);
+          } else {
+            throw e2;
+          }
+        }
+      } else if (size !== SIZE_FALLBACK && /size|dimension|invalid|unsupported/i.test(msg)) {
+        result = await edit(SIZE_FALLBACK, true);
       } else {
         throw e;
       }
