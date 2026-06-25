@@ -180,6 +180,7 @@ def tone_curve(
     black_point: float = 1.0,
     contrast: float = 0.90,
     airy_gamma: float = 0.88,
+    highlight_rolloff: float = 0.0,
 ) -> np.ndarray:
     # Luxury = bright & airy, low contrast. A hair of black point (just off muddy),
     # an actual DE-contrast (<1 compresses the tonal range = softer), plus a gentle
@@ -189,6 +190,17 @@ def tone_curve(
     y = (y - 128.0) * contrast + 128.0  # contrast (1.0 = none)
     y = np.clip(y, 0, 255)
     y = 255.0 * np.power(y / 255.0, airy_gamma)  # airy midtone lift (<1 brightens)
+    if highlight_rolloff > 0:
+        # Soft highlight shoulder: gently compress the top end so bright areas
+        # (windows, bright walls) hold tonal separation instead of clipping to a
+        # flat white — the architectural/editorial "windows keep their view" look.
+        # Monotonic ease-in above the knee; pure white (255) stays 255.
+        t = y / 255.0
+        knee = 0.80
+        u = np.clip((t - knee) / (1.0 - knee), 0.0, 1.0)
+        shoulder = (1.0 - highlight_rolloff) * u + highlight_rolloff * (u * u)
+        t = np.where(t > knee, knee + (1.0 - knee) * shoulder, t)
+        y = t * 255.0
     lut = np.clip(y, 0, 255).astype(np.uint8)
     return cv2.LUT(img, lut)
 
@@ -252,7 +264,11 @@ def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
         # range (contrast 1.0, slightly deeper black point) instead of the airy
         # de-contrast. Colour stays faithful (only a hair restrained) and the
         # stylised blue-sky push is skipped — architectural wants the real sky.
-        img = tone_curve(img, black_point=2.0, contrast=1.0, airy_gamma=1.0)
+        # The highlight roll-off holds window/bright detail (calibrated against the
+        # owner's Lowcountry reference set, 2026-06-25).
+        img = tone_curve(
+            img, black_point=2.0, contrast=1.0, airy_gamma=1.0, highlight_rolloff=0.35
+        )
         img = saturate(img, 0.97)
         img = sharpen(img)
     else:
