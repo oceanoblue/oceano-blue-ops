@@ -74,25 +74,30 @@ export default async function ClientReelsPage({
             {(orders ?? []).map((o: any) => {
               const b = Array.isArray(o.reel_briefs) ? o.reel_briefs[0] : o.reel_briefs;
               return (
-                <li key={o.id} className="card flex items-center gap-4 p-4">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-ocean-100 text-ocean-700">
-                    <Film className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-display text-base font-semibold text-ocean-950">
-                        {reelLabel(b?.reel_type)}
-                      </span>
-                      <span className="text-xs text-slate-400">#{o.order_number}</span>
+                <li key={o.id}>
+                  <Link
+                    href={`/portal/reels/${o.id}`}
+                    className="card flex items-center gap-4 p-4 transition hover:-translate-y-px hover:shadow-lift"
+                  >
+                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-ocean-100 text-ocean-700">
+                      <Film className="h-5 w-5" />
                     </div>
-                    <div className="truncate text-xs text-slate-500">
-                      {aspectLabel(b?.aspect)}
-                      {b?.subject_name ? ` · ${b.subject_name}` : ''}
-                      {b?.length_target_s ? ` · ${b.length_target_s}s` : ''} · submitted{' '}
-                      {fmtRelative(o.created_at)}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-display text-base font-semibold text-ocean-950">
+                          {reelLabel(b?.reel_type)}
+                        </span>
+                        <span className="text-xs text-slate-400">#{o.order_number}</span>
+                      </div>
+                      <div className="truncate text-xs text-slate-500">
+                        {aspectLabel(b?.aspect)}
+                        {b?.subject_name ? ` · ${b.subject_name}` : ''}
+                        {b?.length_target_s ? ` · ${b.length_target_s}s` : ''} · submitted{' '}
+                        {fmtRelative(o.created_at)}
+                      </div>
                     </div>
-                  </div>
-                  <StatusBadge status={o.status} className="shrink-0" />
+                    <StatusBadge status={o.status} className="shrink-0" />
+                  </Link>
                 </li>
               );
             })}
