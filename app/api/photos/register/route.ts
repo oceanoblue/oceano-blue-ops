@@ -15,6 +15,9 @@ const Body = z.object({
       photo_id: z.string().uuid(),
       filename: z.string(),
       storage_path: z.string(),
+      // Path to the untouched RAW original (same bucket) when storage_path is a
+      // JPEG preview. The enhance runner processes from this for full RAW quality.
+      raw_storage_path: z.string().optional(),
       mime_type: z.string().optional().default('application/octet-stream'),
       byte_size: z.number().int().nonnegative(),
       width: z.number().int().positive().optional(),
@@ -50,6 +53,7 @@ export async function POST(request: Request) {
     order_id,
     kind: 'raw' as const,
     storage_path: p.storage_path,
+    raw_storage_path: p.raw_storage_path ?? null,
     bucket: 'raw-photos',
     filename: p.filename,
     mime_type: p.mime_type,
@@ -61,7 +65,8 @@ export async function POST(request: Request) {
     processing_status: 'pending' as const,
   }));
 
-  const { error: insErr } = await supabase.from('photos').insert(rows);
+  // raw_storage_path may be ahead of the generated types until they're regenerated.
+  const { error: insErr } = await supabase.from('photos').insert(rows as any);
   if (insErr) {
     return NextResponse.json({ error: insErr.message }, { status: 500 });
   }

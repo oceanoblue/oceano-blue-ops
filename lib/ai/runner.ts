@@ -95,21 +95,28 @@ export async function runAiJob(jobId: string): Promise<{
       .in('id', job.input_photo_ids);
     if (!inputs?.length) throw new Error('No input photos found');
 
+    // The deterministic engine (oceano-enhance) can decode RAW via libraw;
+    // generative providers (gpt-image) cannot. So only pull the RAW original for
+    // the deterministic job types — generative jobs keep using the JPEG preview.
+    const deterministic = job.job_type === 'hdr_merge' || job.job_type === 'enhance_single';
+
     const sources: SourceImage[] = await Promise.all(
       inputs.map(async (p: Photo) => {
-        const { data, error } = await supabase.storage
-          .from(p.bucket)
-          .download(p.storage_path);
-        if (error || !data) throw new Error(`Download failed: ${p.storage_path}`);
+        const rawPath = (p as any).raw_storage_path as string | null | undefined;
+        const useRaw = deterministic && !!rawPath;
+        const dlPath = useRaw ? (rawPath as string) : p.storage_path;
+        const { data, error } = await supabase.storage.from(p.bucket).download(dlPath);
+        if (error || !data) throw new Error(`Download failed: ${dlPath}`);
         const raw = Buffer.from(await data.arrayBuffer());
         // Camera RAW (.arw/.cr2/.nef/.dng/…): sharp can't decode it. Pass the
         // original bytes straight through so the deterministic edit engine
-        // (libraw/rawpy in worker-edit) does a full RAW decode. Generative
-        // providers can't ingest RAW, so RAW should target the deterministic path.
-        if (/\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(p.filename || '')) {
+        // (libraw/rawpy in worker-edit) does a full RAW decode. This covers both
+        // a RAW uploaded directly AND a RAW original stored beside a preview.
+        const rawName = useRaw ? rawPath!.split('/').pop() || p.filename : p.filename;
+        if (useRaw || /\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(rawName || '')) {
           return {
             bytes: raw,
-            filename: p.filename,
+            filename: rawName,
             mimeType: 'image/x-raw',
             bracketIndex: (p.exif as any)?.ExposureBiasValue,
           };
