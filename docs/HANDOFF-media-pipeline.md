@@ -1,0 +1,103 @@
+# Handoff — Media Production Pipeline (reels / long-form / podcasts)
+
+> Pick up here in a new Claude Code web session that has **both** repos as sources:
+> `oceanoblue/oceano-blue-ops` (this repo — ops app + Supabase + workers) and
+> `oceanoblue/Website` (client-facing site, where the next piece goes).
+> Everything below is already merged to `main`.
+
+## 0. First thing in the new session
+Confirm both repos are in scope:
+- Read something from `oceanoblue/Website` (e.g. list its branches) — if denied, the
+  session wasn't created with it; recreate the session including both repos. The
+  Claude GitHub app must also have access to `oceanoblue/Website`
+  (GitHub → Settings → Applications → Claude → Configure).
+
+Supabase project: **Oceano Blue Ops**, ref `hcxqqbnoextequclrvff` (region us-east-1).
+(There's also an unrelated "Immersive Experience" project — ignore it.)
+
+## 1. What this is
+A general **media-production pipeline**: clients submit orders + footage; the team
+plans the edit; an engine renders; a human approves before delivery.
+
+- **Reel + long-form video** → office-Mac **DaVinci Resolve daemon** (built, see §4).
+- **Podcasts** → existing **Make.com** pipeline (`podcast_shows/episodes/deliverables`,
+  Transistor + YouTube). **Untouched on purpose** — do not reroute without asking.
+- **Real-estate photos** → existing deterministic edit engine (`worker-edit/`).
+  **PAUSED** by the owner (output not dialed in yet); resume later, don't touch now.
+
+## 2. What's shipped (Phase 1 + Phase 2 engine)
+| PR | What |
+|----|------|
+| #135 | `order_kind` enum (`shoot`/`reel_edit`), `reel_briefs`, `order_footage`, **`client-footage`** bucket (first client-writable; per-client path isolation), `SECURITY DEFINER` RPCs `create_reel_order` / `add_reel_footage` / `submit_reel_order` |
+| #136 | Client reel intake wizard `/portal/reels/new` + `/portal/reels`, resumable footage upload (`lib/storage/tus-upload.ts`), "Create a reel" CTA |
+| #137 | Ops reel view on `/dashboard/orders/[id]`: brief + footage video previews + **edit-instructions DSL editor** (`reel_briefs.edit_instructions`) |
+| #138 | `order_kind += long_form_edit`; **`edit_jobs`** queue; **`reel-renders`** bucket; worker `edit_video` capability; worker API `/api/worker/edit/{claim,context,upload-url,complete}`; ops **"Send to edit engine"** button |
+| #139 | **`worker-resolve/`** office-Mac daemon (cut planner + Resolve driver + API client) |
+
+Migrations applied to prod: `0046_reel_orders.sql`, `0047_edit_jobs.sql`.
+
+## 3. Architecture / data flow
+```
+Client (portal, soon Website) ── create order + brief + footage ──▶ orders / reel_briefs / order_footage
+Team (ops /dashboard) ── save edit plan ──▶ reel_briefs.edit_instructions
+Team ── "Send to edit engine" ──▶ POST /api/reels/enqueue-edit ──▶ edit_jobs (queued)
+Office Mac daemon ── claim/context/upload-url/complete ──▶ renders to reel-renders ──▶ order = 'ready' (review gate)
+```
+- Orders are keyed to a `listing`. Reel/long-form orders with no property attach to a
+  per-client **"Brand Content"** listing (auto-created in `create_reel_order`).
+- Edit jobs are a **dedicated queue** (`edit_jobs`), separate from the photo
+  `worker_tasks` queue (which binds to production-OS `jobs`).
+
+### DB objects added
+- Enums: `order_kind('shoot','reel_edit','long_form_edit')`, `reel_type('monologue','qa','testimonial','montage')`
+- Tables: `reel_briefs` (1:1 order; brief + `edit_instructions` jsonb), `order_footage`, `edit_jobs`
+- Buckets: `client-footage` (client-writable, 2 GB/file, video MIME, path `=<client_id>/<order_id>/<file>`), `reel-renders` (private; worker uploads via signed URL; client reads own via order)
+- RPCs (authenticated, ownership re-derived): `create_reel_order(p_brief jsonb)`, `add_reel_footage(...)`, `submit_reel_order(p_order_id)`
+- Helpers reused: `current_client_id()`, `is_team_member()`, `set_updated_at()`
+
+### Worker API contract (Bearer `obw_` key, capability `edit_video`)
+- `POST /api/worker/edit/claim {max}` → `[{id, order_id, edit_plan}]`
+- `GET /api/worker/edit/context?edit_job_id=` → `{brief, edit_plan, footage:[{filename,role,url(6h)}]}`
+- `POST /api/worker/edit/upload-url {edit_job_id, filename}` → signed upload URL into `reel-renders` (path fixed server-side)
+- `POST /api/worker/edit/complete {edit_job_id, status, result_path,...}` → on done: order → `ready`; on fail: re-queue ≤3 attempts
+
+## 4. Office-Mac daemon (`worker-resolve/`)
+Runs on the Mac (Resolve is desktop-only). See `worker-resolve/README.md`.
+- `cutplan.py` — PURE, unit-tested silence-gap planner (`test_cutplan.py`, 5 tests).
+- `resolve_runner.py` — Resolve driver; **the only thing CI can't test — validate against the installed Resolve version on first render.**
+- `daemon.py` — `python3 daemon.py` (loop), `--once`, `--plan <edit_job_id>`, `DRY_RUN=1`.
+- Setup: enable Resolve external scripting; `pip install -r requirements.txt`; register a worker with the `edit_video` capability (curl in README) to get the `obw_` key; set `OPS_BASE_URL` + `OCEANO_WORKER_KEY`.
+
+## 5. Next tasks (in priority order)
+1. **[Website repo] Client UI** — port/build the client intake + login in `oceanoblue/Website`
+   against the same Supabase backend (anon key + URL; magic-link like `/portal`). It calls the
+   SAME RPCs and `client-footage` upload flow. Reference implementation lives in this repo:
+   `components/portal/ReelIntakeWizard.tsx`, `app/portal/reels/*`, `lib/storage/tus-upload.ts`,
+   `lib/reels/types.ts`. Decide: does the Website become the primary client portal (and the
+   ops-app `/portal` redirect to it), or stay marketing-only with a login that deep-links here?
+2. **[ops repo] Long-form intake** — generalize the wizard to also create `long_form_edit`
+   orders (a Reel/Long-form toggle). Backend already supports it; only UI + `create_reel_order`
+   pathway need the kind. (Small, fully unblocked — can be done anytime.)
+3. **[Mac] Stand up + validate the daemon** — first real render; tune crops/transcription;
+   add a `launchd` plist so it survives reboot.
+4. **Optional**: route podcast orders through the same intake/queue (additive; Make stays runtime).
+5. **Later**: resume real-estate photo engine tuning (`worker-edit/server.py`) — paused.
+
+## 6. Standing rules / how we work
+- Branch → PR → CI (`verify` = typecheck) → **squash-merge** → sync `main`. One PR per change.
+- Owner granted: **open PR, merge, deploy, migrate** autonomously.
+- Migrations: **dry-run in a rolled-back txn first**, then `apply_migration`; run the security
+  advisor after DDL.
+- Secrets: never commit keys/tokens/Make blueprints/webhook URLs; owner sets Vercel/Fly env;
+  don't paste secrets in chat. Production actions on Supabase/Make/etc. need owner approval
+  (the standing grant covers the build/deploy/migrate cycle).
+- Never put the model identifier in commits/PRs/code.
+- Cost decision (for when models get wired — NOT yet): go direct — OpenAI (GPT Image; `gpt-image-1`
+  retires 2026-10-23 → use 1.5), Google Gemini (Nano Banana), BytePlus ModelArk (Seedance);
+  keep Higgsfield only for unique motion effects; Artlist needs Enterprise API.
+
+## 7. Reference
+- DaVinci Resolve engineering handoff (cut algorithm §5–6, MCP cookbook):
+  uploaded as `RESOLVE_MCP_HANDOFF.md` in the original chat (not in repo) — the daemon's
+  `cutplan.py` already implements §5–6.
+- This repo's CI check is named `verify` (typecheck only); tests via `vitest run` (121 passing).
