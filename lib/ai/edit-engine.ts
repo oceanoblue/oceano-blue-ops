@@ -22,7 +22,7 @@ export function editEngineConfigured(): boolean {
  */
 export async function runEditEngine(
   inputs: EditInput[],
-  opts: { mode: 'fuse' | 'grade'; targetLongEdge?: number; quality?: number }
+  opts: { mode: 'fuse' | 'grade'; targetLongEdge?: number; quality?: number; style?: string }
 ): Promise<Buffer> {
   const url = process.env.EDIT_ENGINE_URL;
   const secret = process.env.EDIT_WORKER_SECRET;
@@ -35,6 +35,7 @@ export async function runEditEngine(
   form.append('mode', opts.mode);
   form.append('target_long_edge', String(opts.targetLongEdge ?? 4000));
   form.append('quality', String(opts.quality ?? 90));
+  form.append('style', opts.style ?? 'default');
 
   const r = await fetch(`${url.replace(/\/$/, '')}/edit`, {
     method: 'POST',

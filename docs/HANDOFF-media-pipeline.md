@@ -145,3 +145,44 @@ RAW *original* reaches the engine. Ingest currently uploads the camera's embedde
 (~6MB) for RAW, not the RAW file. Flipping ingest to store RAW originals (25–50MB each) enables
 true RAW quality but means much slower uploads / more storage — confirm with owner before changing
 `PhotoManager.tsx` RAW upload path.
+
+## 10. Photo production profiles — roadmap (June 2026, PR #144 starts it)
+Owner's vision (refined from a GPT proposal): the market a shoot is for, chosen
+at order creation, drives the whole downstream finish. Implemented as **ONE
+parameterized pipeline + per-market profiles**, NOT four forked pipelines (the
+proposal's "shared components" point is right; its "independent editing logic"
+framing is not — don't fork).
+
+**Profiles** (`lib/photos/profiles.ts`, `orders.project_type` enum, mig 0049):
+- `mls_real_estate` — fast/bright/clean/consistent → grade `default` (current look)
+- `luxury_real_estate` — elevated marketing → grade `default` for now (premium
+  flash-blend is Phase D)
+- `architectural` — accurate, sober, documentary, **not HDR-pushed** → grade `sober`
+- `interior_design` — faithful colour/texture, editorial → grade `sober`
+
+**Phase A — DONE (PR #144):** `project_type` column + profiles config + the
+**`sober` grade** in `worker-edit` (neutral tone: no airy gamma lift, real tonal
+range, restrained saturation, **no sky-softening push**; vs the airy luxury
+`default`). Threaded end-to-end: runner reads `orders.project_type` → profile →
+`AiRequest.gradeStyle` → oceano-enhance grade → edit-engine `style` form field →
+`grade(img, style)`. Ops set it via the **Photo profile** dropdown on the order
+page. Needs the worker-edit Fly redeploy (same one as RAW) to take effect.
+
+**Phase B — per-profile QC rulesets.** Extend existing QC (`lib/ai/qc/wall-check`,
+`photo_qc_reports`) with profile-scoped checks (MLS: verticals/blown windows/HDR
+halos; architectural: paint+wood colour accuracy, believable window views).
+
+**Phase C — per-profile capture checklists.** Data-driven guidance shown at
+capture/intake (bracket counts, flash/ambient frames, detail shots).
+
+**Phase D — assisted/auto premium editing (BIG).** Owner's north star is to
+**auto-produce** luxury/architectural finals (flash/ambient blend, window pull,
+reflection/object cleanup, dodge & burn). Honest status: magazine-grade AUTO for
+these is a long arc — today's deterministic + gpt-image tooling can't hit it in
+one shot. Path: (1) profile enables the generative ops it needs; (2) build a
+multi-pass blend (ambient base + flash blend + masked window pull) in worker-edit;
+(3) per-profile AI QC assistant gates the result. Sequence after A–C land and
+real architectural/interior samples exist to tune against.
+
+**Per-profile generative ops & delivery** are declared in the profile shape but
+not yet enforced — wire enable/disable + `deliveryDefault` when Phase B lands.

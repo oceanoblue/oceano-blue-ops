@@ -240,17 +240,27 @@ def soften_sky(img: np.ndarray, sat_scale: float = 0.88, lift: float = 12.0) -> 
     return cv2.cvtColor(np.clip(hsv, 0, 255).astype(np.uint8), cv2.COLOR_HSV2BGR)
 
 
-def grade(img: np.ndarray) -> np.ndarray:
+def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
     img = correct_lens(img)  # geometric correction first, before tone/colour
     img = auto_white_balance(img)
     img = denoise(img)
     # (local_contrast/CLAHE intentionally omitted — it was adding the gritty
-    #  micro-contrast that read as too contrasty; the soft de-contrast curve gives
-    #  the airy luxury look instead.)
-    img = tone_curve(img)
-    img = saturate(img)
-    img = soften_sky(img)
-    img = sharpen(img)
+    #  micro-contrast that read as too contrasty.)
+    if style == "sober":
+        # Architectural / interior design: technically accurate, sober,
+        # documentary. No airy midtone LIFT (gamma 1.0) and a real, neutral tonal
+        # range (contrast 1.0, slightly deeper black point) instead of the airy
+        # de-contrast. Colour stays faithful (only a hair restrained) and the
+        # stylised blue-sky push is skipped — architectural wants the real sky.
+        img = tone_curve(img, black_point=2.0, contrast=1.0, airy_gamma=1.0)
+        img = saturate(img, 0.97)
+        img = sharpen(img)
+    else:
+        # Real-estate (MLS / luxury): bright, airy, low-contrast luxury finish.
+        img = tone_curve(img)
+        img = saturate(img)
+        img = soften_sky(img)
+        img = sharpen(img)
     return img
 
 
@@ -276,6 +286,7 @@ async def edit(
     mode: str = Form("grade"),
     target_long_edge: int = Form(0),  # 0 = keep native resolution (no downscale)
     quality: int = Form(95),
+    style: str = Form("default"),  # 'default' (real-estate) | 'sober' (architectural)
     x_edit_secret: Optional[str] = Header(None),
 ):
     if not SECRET or x_edit_secret != SECRET:
@@ -288,7 +299,7 @@ async def edit(
     if mode == "fuse":
         out = fuse(images)
     elif mode == "grade":
-        out = grade(images[0])
+        out = grade(images[0], style=style)
     else:
         raise HTTPException(status_code=400, detail="bad_mode")
 
