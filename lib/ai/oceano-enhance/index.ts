@@ -97,6 +97,7 @@ export const oceanoEnhance: AiProvider = {
               mode: 'grade',
               targetLongEdge: opts.targetLongEdge ?? 0, // 0 = keep native (no downscale)
               quality: opts.jpegQuality ?? 95,
+              style: req.gradeStyle, // 'sober' for architectural/interior profiles
             });
             return {
               outputs: [{ bytes, mimeType: 'image/jpeg', filename: `enhance_single-${Date.now()}.jpg` }],

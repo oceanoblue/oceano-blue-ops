@@ -5,6 +5,7 @@ import { getProvider } from './index';
 import { analyzePhoto, planEdits } from './vision-analyze';
 import { buildAutoEnhanceJobRow } from './auto-enhance';
 import { captureError } from '@/lib/observability/report';
+import { profileFor } from '@/lib/photos/profiles';
 import type { AiJob, Photo } from '@/lib/supabase/database.types';
 import type { SourceImage } from './types';
 
@@ -146,13 +147,21 @@ export async function runAiJob(jobId: string): Promise<{
       })
     );
 
-    // 3. Run provider
+    // 3. Run provider. The order's photo profile selects the finishing-grade
+    // style (e.g. 'sober' for architectural/interior — accurate, not HDR-pushed).
+    const { data: order } = await supabase
+      .from('orders')
+      .select('project_type')
+      .eq('id', job.order_id)
+      .maybeSingle();
+    const profile = profileFor((order as any)?.project_type);
     const provider = getProvider((job.provider as any) ?? 'auto', job.job_type);
     const resp = await provider.process({
       jobType: job.job_type,
       inputs: sources,
       prompt: job.prompt ?? undefined,
       params: (job.params as any) ?? undefined,
+      gradeStyle: profile.gradeStyle,
     });
 
     // 4. Upload outputs and create photo rows

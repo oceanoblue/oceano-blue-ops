@@ -28,6 +28,11 @@ export interface AiRequest {
   prompt?: string;
   /** Provider-specific knobs (size, fidelity, count, etc). */
   params?: Record<string, unknown>;
+  /**
+   * Finishing-grade style from the order's photo profile ('default' | 'sober').
+   * The deterministic engine uses it to pick the grade; other providers ignore it.
+   */
+  gradeStyle?: string;
 }
 
 export interface AiOutput {
