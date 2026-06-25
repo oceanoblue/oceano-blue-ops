@@ -8,23 +8,24 @@ import { captureError } from '@/lib/observability/report';
 import type { AiJob, Photo } from '@/lib/supabase/database.types';
 import type { SourceImage } from './types';
 
-// Delivery target long edge. Enhance outputs are upscaled to this size with a
-// high-quality kernel so finals are ~4K without re-rendering any detail.
-// Override with DELIVERY_LONG_EDGE (e.g. 3072 for 6MP, 0 to disable upscaling).
+// Delivery target long edge. By default we DO NOT upscale — enhance outputs are
+// delivered at their real rendered resolution. Upscaling a smaller render up to a
+// fixed "4K" only interpolates (manufactures) detail, which reads as soft/wrong;
+// that downscale-then-upscale was a real quality regression. Set
+// DELIVERY_LONG_EDGE to a positive value only if you explicitly want enlargement.
 const DELIVERY_LONG_EDGE = (() => {
-  const v = parseInt(process.env.DELIVERY_LONG_EDGE || '3840', 10);
-  return Number.isFinite(v) ? v : 3840;
+  const v = parseInt(process.env.DELIVERY_LONG_EDGE || '0', 10);
+  return Number.isFinite(v) ? v : 0;
 })();
 
-// Long edge the inputs are fed to the pipeline / AI providers at. This MUST be
-// at least the delivery size — feeding a small image makes the deterministic
-// merge low-res AND, crucially, gives a generative model too little detail to
-// "see" the scene, so it invents appliances/walls/rooms. Override with
-// AI_INPUT_LONG_EDGE. Default 4096 keeps full detail while staying within
-// provider payload limits (~2-3 MB at q90).
+// Long edge the inputs are fed to the pipeline / AI providers at. Feeding a small
+// image makes the deterministic merge low-res AND gives a generative model too
+// little detail to "see" the scene (it then invents appliances/walls/rooms).
+// Default 6144 keeps near-native detail for typical full-frame bodies; override
+// with AI_INPUT_LONG_EDGE (lower it if a generative provider rejects the payload).
 const AI_INPUT_LONG_EDGE = (() => {
-  const v = parseInt(process.env.AI_INPUT_LONG_EDGE || '4096', 10);
-  return Number.isFinite(v) && v > 0 ? Math.max(v, DELIVERY_LONG_EDGE) : 4096;
+  const v = parseInt(process.env.AI_INPUT_LONG_EDGE || '6144', 10);
+  return Number.isFinite(v) && v > 0 ? Math.max(v, DELIVERY_LONG_EDGE) : 6144;
 })();
 
 const GENERATED_PREFIX =
@@ -138,11 +139,10 @@ export async function runAiJob(jobId: string): Promise<{
     // 4. Upload outputs and create photo rows
     const outputPhotoIds: string[] = [];
     for (const out of resp.outputs) {
-      // Faithful 4K: deterministically upscale enhance outputs to the delivery
-      // long edge (default 3840) with a high-quality kernel. This is pure
-      // interpolation — it NEVER re-renders content, so house numbers, signage,
-      // and fine text stay exactly as the model preserved them. HDR-merge
-      // passthroughs are intermediates (re-enhanced later), so they're left as-is.
+      // Optional enlargement: only if DELIVERY_LONG_EDGE is set ABOVE the output's
+      // real size (default 0 = never). We do not upscale by default — interpolating
+      // a smaller render up to a fixed size manufactures detail and reads as soft.
+      // HDR-merge passthroughs are intermediates (re-enhanced later), left as-is.
       let bytes = out.bytes;
       let mimeType = out.mimeType;
       // Name the output after the ORIGINAL frame, not the job type. The merged
