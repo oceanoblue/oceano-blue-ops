@@ -175,14 +175,24 @@ halos; architectural: paint+wood colour accuracy, believable window views).
 **Phase C — per-profile capture checklists.** Data-driven guidance shown at
 capture/intake (bracket counts, flash/ambient frames, detail shots).
 
-**Phase D — assisted/auto premium editing (BIG).** Owner's north star is to
-**auto-produce** luxury/architectural finals (flash/ambient blend, window pull,
-reflection/object cleanup, dodge & burn). Honest status: magazine-grade AUTO for
-these is a long arc — today's deterministic + gpt-image tooling can't hit it in
-one shot. Path: (1) profile enables the generative ops it needs; (2) build a
-multi-pass blend (ambient base + flash blend + masked window pull) in worker-edit;
-(3) per-profile AI QC assistant gates the result. Sequence after A–C land and
-real architectural/interior samples exist to tune against.
+**DELIVERY MODEL (decided June 2026):** tier by market.
+- **MLS → full auto.** No human in the loop; auto wins on speed *and* quality.
+- **Luxury / architectural / interior → system-assisted human finish.** The system
+  does all the heavy, repeatable work (RAW decode, fusion, lens/perspective, sober
+  base grade, generative cleanup *suggestions*); a skilled editor does the last
+  mile (final flash/ambient blend, dodge & burn, material-true colour) behind a QC
+  gate. Auto-produce is the *destination*, not the near-term route — assisted-finish
+  delivers higher quality now AND generates the corrections/data that justify
+  automating each stage over time. Don't ship premium tiers as unsupervised auto.
+
+**Phase D — assisted premium finish (BIG), then progressive automation.** Build the
+human-in-the-loop finish for the premium tiers first; automate stages only as they
+prove out. Path: (1) profile enables the generative ops it needs; (2) a review/finish
+gate for premium orders (route to an editor with the prepped base + layers, like the
+Resolve video daemon pattern) before delivery; (3) build the multi-pass blend
+(ambient base + flash blend + masked window pull) in worker-edit as an *assist*;
+(4) per-profile AI QC assistant gates the result; (5) shift proven stages to auto.
+Sequence after A–C land and real architectural/interior samples exist to tune against.
 
 **Per-profile generative ops & delivery** are declared in the profile shape but
 not yet enforced — wire enable/disable + `deliveryDefault` when Phase B lands.
