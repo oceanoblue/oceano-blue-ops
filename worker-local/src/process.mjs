@@ -112,9 +112,12 @@ async function readNormalized(file, size) {
   const source = await sharpInputForFile(resolved);
   let img = sharp(source.input, { failOn: 'none' })
     .rotate()
+    // Keep native resolution. The only resize is matching sibling bracket frames
+    // to the base frame's dimensions; otherwise we cap only at a high safety bound
+    // (8192) so full-frame/8K captures aren't shrunk before merge.
     .resize(size ? { width: size.width, height: size.height, fit: 'fill' } : {
-      width: 4096,
-      height: 4096,
+      width: 8192,
+      height: 8192,
       fit: 'inside',
       withoutEnlargement: true,
       kernel: 'lanczos3',
@@ -208,8 +211,9 @@ async function processItem(item, jobId, profile) {
     sourceInputKinds.push(source.kind);
     baseBuffer = await sharp(source.input, { failOn: 'none' })
       .rotate()
-      .resize({ width: 4096, height: 4096, fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
-      .jpeg({ quality: 94, mozjpeg: true })
+      // Native resolution; 8192 is only a high safety bound (don't shrink 8K shots).
+      .resize({ width: 8192, height: 8192, fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
+      .jpeg({ quality: 95, mozjpeg: true })
       .toBuffer();
   }
 

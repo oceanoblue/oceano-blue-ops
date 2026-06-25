@@ -66,7 +66,7 @@ export interface EnhanceOptions {
 }
 
 const DEFAULTS: Required<EnhanceOptions> = {
-  targetLongEdge: 3000,
+  targetLongEdge: 0, // 0 = keep native resolution (no downscale); MLS sizing happens at delivery
   jpegQuality: 92,
   exposure: 0,
   contrast: 0,
@@ -135,6 +135,7 @@ function normalizeOptions(opts: EnhanceOptions): Required<EnhanceOptions> {
 async function resize(img: Sharp, opts: Required<EnhanceOptions>): Promise<Sharp> {
   const meta = await img.metadata();
   if (!meta.width || !meta.height) return img;
+  if (opts.targetLongEdge <= 0) return img; // 0 = keep native, never downscale
   const longEdge = Math.max(meta.width, meta.height);
   if (longEdge <= opts.targetLongEdge) return img;
   const ratio = opts.targetLongEdge / longEdge;

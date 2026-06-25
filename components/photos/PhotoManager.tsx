@@ -119,7 +119,9 @@ export function PhotoManager({
   const [uploading, setUploading] = useState(false);
   // Compress browser-decodable images to web quality before upload (much faster;
   // RAW/TIFF are untouched). The pipeline already works from JPEG.
-  const [compressUploads, setCompressUploads] = useState(true);
+  // Default OFF: upload full-size originals so the merge/enhance runs on full
+  // resolution. Operators can opt back into compression for a faster upload.
+  const [compressUploads, setCompressUploads] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string | null>>({});
   const [viewer, setViewer] = useState<{ list: 'raw' | 'processed'; index: number } | null>(null);
@@ -816,9 +818,10 @@ export function PhotoManager({
           className="h-3.5 w-3.5 rounded accent-ocean-600"
         />
         <span>
-          Compress to web quality before upload — much faster.{' '}
+          Compress before upload — faster, slightly lower quality.{' '}
           <span className="text-slate-400">
-            Shrinks JPEG/PNG/WebP (≤4096px); RAW &amp; TIFF upload untouched.
+            Off by default (full-size). When on, shrinks JPEG/PNG/WebP to ≤6144px;
+            RAW &amp; TIFF upload untouched.
           </span>
         </span>
       </label>

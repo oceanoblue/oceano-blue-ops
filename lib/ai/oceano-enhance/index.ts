@@ -95,8 +95,8 @@ export const oceanoEnhance: AiProvider = {
           try {
             const bytes = await runEditEngine([{ bytes: buf, filename: src.filename }], {
               mode: 'grade',
-              targetLongEdge: opts.targetLongEdge ?? 4000,
-              quality: opts.jpegQuality ?? 90,
+              targetLongEdge: opts.targetLongEdge ?? 0, // 0 = keep native (no downscale)
+              quality: opts.jpegQuality ?? 95,
             });
             return {
               outputs: [{ bytes, mimeType: 'image/jpeg', filename: `enhance_single-${Date.now()}.jpg` }],
@@ -166,7 +166,7 @@ export const oceanoEnhance: AiProvider = {
             );
             const bytes = await runEditEngine(
               ordered.map((b) => ({ bytes: b.bytes, filename: b.filename })),
-              { mode: 'fuse', targetLongEdge: 4096, quality: 95 }
+              { mode: 'fuse', targetLongEdge: 0, quality: 95 } // 0 = native; merge base stays full-res
             );
             return {
               outputs: [{ bytes, mimeType: 'image/jpeg', filename: `hdr_merge-${Date.now()}.jpg` }],

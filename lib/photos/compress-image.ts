@@ -19,8 +19,11 @@ export interface CompressOptions {
 }
 
 export async function compressImageFile(file: File, opts: CompressOptions = {}): Promise<File> {
-  const maxEdge = opts.maxEdge ?? 4096;
-  const quality = opts.quality ?? 0.88;
+  // When compression IS opted into (it's off by default now), keep near-native
+  // detail: 6144px long edge at q0.95. The old 4096/q0.88 default was discarding
+  // most of a full-frame capture's resolution at ingest.
+  const maxEdge = opts.maxEdge ?? 6144;
+  const quality = opts.quality ?? 0.95;
   if (!COMPRESSIBLE.has(file.type)) return file;
   if (typeof createImageBitmap === 'undefined' || typeof document === 'undefined') return file;
 
