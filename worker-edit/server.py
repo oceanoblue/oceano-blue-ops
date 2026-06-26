@@ -259,17 +259,18 @@ def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
     # (local_contrast/CLAHE intentionally omitted — it was adding the gritty
     #  micro-contrast that read as too contrasty.)
     if style == "sober":
-        # Architectural / interior design: technically accurate, sober,
-        # documentary. No airy midtone LIFT (gamma 1.0) and a real, neutral tonal
-        # range (contrast 1.0, slightly deeper black point) instead of the airy
-        # de-contrast. Colour stays faithful (only a hair restrained) and the
-        # stylised blue-sky push is skipped — architectural wants the real sky.
-        # The highlight roll-off holds window/bright detail (calibrated against the
-        # owner's Lowcountry reference set, 2026-06-25).
+        # Architectural / interior design: BRIGHT, airy, and accurate — the
+        # reference look is luminous, not dark/documentary. "Not HDR-pushed" means
+        # no gritty local-contrast/halos, NOT darker. So: a gentle midtone+shadow
+        # lift (gamma 0.90) opens the room, a light black point (1.0) keeps shadows
+        # from muddying, a touch of de-contrast (0.94) gives the soft editorial
+        # feel, and the highlight roll-off holds window/exterior detail. Colour
+        # stays faithful (no sky stylisation). Calibrated against the owner's
+        # Lowcountry reference set (v2, 2026-06-26).
         img = tone_curve(
-            img, black_point=2.0, contrast=1.0, airy_gamma=1.0, highlight_rolloff=0.35
+            img, black_point=1.0, contrast=0.94, airy_gamma=0.90, highlight_rolloff=0.35
         )
-        img = saturate(img, 0.97)
+        img = saturate(img, 0.98)
         img = sharpen(img)
     else:
         # Real-estate (MLS / luxury): bright, airy, low-contrast luxury finish.
