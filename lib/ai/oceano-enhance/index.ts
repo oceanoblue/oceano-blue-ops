@@ -23,6 +23,17 @@ import { editEngineConfigured, runEditEngine } from '../edit-engine';
  * can fake. This way "Oceano Enhance" is a single selectable option in the
  * UI that does the right thing for every job type.
  */
+// Max long edge for exposure FUSION. Bounded (not native) because Mertens fusion
+// holds float Laplacian/Gaussian pyramids of every bracket simultaneously — native
+// full-RAW multi-frame fusion OOMs the worker. Default 4096 is what the 2 GB Fly
+// VM is sized for (3–7 frames). To go higher (e.g. 6144 ≈ 25MP, near-native),
+// raise EDIT_FUSE_MAX_EDGE *and* the Fly VM's memory (`fly scale memory 8192`).
+// Single-frame grade is unaffected — it stays native.
+const FUSE_MAX_EDGE = (() => {
+  const v = parseInt(process.env.EDIT_FUSE_MAX_EDGE || '4096', 10);
+  return Number.isFinite(v) && v >= 0 ? v : 4096;
+})();
+
 async function bufFromSource(src: SourceImage): Promise<Buffer> {
   if (src.bytes) return Buffer.isBuffer(src.bytes) ? src.bytes : Buffer.from(src.bytes);
   if (src.url) {
@@ -167,7 +178,11 @@ export const oceanoEnhance: AiProvider = {
             );
             const bytes = await runEditEngine(
               ordered.map((b) => ({ bytes: b.bytes, filename: b.filename })),
-              { mode: 'fuse', targetLongEdge: 0, quality: 95 } // 0 = native; merge base stays full-res
+              // Fuse at a bounded edge, NOT native: Mertens holds float pyramids of
+              // EVERY bracket at once, so native multi-frame fusion of full RAW
+              // (30–60MP × 3–7 frames) OOMs the worker. Bounded by EDIT_FUSE_MAX_EDGE
+              // (default 4096, sized for the 2 GB VM). Single-frame grade stays native.
+              { mode: 'fuse', targetLongEdge: FUSE_MAX_EDGE, quality: 95 }
             );
             return {
               outputs: [{ bytes, mimeType: 'image/jpeg', filename: `hdr_merge-${Date.now()}.jpg` }],
@@ -176,8 +191,19 @@ export const oceanoEnhance: AiProvider = {
               rawPromptUsed: '(deterministic edit engine: Mertens fusion)',
             };
           } catch (e) {
-            // Engine unreachable/erroring → fall back to legacy fusion instead
-            // of failing the merge. Model tag below reveals the fallback ran.
+            // RAW can ONLY be merged by the engine — sharp can't decode it, so
+            // falling back would just throw a cryptic "unsupported image format"
+            // that masks the real cause. Surface the engine error instead.
+            const anyRaw = req.inputs.some(
+              (s) => s.mimeType === 'image/x-raw' || /\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(s.filename || '')
+            );
+            if (anyRaw) {
+              throw new Error(
+                `RAW bracket fusion requires the edit engine, which failed: ${(e as Error)?.message ?? e}`
+              );
+            }
+            // Non-RAW: engine unreachable/erroring → fall back to legacy fusion
+            // instead of failing the merge. Model tag below reveals the fallback ran.
             console.error('[oceano-enhance] edit engine fuse failed, falling back:', e);
           }
         }
