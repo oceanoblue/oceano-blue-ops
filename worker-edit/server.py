@@ -145,16 +145,48 @@ def auto_white_balance(img: np.ndarray) -> np.ndarray:
         gm = float(g[mask].mean())
         bm = float(b[mask].mean())
 
+        # Anchor ALL THREE channels to the neutral patch's own grey (the mean of
+        # the three). Correcting toward that target — not toward green — fixes the
+        # green/magenta TINT as well as warm/cool. (The old code scaled only R and
+        # B toward G, so a genuine green cast was uncorrectable.)
+        target = (rm + gm + bm) / 3.0
+
         def gain(c: float) -> float:
             if c <= 0:
                 return 1.0
-            return float(np.clip(1.0 + (gm / c - 1.0) * blend, 0.80, 1.25))
+            return float(np.clip(1.0 + (target / c - 1.0) * blend, 0.80, 1.25))
 
-        rg, bg = gain(rm), gain(bm)
+        rg, gg, bg = gain(rm), gain(gm), gain(bm)
         out = img.astype(np.float32)
         out[..., 2] = np.clip(out[..., 2] * rg, 0, 255)  # R
+        out[..., 1] = np.clip(out[..., 1] * gg, 0, 255)  # G (tint)
         out[..., 0] = np.clip(out[..., 0] * bg, 0, 255)  # B
         return out.astype(np.uint8)
+    except Exception:
+        return img
+
+
+def auto_exposure(img: np.ndarray, target: float = 0.50) -> np.ndarray:
+    # Normalise overall brightness to a target so a dark/bright merge lands at a
+    # consistent, properly-exposed level (the grade's black-point/gamma only SHAPE
+    # tone — they don't set the overall level). Exposes for the ROOM via the MEDIAN
+    # luminance (robust to bright-window outliers) and caps the gain; the tone
+    # curve's highlight roll-off then softens whatever the windows do. (A global
+    # multiply can't both lift a dark room AND fully hold a bright window — that's
+    # local window-pull, Phase D — so we prioritise a correctly-exposed interior.)
+    # Multiplicative, so colour ratios are preserved (no colour shift).
+    try:
+        small = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32)
+        b, g, r = small[..., 0], small[..., 1], small[..., 2]
+        lum = 0.114 * b + 0.587 * g + 0.299 * r
+        med = float(np.median(lum)) / 255.0
+        if med <= 0.001:
+            return img
+        # Cap lift at 1.8× (don't manufacture a scene out of near-black) and allow
+        # mild darkening for over-bright merges.
+        gain = float(np.clip(target / med, 0.6, 1.8))
+        out = img.astype(np.float32) * gain
+        return np.clip(out, 0, 255).astype(np.uint8)
     except Exception:
         return img
 
@@ -254,7 +286,11 @@ def soften_sky(img: np.ndarray, sat_scale: float = 0.88, lift: float = 12.0) -> 
 
 def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
     img = correct_lens(img)  # geometric correction first, before tone/colour
-    img = auto_white_balance(img)
+    img = auto_white_balance(img)  # neutral whites + tint correction
+    # Proper exposure: normalise overall brightness BEFORE tone shaping so a dark
+    # or bright merge lands at a consistent, well-exposed level. sober a touch
+    # lower so accurate scenes don't over-brighten; both stay bright + airy.
+    img = auto_exposure(img, target=0.50 if style == "sober" else 0.52)
     img = denoise(img)
     # (local_contrast/CLAHE intentionally omitted — it was adding the gritty
     #  micro-contrast that read as too contrasty.)
