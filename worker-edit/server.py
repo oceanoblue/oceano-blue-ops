@@ -310,12 +310,22 @@ async def edit(
     if not files:
         raise HTTPException(status_code=400, detail="no_files")
 
-    images = [_decode(await f.read()) for f in files]
-
     if mode == "fuse":
-        out = fuse(images)
+        # CRITICAL: bound resolution BEFORE fusing, not after. Mertens holds float
+        # Laplacian/Gaussian pyramids of EVERY bracket at once, so fusing at full
+        # native RAW (30–60MP × 3–7 frames) OOMs the worker (502). Decode + shrink
+        # one frame at a time so peak memory ≈ a single native decode + N bounded
+        # frames. target_long_edge<=0 still means native (only safe with lots of RAM).
+        imgs: List[np.ndarray] = []
+        for f in files:
+            im = _decode(await f.read())
+            imgs.append(resize_long_edge(im, target_long_edge))
+            del im
+        out = fuse(imgs)
+        del imgs
     elif mode == "grade":
-        out = grade(images[0], style=style)
+        # Single frame — safe at native; grade then bound (no-op when target<=0).
+        out = grade(_decode(await files[0].read()), style=style)
     else:
         raise HTTPException(status_code=400, detail="bad_mode")
 
