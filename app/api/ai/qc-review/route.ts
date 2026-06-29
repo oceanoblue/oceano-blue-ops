@@ -5,6 +5,8 @@ import { isDeliverable } from '@/lib/photos/deliverable';
 import { computeColorStats } from '@/lib/ai/qc/color-stats';
 import { analyzeConsistency, type PhotoStat } from '@/lib/ai/qc/consistency';
 import { wallCheck } from '@/lib/ai/qc/wall-check';
+import { rulesetFor, evaluateVerdict } from '@/lib/ai/qc/rulesets';
+import { profileFor } from '@/lib/photos/profiles';
 import { mapWithConcurrency } from '@/lib/utils/concurrent';
 
 /**
@@ -41,6 +43,16 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient() as any;
 
+  // Production profile selects the QC bar (thresholds + pass/fail), not the
+  // checks themselves. Falls back to MLS for legacy orders with no project_type.
+  const { data: orderRow } = await admin
+    .from('orders')
+    .select('project_type')
+    .eq('id', order_id)
+    .maybeSingle();
+  const profile = profileFor(orderRow?.project_type);
+  const ruleset = rulesetFor(orderRow?.project_type);
+
   // The set the client will receive: approved, finished, deliverable photos.
   const { data: all } = await admin
     .from('photos')
@@ -76,7 +88,7 @@ export async function POST(request: Request) {
     }
   });
 
-  const consistency = analyzeConsistency(stats);
+  const consistency = analyzeConsistency(stats, ruleset.deltas);
   const consistencyByPhoto = new Map(consistency.findings.map((f) => [f.photo_id, f]));
 
   // AI fidelity check vs each photo's original (best-effort; skipped w/o key).
@@ -133,16 +145,35 @@ export async function POST(request: Request) {
   const wallDrift = Array.from(aiByPhoto.values()).filter((a) => a.wall_drift).length;
   const wbIssues = Array.from(aiByPhoto.values()).filter((a) => !a.white_balance_ok).length;
 
+  // Profile-aware pass/fail: judge the measured set against this market's bar.
+  const verdict = evaluateVerdict({
+    ruleset,
+    report: consistency,
+    flaggedCount: consistency.findings.length,
+    total: pool.length,
+    aiRan,
+    wallDrift,
+  });
+
   const summary = {
     photo_count: pool.length,
     evaluated: consistency.evaluated,
     truncated,
+    project_type: profile.id,
+    profile: profile.label,
     consistency_score: consistency.score,
+    min_score: ruleset.minScore,
     median: consistency.median,
     consistency_flagged: consistency.findings.length,
     ai_ran: aiRan,
     wall_drift: wallDrift,
     wb_issues: wbIssues,
+    // Profile verdict — the headline result for the ops UI.
+    pass: verdict.pass,
+    cast_flags: verdict.castFlags,
+    verdict_reasons: verdict.reasons,
+    fidelity_unverified: verdict.fidelityUnverified,
+    // `clean` = no per-photo issues at all (kept for backward compatibility).
     clean: findings.length === 0,
   };
 

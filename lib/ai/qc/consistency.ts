@@ -33,10 +33,22 @@ export interface ConsistencyReport {
   evaluated: number;
 }
 
-const TH = {
-  b: 6, // warm/cool — the dominant WB axis
-  a: 5, // green/magenta
-  L: 12, // brightness outlier
+/** Per-photo flag thresholds (CIELAB units), measured vs the set median. */
+export interface ConsistencyThresholds {
+  /** warm/cool — the dominant WB axis (b*). */
+  b: number;
+  /** green/magenta (a*). */
+  a: number;
+  /** brightness outlier (L). */
+  L: number;
+}
+
+/** Default thresholds = the MLS look: only flag a difference a person would
+ *  notice across a gallery. Stricter profiles tighten these (see qc rulesets). */
+export const DEFAULT_CONSISTENCY_THRESHOLDS: ConsistencyThresholds = {
+  b: 6,
+  a: 5,
+  L: 12,
 };
 
 function median(xs: number[]): number {
@@ -46,7 +58,10 @@ function median(xs: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-export function analyzeConsistency(items: PhotoStat[]): ConsistencyReport {
+export function analyzeConsistency(
+  items: PhotoStat[],
+  thresholds: ConsistencyThresholds = DEFAULT_CONSISTENCY_THRESHOLDS
+): ConsistencyReport {
   const mA = median(items.map((i) => i.stats.a));
   const mB = median(items.map((i) => i.stats.b));
   const mL = median(items.map((i) => i.stats.L));
@@ -57,12 +72,12 @@ export function analyzeConsistency(items: PhotoStat[]): ConsistencyReport {
     const deltaB = it.stats.b - mB;
     const deltaL = it.stats.L - mL;
     const flags: ConsistencyFlagKind[] = [];
-    if (deltaB > TH.b) flags.push('warm');
-    else if (deltaB < -TH.b) flags.push('cool');
-    if (deltaA > TH.a) flags.push('magenta');
-    else if (deltaA < -TH.a) flags.push('green');
-    if (deltaL > TH.L) flags.push('bright');
-    else if (deltaL < -TH.L) flags.push('dark');
+    if (deltaB > thresholds.b) flags.push('warm');
+    else if (deltaB < -thresholds.b) flags.push('cool');
+    if (deltaA > thresholds.a) flags.push('magenta');
+    else if (deltaA < -thresholds.a) flags.push('green');
+    if (deltaL > thresholds.L) flags.push('bright');
+    else if (deltaL < -thresholds.L) flags.push('dark');
     if (flags.length) {
       findings.push({
         photo_id: it.photo_id,

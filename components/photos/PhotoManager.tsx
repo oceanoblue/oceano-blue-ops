@@ -2127,20 +2127,35 @@ function QcReportPanel({
   return (
     <div className="card p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-ocean-600" />
           <h3 className="text-sm font-semibold text-slate-900">Consistency check</h3>
+          {s.profile && (
+            <span className="pill bg-slate-100 text-slate-600" title="Production profile — sets the QC bar">
+              {s.profile}
+            </span>
+          )}
+          {typeof s.pass === 'boolean' && (
+            <span className={`pill ${s.pass ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+              {s.pass ? 'Meets profile bar' : 'Below profile bar'}
+            </span>
+          )}
           {score !== null && (
             <span
               className={`pill ${
-                score >= 85
+                typeof s.min_score === 'number'
+                  ? score >= s.min_score
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-rose-100 text-rose-700'
+                  : score >= 85
                   ? 'bg-emerald-100 text-emerald-700'
                   : score >= 70
                   ? 'bg-amber-100 text-amber-800'
                   : 'bg-rose-100 text-rose-700'
               }`}
+              title={typeof s.min_score === 'number' ? `Profile bar: ${s.min_score}/100` : undefined}
             >
-              {score}/100 consistent
+              {score}/100 consistent{typeof s.min_score === 'number' ? ` · need ${s.min_score}` : ''}
             </span>
           )}
         </div>
@@ -2186,7 +2201,27 @@ function QcReportPanel({
         {s.truncated ? ` · limited to the first ${s.photo_count}` : ''}.
       </p>
 
-      {clean ? (
+      {/* Set-level verdict reasons (profile bar): these can fire even when no
+          single photo is flagged — e.g. the whole set runs warm for an
+          architectural profile, or the score is under the bar. */}
+      {Array.isArray(s.verdict_reasons) && s.verdict_reasons.length > 0 && (
+        <ul className="space-y-1 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {s.verdict_reasons.map((r: string, i: number) => (
+            <li key={i} className="flex items-start gap-1.5">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{r}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {s.fidelity_unverified && (
+        <p className="text-xs text-amber-700">
+          This profile expects an AI material-fidelity check — set OPENAI_API_KEY to verify wall /
+          material colors weren&apos;t altered.
+        </p>
+      )}
+
+      {clean && s.pass !== false ? (
         <div className="flex items-center gap-2 text-sm text-emerald-700">
           <CheckCircle2 className="h-4 w-4" /> Looks clean — consistent white balance and no
           material-color drift detected.
