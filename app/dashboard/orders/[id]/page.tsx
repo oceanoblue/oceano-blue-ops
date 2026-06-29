@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { OrderStatusControl } from '@/components/orders/OrderStatusControl';
 import { AssignTeamControl } from '@/components/orders/AssignTeamControl';
 import { PhotoManager } from '@/components/photos/PhotoManager';
+import { ProjectTypeControl } from '@/components/orders/ProjectTypeControl';
 import { DeliveryControl } from '@/components/orders/DeliveryControl';
 import { RawCleanupControl } from '@/components/orders/RawCleanupControl';
 import { DeleteOrderControl } from '@/components/orders/DeleteOrderControl';
@@ -221,6 +222,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           ) : (
             <section className="card p-6">
               <h2 className="font-semibold mb-4">Photos</h2>
+              <ProjectTypeControl orderId={order.id} projectType={order.project_type} />
               <PhotoManager orderId={order.id} autoEnhanceOnUpload={autoEnhanceOnUpload} />
             </section>
           )}

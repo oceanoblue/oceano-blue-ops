@@ -5,26 +5,28 @@ import { getProvider } from './index';
 import { analyzePhoto, planEdits } from './vision-analyze';
 import { buildAutoEnhanceJobRow } from './auto-enhance';
 import { captureError } from '@/lib/observability/report';
+import { profileFor } from '@/lib/photos/profiles';
 import type { AiJob, Photo } from '@/lib/supabase/database.types';
 import type { SourceImage } from './types';
 
-// Delivery target long edge. Enhance outputs are upscaled to this size with a
-// high-quality kernel so finals are ~4K without re-rendering any detail.
-// Override with DELIVERY_LONG_EDGE (e.g. 3072 for 6MP, 0 to disable upscaling).
+// Delivery target long edge. By default we DO NOT upscale — enhance outputs are
+// delivered at their real rendered resolution. Upscaling a smaller render up to a
+// fixed "4K" only interpolates (manufactures) detail, which reads as soft/wrong;
+// that downscale-then-upscale was a real quality regression. Set
+// DELIVERY_LONG_EDGE to a positive value only if you explicitly want enlargement.
 const DELIVERY_LONG_EDGE = (() => {
-  const v = parseInt(process.env.DELIVERY_LONG_EDGE || '3840', 10);
-  return Number.isFinite(v) ? v : 3840;
+  const v = parseInt(process.env.DELIVERY_LONG_EDGE || '0', 10);
+  return Number.isFinite(v) ? v : 0;
 })();
 
-// Long edge the inputs are fed to the pipeline / AI providers at. This MUST be
-// at least the delivery size — feeding a small image makes the deterministic
-// merge low-res AND, crucially, gives a generative model too little detail to
-// "see" the scene, so it invents appliances/walls/rooms. Override with
-// AI_INPUT_LONG_EDGE. Default 4096 keeps full detail while staying within
-// provider payload limits (~2-3 MB at q90).
+// Long edge the inputs are fed to the pipeline / AI providers at. Feeding a small
+// image makes the deterministic merge low-res AND gives a generative model too
+// little detail to "see" the scene (it then invents appliances/walls/rooms).
+// Default 6144 keeps near-native detail for typical full-frame bodies; override
+// with AI_INPUT_LONG_EDGE (lower it if a generative provider rejects the payload).
 const AI_INPUT_LONG_EDGE = (() => {
-  const v = parseInt(process.env.AI_INPUT_LONG_EDGE || '4096', 10);
-  return Number.isFinite(v) && v > 0 ? Math.max(v, DELIVERY_LONG_EDGE) : 4096;
+  const v = parseInt(process.env.AI_INPUT_LONG_EDGE || '6144', 10);
+  return Number.isFinite(v) && v > 0 ? Math.max(v, DELIVERY_LONG_EDGE) : 6144;
 })();
 
 const GENERATED_PREFIX =
@@ -94,13 +96,32 @@ export async function runAiJob(jobId: string): Promise<{
       .in('id', job.input_photo_ids);
     if (!inputs?.length) throw new Error('No input photos found');
 
+    // The deterministic engine (oceano-enhance) can decode RAW via libraw;
+    // generative providers (gpt-image) cannot. So only pull the RAW original for
+    // the deterministic job types — generative jobs keep using the JPEG preview.
+    const deterministic = job.job_type === 'hdr_merge' || job.job_type === 'enhance_single';
+
     const sources: SourceImage[] = await Promise.all(
       inputs.map(async (p: Photo) => {
-        const { data, error } = await supabase.storage
-          .from(p.bucket)
-          .download(p.storage_path);
-        if (error || !data) throw new Error(`Download failed: ${p.storage_path}`);
+        const rawPath = (p as any).raw_storage_path as string | null | undefined;
+        const useRaw = deterministic && !!rawPath;
+        const dlPath = useRaw ? (rawPath as string) : p.storage_path;
+        const { data, error } = await supabase.storage.from(p.bucket).download(dlPath);
+        if (error || !data) throw new Error(`Download failed: ${dlPath}`);
         const raw = Buffer.from(await data.arrayBuffer());
+        // Camera RAW (.arw/.cr2/.nef/.dng/…): sharp can't decode it. Pass the
+        // original bytes straight through so the deterministic edit engine
+        // (libraw/rawpy in worker-edit) does a full RAW decode. This covers both
+        // a RAW uploaded directly AND a RAW original stored beside a preview.
+        const rawName = useRaw ? rawPath!.split('/').pop() || p.filename : p.filename;
+        if (useRaw || /\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(rawName || '')) {
+          return {
+            bytes: raw,
+            filename: rawName,
+            mimeType: 'image/x-raw',
+            bracketIndex: (p.exif as any)?.ExposureBiasValue,
+          };
+        }
         // Preprocess: normalize orientation + cap the long edge. Keep this at
         // full delivery resolution so the deterministic merge stays sharp and a
         // generative enhance gets enough detail to stay faithful (a downscaled
@@ -126,23 +147,30 @@ export async function runAiJob(jobId: string): Promise<{
       })
     );
 
-    // 3. Run provider
+    // 3. Run provider. The order's photo profile selects the finishing-grade
+    // style (e.g. 'sober' for architectural/interior — accurate, not HDR-pushed).
+    const { data: order } = await supabase
+      .from('orders')
+      .select('project_type')
+      .eq('id', job.order_id)
+      .maybeSingle();
+    const profile = profileFor((order as any)?.project_type);
     const provider = getProvider((job.provider as any) ?? 'auto', job.job_type);
     const resp = await provider.process({
       jobType: job.job_type,
       inputs: sources,
       prompt: job.prompt ?? undefined,
       params: (job.params as any) ?? undefined,
+      gradeStyle: profile.gradeStyle,
     });
 
     // 4. Upload outputs and create photo rows
     const outputPhotoIds: string[] = [];
     for (const out of resp.outputs) {
-      // Faithful 4K: deterministically upscale enhance outputs to the delivery
-      // long edge (default 3840) with a high-quality kernel. This is pure
-      // interpolation — it NEVER re-renders content, so house numbers, signage,
-      // and fine text stay exactly as the model preserved them. HDR-merge
-      // passthroughs are intermediates (re-enhanced later), so they're left as-is.
+      // Optional enlargement: only if DELIVERY_LONG_EDGE is set ABOVE the output's
+      // real size (default 0 = never). We do not upscale by default — interpolating
+      // a smaller render up to a fixed size manufactures detail and reads as soft.
+      // HDR-merge passthroughs are intermediates (re-enhanced later), left as-is.
       let bytes = out.bytes;
       let mimeType = out.mimeType;
       // Name the output after the ORIGINAL frame, not the job type. The merged

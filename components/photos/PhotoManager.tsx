@@ -119,7 +119,9 @@ export function PhotoManager({
   const [uploading, setUploading] = useState(false);
   // Compress browser-decodable images to web quality before upload (much faster;
   // RAW/TIFF are untouched). The pipeline already works from JPEG.
-  const [compressUploads, setCompressUploads] = useState(true);
+  // Default OFF: upload full-size originals so the merge/enhance runs on full
+  // resolution. Operators can opt back into compression for a faster upload.
+  const [compressUploads, setCompressUploads] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string | null>>({});
   const [viewer, setViewer] = useState<{ list: 'raw' | 'processed'; index: number } | null>(null);
@@ -473,6 +475,7 @@ export function PhotoManager({
         photo_id: string;
         filename: string;
         storage_path: string;
+        raw_storage_path?: string;
         mime_type: string;
         byte_size: number;
         width?: number;
@@ -500,10 +503,14 @@ export function PhotoManager({
         let file: File;
         let presetExif: Record<string, unknown> | null = null;
         let dims: { width: number; height: number } | null = null;
+        // When we upload a JPEG preview for display, also keep the RAW original
+        // for full-quality processing (libraw decode in the edit engine).
+        let rawOriginal: File | null = null;
         if (isRawFilename(original.name)) {
           const prev = await extractRawForUpload(original).catch(() => null);
           if (prev) {
             file = prev.file;
+            rawOriginal = original; // upload alongside the preview for the engine
             dims = { width: prev.width, height: prev.height };
             presetExif = {};
             if (typeof prev.exif.ExposureBiasValue === 'number') presetExif.ExposureBiasValue = prev.exif.ExposureBiasValue;
@@ -511,7 +518,7 @@ export function PhotoManager({
             if (prev.exif.Make) presetExif.Make = prev.exif.Make;
             if (prev.exif.Model) presetExif.Model = prev.exif.Model;
           } else {
-            file = original; // no usable preview → upload the raw original
+            file = original; // no usable preview → the raw original IS storage_path
           }
         } else {
           file = compressUploads ? await compressImageFile(original) : original;
@@ -536,6 +543,26 @@ export function PhotoManager({
           return;
         }
 
+        // Upload the RAW original alongside the preview (always resumable — it's
+        // large). The engine processes from this; display keeps using the preview.
+        let rawStoragePath: string | undefined;
+        if (rawOriginal) {
+          const safeRawName = rawOriginal.name.replace(/[^\w.\-]+/g, '_');
+          rawStoragePath = `${orderId}/${photoId}-raw-${safeRawName}`;
+          try {
+            await tusUpload({
+              file: rawOriginal,
+              bucket: 'raw-photos',
+              objectName: rawStoragePath,
+              contentType: rawOriginal.type || 'application/octet-stream',
+            });
+          } catch (err: any) {
+            // The preview is already up, so the photo still works for display +
+            // preview-based processing. Skip the RAW rather than fail the upload.
+            rawStoragePath = undefined;
+          }
+        }
+
         const entry: RegItem = {
           photo_id: photoId,
           filename: file.name,
@@ -543,6 +570,7 @@ export function PhotoManager({
           mime_type: contentType,
           byte_size: file.size,
         };
+        if (rawStoragePath) entry.raw_storage_path = rawStoragePath;
         if (dims) {
           entry.width = dims.width;
           entry.height = dims.height;
@@ -816,9 +844,10 @@ export function PhotoManager({
           className="h-3.5 w-3.5 rounded accent-ocean-600"
         />
         <span>
-          Compress to web quality before upload — much faster.{' '}
+          Compress before upload — faster, slightly lower quality.{' '}
           <span className="text-slate-400">
-            Shrinks JPEG/PNG/WebP (≤4096px); RAW &amp; TIFF upload untouched.
+            Off by default (full-size). When on, shrinks JPEG/PNG/WebP to ≤6144px;
+            RAW &amp; TIFF upload untouched.
           </span>
         </span>
       </label>
