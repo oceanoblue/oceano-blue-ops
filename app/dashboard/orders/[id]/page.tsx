@@ -9,6 +9,8 @@ import { OrderStatusControl } from '@/components/orders/OrderStatusControl';
 import { AssignTeamControl } from '@/components/orders/AssignTeamControl';
 import { PhotoManager } from '@/components/photos/PhotoManager';
 import { ProjectTypeControl } from '@/components/orders/ProjectTypeControl';
+import { CaptureChecklist } from '@/components/photos/CaptureChecklist';
+import { QcVerdictSummary } from '@/components/photos/QcVerdictSummary';
 import { DeliveryControl } from '@/components/orders/DeliveryControl';
 import { RawCleanupControl } from '@/components/orders/RawCleanupControl';
 import { DeleteOrderControl } from '@/components/orders/DeleteOrderControl';
@@ -127,6 +129,15 @@ export default async function OrderDetailPage({ params }: { params: { id: string
     .eq('kind', 'raw');
   const rawOriginalsCount = ((rawPhotos ?? []) as any[]).filter((p) => RAW_EXT.test(p.filename)).length;
 
+  // Latest delivery-QC verdict for an at-a-glance status (team-readable via RLS).
+  const { data: latestQc } = await supabase
+    .from('photo_qc_reports')
+    .select('summary, created_at')
+    .eq('order_id', params.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   // Org setting: auto-enhance bases on upload (default on).
   const { data: bizSettings } = await supabase
     .from('business_settings')
@@ -223,6 +234,8 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             <section className="card p-6">
               <h2 className="font-semibold mb-4">Photos</h2>
               <ProjectTypeControl orderId={order.id} projectType={order.project_type} />
+              <QcVerdictSummary summary={(latestQc as any)?.summary} createdAt={(latestQc as any)?.created_at} />
+              <CaptureChecklist orderId={order.id} projectType={order.project_type} />
               <PhotoManager orderId={order.id} autoEnhanceOnUpload={autoEnhanceOnUpload} />
             </section>
           )}
