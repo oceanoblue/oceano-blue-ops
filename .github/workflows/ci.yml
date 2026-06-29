@@ -48,3 +48,25 @@ jobs:
       - name: Dependency audit (informational)
         run: npm audit --audit-level=high
         continue-on-error: true
+
+  # Photo edit-engine grade-math invariants (pure NumPy/OpenCV). These guard the
+  # tuning loop (docs/HANDOFF-photo-quality.md) so each worker-edit change ships
+  # on a green math floor even though real renders can't run in CI.
+  edit-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install
+        working-directory: worker-edit
+        run: pip install -r requirements.txt pytest
+
+      - name: Grade-math tests
+        working-directory: worker-edit
+        run: pytest -q

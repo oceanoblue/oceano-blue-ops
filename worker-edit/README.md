@@ -17,7 +17,12 @@ masked, opt-in operations.
 Header `x-edit-secret` must match `EDIT_WORKER_SECRET`. Returns `image/jpeg`.
 
 - **fuse**: align (best-effort) → Mertens multi-scale exposure fusion → resize. No grade.
-- **grade**: auto white balance → light denoise → CLAHE local contrast → tone curve (true black point + gentle contrast) → gentle saturation → edge-aware sharpen → resize.
+- **grade** (`grade(img, style)`): lens correction → auto white balance (tint-aware) →
+  auto-exposure (median-based) → light denoise → tone curve (black point + gentle
+  de-contrast + airy gamma; `sober` adds a highlight roll-off) → gentle saturation →
+  (`default` only: sky soften) → edge-aware sharpen. `style` is `default`
+  (MLS / luxury) or `sober` (architectural / interior). See
+  `../docs/HANDOFF-photo-quality.md` for the live grade parameters and the tuning loop.
 
 ## Deploy (Fly.io)
 
@@ -47,4 +52,17 @@ curl -s -X POST http://localhost:8080/edit \
   -H "x-edit-secret: test" \
   -F mode=fuse -F files=@dark.jpg -F files=@mid.jpg -F files=@bright.jpg \
   -o fused.jpg
+```
+
+## Grade-math tests
+
+`test_server.py` locks in the mathematical invariants of the grade functions
+(curve monotonicity, white preservation, exposure target + clamps, tint-aware
+WB + sky exclusion, etc.). They're pure NumPy/OpenCV — no Fly, no renders — so
+they make the parameter-tuning loop regression-safe. They run in CI
+(`edit-engine` job) and locally:
+
+```sh
+pip install -r requirements.txt pytest
+pytest -q
 ```
