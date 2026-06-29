@@ -2235,6 +2235,8 @@ function QcReportPanel({
             if (f.ai?.wall_drift) issues.push('material/wall color changed');
             if (f.ai && f.ai.white_balance_ok === false) issues.push('off white balance');
             if (f.ai && f.ai.color_accuracy === 'poor') issues.push('poor color accuracy');
+            if (f.blown_highlights)
+              issues.push(`blown highlights (${Math.round((f.blown_highlights.fraction ?? 0) * 100)}%)`);
             return (
               <li key={f.photo_id} className="flex items-start gap-2 py-2 text-sm">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />

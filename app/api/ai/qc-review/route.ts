@@ -5,6 +5,7 @@ import { isDeliverable } from '@/lib/photos/deliverable';
 import { computeColorStats } from '@/lib/ai/qc/color-stats';
 import { analyzeConsistency, type PhotoStat } from '@/lib/ai/qc/consistency';
 import { wallCheck } from '@/lib/ai/qc/wall-check';
+import { computeClipping } from '@/lib/ai/qc/clipping';
 import { rulesetFor, evaluateVerdict } from '@/lib/ai/qc/rulesets';
 import { profileFor } from '@/lib/photos/profiles';
 import { mapWithConcurrency } from '@/lib/utils/concurrent';
@@ -72,9 +73,11 @@ export async function POST(request: Request) {
   const truncated = pool.length > MAX_PHOTOS;
   pool = pool.slice(0, MAX_PHOTOS);
 
-  // Download + color stats (bounded concurrency). Cache buffers for the AI pass.
+  // Download + color stats + highlight-clipping (bounded concurrency). Cache
+  // buffers for the AI pass; both metrics come from the one decode.
   const editedBuffers = new Map<string, Buffer>();
   const stats: PhotoStat[] = [];
+  const blownFractionByPhoto = new Map<string, number>();
   await mapWithConcurrency(pool, 4, async (p) => {
     try {
       const { data, error } = await admin.storage.from(p.bucket).download(p.storage_path);
@@ -83,6 +86,8 @@ export async function POST(request: Request) {
       editedBuffers.set(p.id, buf);
       const s = await computeColorStats(buf);
       if (s) stats.push({ photo_id: p.id, filename: p.filename, stats: s });
+      const cl = await computeClipping(buf);
+      if (cl) blownFractionByPhoto.set(p.id, cl.blownFraction);
     } catch {
       /* skip unreadable frames */
     }
@@ -90,6 +95,13 @@ export async function POST(request: Request) {
 
   const consistency = analyzeConsistency(stats, ruleset.deltas);
   const consistencyByPhoto = new Map(consistency.findings.map((f) => [f.photo_id, f]));
+
+  // Highlight-hold: which photos blow past the profile's tolerance (Phase D
+  // signal — flags the photos that want the assisted window-pull finish).
+  const maxBlown = ruleset.windowHold?.maxBlownFraction ?? Infinity;
+  const blownPhotos = new Set(
+    [...blownFractionByPhoto].filter(([, f]) => f > maxBlown).map(([id]) => id)
+  );
 
   // AI fidelity check vs each photo's original (best-effort; skipped w/o key).
   const parentIds = Array.from(new Set(pool.map((p) => p.parent_photo_id).filter(Boolean)));
@@ -127,8 +139,9 @@ export async function POST(request: Request) {
     .map((p) => {
       const c = consistencyByPhoto.get(p.id);
       const ai = aiByPhoto.get(p.id);
+      const blown = blownPhotos.has(p.id);
       const issue =
-        !!c || (ai && (ai.wall_drift || !ai.white_balance_ok || ai.color_accuracy === 'poor'));
+        !!c || blown || (ai && (ai.wall_drift || !ai.white_balance_ok || ai.color_accuracy === 'poor'));
       if (!issue) return null;
       return {
         photo_id: p.id,
@@ -138,6 +151,9 @@ export async function POST(request: Request) {
           ? { flags: c.flags, deltaA: c.deltaA, deltaB: c.deltaB, deltaL: c.deltaL }
           : null,
         ai: ai ?? null,
+        blown_highlights: blown
+          ? { fraction: Math.round((blownFractionByPhoto.get(p.id) ?? 0) * 1000) / 1000 }
+          : null,
       };
     })
     .filter(Boolean);
@@ -153,6 +169,7 @@ export async function POST(request: Request) {
     total: pool.length,
     aiRan,
     wallDrift,
+    blownCount: blownPhotos.size,
   });
 
   const summary = {
@@ -168,6 +185,7 @@ export async function POST(request: Request) {
     ai_ran: aiRan,
     wall_drift: wallDrift,
     wb_issues: wbIssues,
+    blown_highlights: blownPhotos.size,
     // Profile verdict — the headline result for the ops UI.
     pass: verdict.pass,
     cast_flags: verdict.castFlags,

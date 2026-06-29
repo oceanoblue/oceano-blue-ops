@@ -31,6 +31,14 @@ export interface CastTarget {
   aAbs: number;
 }
 
+/** Highlight-detail gate: how much blown-to-white is tolerable for the profile. */
+export interface WindowHold {
+  /** Per-photo: blown-highlight fraction (0–1) above which the photo is flagged. */
+  maxBlownFraction: number;
+  /** Set-level: share of photos allowed to be flagged before the set fails. */
+  maxBlownRatio: number;
+}
+
 export interface QcRuleset {
   /** Per-photo consistency flag thresholds (vs set median). */
   deltas: ConsistencyThresholds;
@@ -42,6 +50,8 @@ export interface QcRuleset {
   maxFlaggedRatio: number;
   /** Whether AI material-fidelity (wall/material colour drift) must be clean. */
   requireFidelity: boolean;
+  /** Highlight-hold gate, or null when the profile doesn't enforce it (MLS). */
+  windowHold: WindowHold | null;
 }
 
 // Ordered loosest → strictest. MLS deltas intentionally equal
@@ -53,6 +63,7 @@ export const QC_RULESETS: Record<ProjectType, QcRuleset> = {
     minScore: 70,
     maxFlaggedRatio: 0.25,
     requireFidelity: false, // speed over forensic fidelity for the MLS tier
+    windowHold: null, // a bright, airy look is fine — highlights not policed
   },
   luxury_real_estate: {
     deltas: { b: 5, a: 4, L: 10 },
@@ -60,6 +71,7 @@ export const QC_RULESETS: Record<ProjectType, QcRuleset> = {
     minScore: 80,
     maxFlaggedRatio: 0.15,
     requireFidelity: true,
+    windowHold: { maxBlownFraction: 0.1, maxBlownRatio: 0.2 },
   },
   architectural: {
     deltas: { b: 4, a: 3, L: 9 },
@@ -67,6 +79,7 @@ export const QC_RULESETS: Record<ProjectType, QcRuleset> = {
     minScore: 85,
     maxFlaggedRatio: 0.12,
     requireFidelity: true,
+    windowHold: { maxBlownFraction: 0.06, maxBlownRatio: 0.12 }, // windows must hold their view
   },
   interior_design: {
     deltas: { b: 4, a: 3, L: 10 },
@@ -74,6 +87,7 @@ export const QC_RULESETS: Record<ProjectType, QcRuleset> = {
     minScore: 83,
     maxFlaggedRatio: 0.12,
     requireFidelity: true,
+    windowHold: { maxBlownFraction: 0.08, maxBlownRatio: 0.15 },
   },
 };
 
@@ -94,6 +108,8 @@ export interface QcVerdictInput {
   aiRan: boolean;
   /** Photos the AI flagged for material/wall-colour drift. */
   wallDrift: number;
+  /** Photos exceeding the profile's blown-highlight tolerance (windowHold). */
+  blownCount?: number;
 }
 
 export interface QcVerdict {
@@ -120,6 +136,7 @@ export type CastFlag = 'warm' | 'cool' | 'green' | 'magenta';
  */
 export function evaluateVerdict(input: QcVerdictInput): QcVerdict {
   const { ruleset, report, flaggedCount, total, aiRan, wallDrift } = input;
+  const blownCount = input.blownCount ?? 0;
   const reasons: string[] = [];
 
   // 1. Set consistency score.
@@ -146,6 +163,14 @@ export function evaluateVerdict(input: QcVerdictInput): QcVerdict {
   if (ruleset.requireFidelity && aiRan && wallDrift > 0) {
     reasons.push(
       `AI flagged material/wall-colour drift on ${wallDrift} photo${wallDrift === 1 ? '' : 's'}.`
+    );
+  }
+
+  // 5. Highlight hold (only profiles that enforce it). Too many photos with
+  //    blown windows/walls → the set wants the assisted window-pull finish.
+  if (ruleset.windowHold && total > 0 && blownCount / total > ruleset.windowHold.maxBlownRatio) {
+    reasons.push(
+      `${blownCount} of ${total} photos have blown-out highlights (windows losing their view) — beyond this profile's tolerance.`
     );
   }
 

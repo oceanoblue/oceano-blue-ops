@@ -108,6 +108,30 @@ describe('evaluateVerdict', () => {
     expect(v.pass).toBe(true); // can't gate on a check that didn't run
   });
 
+  it('fails on too many blown-highlight photos only when the profile holds windows', () => {
+    const blown = { flaggedCount: 0, total: 10, aiRan: true, wallDrift: 0, blownCount: 5 };
+    // Architectural enforces windowHold (maxBlownRatio 0.12) → 50% fails.
+    const arch = evaluateVerdict({ ruleset: QC_RULESETS.architectural, report: report(), ...blown });
+    expect(arch.pass).toBe(false);
+    expect(arch.reasons.join(' ')).toMatch(/blown-out highlights/);
+    // MLS has windowHold: null → blown highlights never fail it.
+    const mls = evaluateVerdict({ ruleset: QC_RULESETS.mls_real_estate, report: report(), ...blown });
+    expect(mls.pass).toBe(true);
+  });
+
+  it('tolerates a few blown highlights under the profile ratio', () => {
+    const v = evaluateVerdict({
+      ruleset: QC_RULESETS.luxury_real_estate, // maxBlownRatio 0.2
+      report: report(),
+      flaggedCount: 0,
+      total: 10,
+      aiRan: true,
+      wallDrift: 0,
+      blownCount: 1, // 10% ≤ 20%
+    });
+    expect(v.pass).toBe(true);
+  });
+
   it('handles an empty set without dividing by zero', () => {
     const v = evaluateVerdict({
       ruleset: QC_RULESETS.mls_real_estate,
