@@ -27,6 +27,10 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, Header, HTTPException, Response, UploadFile
 
+from window_pull import window_pull as pull_windows, pick_darkest
+from geometry import straighten_verticals
+from sky import replace_sky
+
 try:
     import rawpy  # libraw-backed full RAW decode
     _HAS_RAWPY = True
@@ -340,6 +344,12 @@ async def edit(
     target_long_edge: int = Form(0),  # 0 = keep native resolution (no downscale)
     quality: int = Form(95),
     style: str = Form("default"),  # 'default' (real-estate) | 'sober' (architectural)
+    # Opt-in enhancements (default OFF → behaviour unchanged for existing callers).
+    # Enable per-profile from the app layer once validated on real renders.
+    window_pull: bool = Form(False),    # fuse mode: recover blown windows from the darkest bracket
+    straighten: bool = Form(False),     # de-skew + bounded keystone so verticals are plumb
+    keystone: bool = Form(True),        # whether straighten also applies the keystone warp
+    sky_mode: str = Form("keep"),       # 'keep' | 'replace' (replace is no-op for the 'sober' style)
     x_edit_secret: Optional[str] = Header(None),
 ):
     if not SECRET or x_edit_secret != SECRET:
@@ -359,10 +369,20 @@ async def edit(
             imgs.append(resize_long_edge(im, target_long_edge))
             del im
         out = fuse(imgs)
+        # Window pull needs a darker frame to borrow the view from — fuse mode only.
+        if window_pull and len(imgs) > 1:
+            out = pull_windows(out, pick_darkest(imgs))
         del imgs
+        if straighten:
+            out = straighten_verticals(out, apply_keystone=keystone)
     elif mode == "grade":
         # Single frame — safe at native; grade then bound (no-op when target<=0).
-        out = grade(_decode(await files[0].read()), style=style)
+        img = _decode(await files[0].read())
+        if straighten:  # geometry before tone/colour
+            img = straighten_verticals(img, apply_keystone=keystone)
+        out = grade(img, style=style)
+        if sky_mode == "replace":
+            out = replace_sky(out, style=style)
     else:
         raise HTTPException(status_code=400, detail="bad_mode")
 
