@@ -182,7 +182,10 @@ export const oceanoEnhance: AiProvider = {
               // EVERY bracket at once, so native multi-frame fusion of full RAW
               // (30–60MP × 3–7 frames) OOMs the worker. Bounded by EDIT_FUSE_MAX_EDGE
               // (default 4096, sized for the 2 GB VM). Single-frame grade stays native.
-              { mode: 'fuse', targetLongEdge: FUSE_MAX_EDGE, quality: 95 }
+              //
+              // windowPull: the AutoHDR-style flagship — recover blown windows from
+              // the darkest bracket so they hold their view (no-op for single frames).
+              { mode: 'fuse', targetLongEdge: FUSE_MAX_EDGE, quality: 95, windowPull: true }
             );
             return {
               outputs: [{ bytes, mimeType: 'image/jpeg', filename: `hdr_merge-${Date.now()}.jpg` }],

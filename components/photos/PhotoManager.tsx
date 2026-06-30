@@ -140,8 +140,10 @@ export function PhotoManager({
   // Bracketing method: Auto-detect, or force a fixed Count (3/5/7).
   const [bracketCount, setBracketCount] = useState<'auto' | 3 | 5 | 7>('auto');
 
-  // Stage 2 config
-  const [aiProvider, setAiProvider] = useState<AiProvider>('openai-gpt-image');
+  // Stage 2 config. Default to the deterministic edit engine (the faithful
+  // fuse + grade we tune) rather than a paid generative model — that's the
+  // reliable "one look" path; generative providers stay available in the dropdown.
+  const [aiProvider, setAiProvider] = useState<AiProvider>('oceano-enhance');
   // Off by default: the signature enhance should NOT auto-apply sky / window /
   // lawn / declutter / twilight. Those alter content and stay opt-in per photo.
   const [autoDetect, setAutoDetect] = useState(false);

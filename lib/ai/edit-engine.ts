@@ -22,7 +22,17 @@ export function editEngineConfigured(): boolean {
  */
 export async function runEditEngine(
   inputs: EditInput[],
-  opts: { mode: 'fuse' | 'grade'; targetLongEdge?: number; quality?: number; style?: string }
+  opts: {
+    mode: 'fuse' | 'grade';
+    targetLongEdge?: number;
+    quality?: number;
+    style?: string;
+    // Real-estate enhancements (engine P1–P4). Only sent when set, so the
+    // engine's conservative defaults apply otherwise.
+    windowPull?: boolean; // fuse: recover blown windows from the darkest bracket
+    straighten?: boolean; // de-skew + bounded keystone so verticals are plumb
+    skyMode?: 'keep' | 'replace';
+  }
 ): Promise<Buffer> {
   const url = process.env.EDIT_ENGINE_URL;
   const secret = process.env.EDIT_WORKER_SECRET;
@@ -36,6 +46,9 @@ export async function runEditEngine(
   form.append('target_long_edge', String(opts.targetLongEdge ?? 4000));
   form.append('quality', String(opts.quality ?? 90));
   form.append('style', opts.style ?? 'default');
+  if (opts.windowPull) form.append('window_pull', 'true');
+  if (opts.straighten) form.append('straighten', 'true');
+  if (opts.skyMode) form.append('sky_mode', opts.skyMode);
 
   const r = await fetch(`${url.replace(/\/$/, '')}/edit`, {
     method: 'POST',

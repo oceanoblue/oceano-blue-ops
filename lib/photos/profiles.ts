@@ -37,15 +37,18 @@ export const PHOTO_PROFILES: Record<ProjectType, PhotoProfile> = {
   mls_real_estate: {
     id: 'mls_real_estate',
     label: 'MLS Real Estate',
-    description: 'Fast, bright, clean, consistent — the standard listing look.',
-    gradeStyle: 'default',
+    description: 'Bright, clean, faithful — windows hold their view, whites stay true.',
+    // The clean-HDR look: accurate/airy grade (not the old over-pushed default
+    // that was blowing out highlights). One consistent look across profiles.
+    gradeStyle: 'sober',
     deliveryDefault: 'web',
   },
   luxury_real_estate: {
     id: 'luxury_real_estate',
     label: 'Luxury Real Estate',
-    description: 'Elevated marketing finish. (Premium flash-blend stages: Phase D.)',
-    gradeStyle: 'default',
+    description: 'Elevated marketing finish — clean, luminous, accurate (not HDR-pushed).',
+    // Was the punchy MLS grade, which over-brightened/blew out; now the clean look.
+    gradeStyle: 'sober',
     deliveryDefault: '4k',
   },
   architectural: {
