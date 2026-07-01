@@ -9,7 +9,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY server.py .
+COPY server.py window_pull.py geometry.py masks.py sky.py .
 
 ENV PORT=8080
 # Single worker: image ops are CPU-heavy; concurrency is handled by Fly machines.
