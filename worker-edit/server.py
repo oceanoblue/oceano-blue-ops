@@ -186,9 +186,11 @@ def auto_exposure(img: np.ndarray, target: float = 0.50) -> np.ndarray:
         med = float(np.median(lum)) / 255.0
         if med <= 0.001:
             return img
-        # Cap lift at 1.8× (don't manufacture a scene out of near-black) and allow
-        # mild darkening for over-bright merges.
-        gain = float(np.clip(target / med, 0.6, 1.8))
+        # Cap lift at 2.2× (don't manufacture a scene out of near-black) and allow
+        # mild darkening for over-bright merges. Raised from 1.8 (v3 retune,
+        # 2026-07-01): a genuinely dim single-frame source (enhance_single, no
+        # fusion headroom) was hitting the old cap short of the sober target.
+        gain = float(np.clip(target / med, 0.6, 2.2))
         out = img.astype(np.float32) * gain
         return np.clip(out, 0, 255).astype(np.uint8)
     except Exception:
@@ -292,9 +294,13 @@ def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
     img = correct_lens(img)  # geometric correction first, before tone/colour
     img = auto_white_balance(img)  # neutral whites + tint correction
     # Proper exposure: normalise overall brightness BEFORE tone shaping so a dark
-    # or bright merge lands at a consistent, well-exposed level. sober a touch
-    # lower so accurate scenes don't over-brighten; both stay bright + airy.
-    img = auto_exposure(img, target=0.50 if style == "sober" else 0.52)
+    # or bright merge lands at a consistent, well-exposed level. sober now targets
+    # HIGHER than default (0.58 vs 0.52) — v3 retune, 2026-07-01: sober is the
+    # profile actually in production use (mls/luxury/architectural/interior all
+    # route here, see profiles.ts) and it has a highlight roll-off to hold
+    # windows, so it can push brighter without blowing them; default has no
+    # roll-off so its lower target stays the safety margin.
+    img = auto_exposure(img, target=0.58 if style == "sober" else 0.52)
     img = denoise(img)
     # (local_contrast/CLAHE intentionally omitted — it was adding the gritty
     #  micro-contrast that read as too contrasty.)
@@ -302,13 +308,16 @@ def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
         # Architectural / interior design: BRIGHT, airy, and accurate — the
         # reference look is luminous, not dark/documentary. "Not HDR-pushed" means
         # no gritty local-contrast/halos, NOT darker. So: a gentle midtone+shadow
-        # lift (gamma 0.90) opens the room, a light black point (1.0) keeps shadows
+        # lift (gamma 0.82) opens the room, a light black point (1.0) keeps shadows
         # from muddying, a touch of de-contrast (0.94) gives the soft editorial
         # feel, and the highlight roll-off holds window/exterior detail. Colour
-        # stays faithful (no sky stylisation). Calibrated against the owner's
-        # Lowcountry reference set (v2, 2026-06-26).
+        # stays faithful (no sky stylisation). v3 retune (2026-07-01): v2 (gamma
+        # 0.90, target 0.50) still rendered dark/muddy next to the owner's AutoHDR
+        # side-by-side (a bright, evenly-lit kitchen) — raised the exposure target
+        # and lowered the gamma for a meaningfully brighter, airier result while
+        # keeping the same roll-off so windows still hold.
         img = tone_curve(
-            img, black_point=1.0, contrast=0.94, airy_gamma=0.90, highlight_rolloff=0.35
+            img, black_point=1.0, contrast=0.94, airy_gamma=0.82, highlight_rolloff=0.35
         )
         img = saturate(img, 0.98)
         img = sharpen(img)

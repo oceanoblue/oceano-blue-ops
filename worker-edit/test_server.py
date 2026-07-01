@@ -43,7 +43,7 @@ def _lut(**kw):
 def test_tone_curve_monotonic_nondecreasing():
     for kw in (
         dict(),  # defaults
-        dict(black_point=1.0, contrast=0.94, airy_gamma=0.90, highlight_rolloff=0.35),  # sober
+        dict(black_point=1.0, contrast=0.94, airy_gamma=0.82, highlight_rolloff=0.35),  # sober (v3)
     ):
         lut = _lut(**kw)
         assert np.all(np.diff(lut) >= 0), f"tone curve must be monotonic for {kw}"
@@ -51,9 +51,9 @@ def test_tone_curve_monotonic_nondecreasing():
 
 def test_tone_curve_white_stays_bright_and_topmost_with_rolloff():
     # The sober de-contrast (0.94) intentionally lands peak white just under 255
-    # (~246) for an airy, un-clipped white — NOT a dingy grey. Invariant: the
+    # (~247) for an airy, un-clipped white — NOT a dingy grey. Invariant: the
     # brightest input is still the brightest output and stays near-white.
-    lut = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.90, highlight_rolloff=0.35)
+    lut = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.82, highlight_rolloff=0.35)
     assert lut[255] == lut.max()
     assert lut[255] >= 240  # near-white, not dimmed
 
@@ -74,8 +74,8 @@ def test_airy_gamma_lifts_midtones():
 
 
 def test_highlight_rolloff_compresses_highs_but_keeps_separation():
-    base = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.90, highlight_rolloff=0.0)
-    rolled = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.90, highlight_rolloff=0.35)
+    base = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.82, highlight_rolloff=0.0)
+    rolled = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.82, highlight_rolloff=0.35)
     # Above the knee, the shoulder pulls values DOWN (holds window detail)…
     assert rolled[245] <= base[245]
     # …without collapsing them to a flat white: bright tones stay distinct.
@@ -97,9 +97,9 @@ def test_auto_exposure_lifts_dark_scene_toward_target():
 
 
 def test_auto_exposure_gain_is_clamped():
-    # Near-black must not be manufactured into a scene: gain capped at 1.8×.
+    # Near-black must not be manufactured into a scene: gain capped at 2.2×.
     dark = solid((10, 10, 10))
-    assert float(np.median(luminance(server.auto_exposure(dark, target=0.50)))) <= 10 * 1.8 + 1
+    assert float(np.median(luminance(server.auto_exposure(dark, target=0.50)))) <= 10 * 2.2 + 1
     # Over-bright merges darken, but no more than 0.6×.
     bright = solid((240, 240, 240))
     assert float(np.median(luminance(server.auto_exposure(bright, target=0.50)))) >= 240 * 0.6 - 1
@@ -225,3 +225,13 @@ def test_grade_sober_is_not_darker_than_input_midtones():
     img = solid((110, 110, 110), h=120, w=160)
     out = server.grade(img, style="sober")
     assert float(np.median(luminance(out))) >= 110
+
+
+def test_grade_sober_reaches_bright_airy_level():
+    # v3 retune (2026-07-01): v2 (target 0.50, gamma 0.90) still read dark/muddy
+    # against the owner's AutoHDR side-by-side. A moderately dim scene (median
+    # ~0.35, e.g. an under-lit interior before grading) must land meaningfully
+    # bright and airy after grading — not just "not darker."
+    img = solid((90, 90, 90), h=120, w=160)
+    out = server.grade(img, style="sober")
+    assert float(np.median(luminance(out))) >= 150

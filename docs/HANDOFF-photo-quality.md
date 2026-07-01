@@ -34,12 +34,34 @@ owner's reference screenshots, but needs confirmation on real rendered output.
 
 ## 3. Current grade parameters (the tuning starting point)
 `worker-edit/server.py`, `grade(img, style)`. Order: correct_lens → auto_white_balance → auto_exposure → denoise → tone/sat/sharpen.
-- **auto_exposure** (both styles): median luminance → target (sober **0.50**, default **0.52**), gain clamped **[0.6, 1.8]**, multiplicative. Exposes for the ROOM; windows handled by the roll-off (global multiply can't hold a bright window AND lift a dark room — that's Phase D).
-- **auto_white_balance**: anchors **all 3 channels** to the neutral patch's grey (fixes green/magenta tint + warm/cool), gains clamped [0.80, 1.25].
-- **sober** grade (architectural/interior): `tone_curve(black_point=1.0, contrast=0.94, airy_gamma=0.90, highlight_rolloff=0.35)`, `saturate=0.98`, **no sky push**.
-- **default** grade (MLS/luxury): airy look — `tone_curve(1.0, 0.90, 0.88)`, `saturate=1.0`, `soften_sky` on.
 
-Profiles map in `lib/photos/profiles.ts`: `mls_real_estate`/`luxury_real_estate` → `default`; `architectural`/`interior_design` → `sober`.
+**v3 retune (2026-07-01):** all four profiles now route to `sober` (see below) —
+the owner reported the `default` style (used only by MLS/Luxury before) was
+over-blowing highlights, and `sober` v2 (target 0.50, gamma 0.90) still read
+dark/muddy against a real AutoHDR side-by-side comparison the owner sent
+(a bright, evenly-lit kitchen vs. our darker/heavier output on a similar room).
+Reasoned math-only tune below; **needs confirmation on a real render** (this
+sandbox can't render photos or reach `*.fly.dev`).
+
+- **auto_exposure** (both styles): median luminance → target (sober **0.58**,
+  default **0.52**), gain clamped **[0.6, 2.2]** (was 1.8 — a dim single-frame
+  source with no fusion headroom could hit the old cap short of target),
+  multiplicative. Exposes for the ROOM; windows handled by the roll-off (global
+  multiply can't hold a bright window AND lift a dark room — that's Phase D).
+- **auto_white_balance**: anchors **all 3 channels** to the neutral patch's grey (fixes green/magenta tint + warm/cool), gains clamped [0.80, 1.25].
+- **sober** grade (now MLS/luxury/architectural/interior — the only style in
+  production use): `tone_curve(black_point=1.0, contrast=0.94, airy_gamma=0.82,
+  highlight_rolloff=0.35)` (gamma was 0.90 in v2 — lowered for more midtone
+  lift), `saturate=0.98`, **no sky push**.
+- **default** grade (currently unselected by any profile — kept for reference /
+  a possible future punchier tier): `tone_curve(1.0, 0.90, 0.88)`, `saturate=1.0`,
+  `soften_sky` on. No highlight roll-off, so it's not safe to push as bright as
+  sober without re-introducing the original blown-highlight complaint.
+
+Profiles map in `lib/photos/profiles.ts`: **all four** (`mls_real_estate`,
+`luxury_real_estate`, `architectural`, `interior_design`) → `sober`. One
+consistent look across profiles; `default` is currently dead code paths-wise
+(still reachable via the `style` param, just not selected by any profile).
 
 ## 4. Key env vars (all have safe defaults)
 | Var | Default | Where | Note |
@@ -55,7 +77,7 @@ Profiles map in `lib/photos/profiles.ts`: `mls_real_estate`/`luxury_real_estate`
 Owner's Lowcountry reference set (Southern coastal): **bright, airy, luminous, accurate** — clean neutral-to-gently-warm whites, true wood tones, muted blues stay muted, real sky (no stylized blue), windows hold their exterior view, natural shadows kept. "Not HDR-pushed" = **no gritty halos/over-contrast, NOT darker.** (Reference files `IMG_3417`–`3424` shown in chat; `IMG_3416.gif`/`IMG_3421.webp` never rendered — re-request as JPG if needed.)
 
 ## 6. Open items / next steps
-1. **TUNING LOOP (next action):** get a real architectural output (4k preset) and judge exposure / color (green cast gone?) / window hold. Adjust in `worker-edit/server.py`: exposure `target`, sober `airy_gamma`/`black_point`, `highlight_rolloff`, WB blend. Each change = `fly deploy`. Can't render images in-session — verify curve math with numpy, confirm on real output.
+1. **TUNING LOOP (next action):** the v3 retune (§3) needs a real render + `fly deploy` to confirm — judge exposure / color (green cast gone?) / window hold against the AutoHDR reference. If still too dark, next knobs to try (in order): raise sober `target` further (0.58→~0.62), lower `airy_gamma` further (0.82→~0.76), or re-check the Mertens fusion weights in `fuse()` (`createMergeMertens(0.15, 0.25, 1.0)`) — the 1.0 well-exposedness weight biases the fused base toward middle-gray before grading even starts, which may be the deeper cause if tuning the grade alone isn't enough. Can't render images in-session — verify curve math with numpy, confirm on real output.
 2. **Bigger HDR masters (optional):** `fly scale memory 8192 -a oceano-edit-engine` + set `EDIT_FUSE_MAX_EDGE=6144` in Vercel.
 3. **Phase B** — per-profile QC rulesets (extend `lib/ai/qc/*`, `photo_qc_reports`).
 4. **Phase C** — per-profile capture checklists (data-driven UI at intake).
