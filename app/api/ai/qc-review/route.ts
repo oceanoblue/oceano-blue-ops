@@ -6,6 +6,7 @@ import { computeColorStats } from '@/lib/ai/qc/color-stats';
 import { analyzeConsistency, type PhotoStat } from '@/lib/ai/qc/consistency';
 import { wallCheck } from '@/lib/ai/qc/wall-check';
 import { computeClipping } from '@/lib/ai/qc/clipping';
+import { computeStructureDrift } from '@/lib/ai/qc/structure';
 import { rulesetFor, evaluateVerdict } from '@/lib/ai/qc/rulesets';
 import { profileFor } from '@/lib/photos/profiles';
 import { mapWithConcurrency } from '@/lib/utils/concurrent';
@@ -116,6 +117,7 @@ export async function POST(request: Request) {
 
   let aiRan = false;
   const aiByPhoto = new Map<string, any>();
+  const structureByPhoto = new Map<string, { score: number; drifted: boolean }>();
   await mapWithConcurrency(pool, 3, async (p) => {
     const parent = p.parent_photo_id ? parents.get(p.parent_photo_id) : null;
     const edited = editedBuffers.get(p.id);
@@ -124,6 +126,14 @@ export async function POST(request: Request) {
       const { data, error } = await admin.storage.from(parent.bucket).download(parent.storage_path);
       if (error || !data) return;
       const orig = Buffer.from(await data.arrayBuffer());
+      // Structure-drift guard: generative outputs only (the deterministic
+      // engine legitimately warps pixels — lens correction / keystone — and
+      // would false-positive). Deterministic + free, so it always runs; the
+      // GPT-4o wall check below still needs its key.
+      if (p.ai_provider && p.ai_provider !== 'oceano-enhance') {
+        const s = await computeStructureDrift(orig, edited);
+        if (s) structureByPhoto.set(p.id, s);
+      }
       const res = await wallCheck(orig, edited);
       if (res) {
         aiRan = true;
@@ -140,8 +150,12 @@ export async function POST(request: Request) {
       const c = consistencyByPhoto.get(p.id);
       const ai = aiByPhoto.get(p.id);
       const blown = blownPhotos.has(p.id);
+      const structure = structureByPhoto.get(p.id);
       const issue =
-        !!c || blown || (ai && (ai.wall_drift || !ai.white_balance_ok || ai.color_accuracy === 'poor'));
+        !!c ||
+        blown ||
+        structure?.drifted ||
+        (ai && (ai.wall_drift || !ai.white_balance_ok || ai.color_accuracy === 'poor'));
       if (!issue) return null;
       return {
         photo_id: p.id,
@@ -154,12 +168,16 @@ export async function POST(request: Request) {
         blown_highlights: blown
           ? { fraction: Math.round((blownFractionByPhoto.get(p.id) ?? 0) * 1000) / 1000 }
           : null,
+        // Generative fidelity: edge-structure correlation vs the original.
+        // Low score = the model likely REDREW content, not just relit it.
+        structure: structure?.drifted ? structure : null,
       };
     })
     .filter(Boolean);
 
   const wallDrift = Array.from(aiByPhoto.values()).filter((a) => a.wall_drift).length;
   const wbIssues = Array.from(aiByPhoto.values()).filter((a) => !a.white_balance_ok).length;
+  const structureDrift = Array.from(structureByPhoto.values()).filter((s) => s.drifted).length;
 
   // Profile-aware pass/fail: judge the measured set against this market's bar.
   const verdict = evaluateVerdict({
@@ -186,6 +204,8 @@ export async function POST(request: Request) {
     wall_drift: wallDrift,
     wb_issues: wbIssues,
     blown_highlights: blownPhotos.size,
+    structure_drift: structureDrift,
+    structure_checked: structureByPhoto.size,
     // Profile verdict — the headline result for the ops UI.
     pass: verdict.pass,
     cast_flags: verdict.castFlags,

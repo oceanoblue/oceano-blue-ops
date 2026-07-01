@@ -9,6 +9,7 @@ import {
   Download,
   RotateCw,
   GitCompareArrows,
+  Columns2,
   Loader2,
   Save,
   Trash2,
@@ -90,6 +91,12 @@ export function PhotoViewer({
   const photo = photos[index];
   const [mode, setMode] = useState<'fit' | 'zoom'>('fit');
   const [showBefore, setShowBefore] = useState(false);
+  // Split compare: original on the left of a draggable divider, enhanced on the
+  // right — judging a tone match by eye works far better side-by-side than by
+  // toggling (the eye re-adapts between flashes and hides level differences).
+  const [split, setSplit] = useState(false);
+  const [splitPct, setSplitPct] = useState(50);
+  const splitDragRef = useRef(false);
   const [parentUrl, setParentUrl] = useState<string | null>(null);
   const [parentFetching, setParentFetching] = useState(false);
   // Full-resolution URL for the current photo. The grids populate `urls` with
@@ -114,6 +121,7 @@ export function PhotoViewer({
   // Fetch the raw "before" URL for the compare toggle
   useEffect(() => {
     setShowBefore(false);
+    setSplit(false);
     setParentUrl(null);
     setError(null);
     setPreviewB64(null);
@@ -375,6 +383,18 @@ export function PhotoViewer({
               {parentFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitCompareArrows className="h-4 w-4" />}
             </button>
           )}
+          {hasParent && (
+            <button
+              onClick={() => setSplit((s) => !s)}
+              disabled={!parentUrl}
+              title="Split compare — drag the divider (original left, enhanced right)"
+              className={`p-1.5 rounded text-sm transition ${
+                split ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 text-slate-700'
+              } disabled:opacity-40`}
+            >
+              <Columns2 className="h-4 w-4" />
+            </button>
+          )}
           <button
             onClick={() => rotate(-90)}
             disabled={busy === 'rotate'}
@@ -435,7 +455,61 @@ export function PhotoViewer({
           )}
 
           {/* The photo itself */}
-          {displayUrl ? (
+          {split && parentUrl && url ? (
+            <div
+              className="absolute inset-0 select-none touch-none cursor-col-resize"
+              onPointerDown={(e) => {
+                splitDragRef.current = true;
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                const rect = e.currentTarget.getBoundingClientRect();
+                setSplitPct(Math.min(98, Math.max(2, ((e.clientX - rect.left) / rect.width) * 100)));
+              }}
+              onPointerMove={(e) => {
+                if (!splitDragRef.current) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                setSplitPct(Math.min(98, Math.max(2, ((e.clientX - rect.left) / rect.width) * 100)));
+              }}
+              onPointerUp={() => {
+                splitDragRef.current = false;
+              }}
+            >
+              {/* AFTER (enhanced) fills the canvas… */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewB64 ? `data:image/jpeg;base64,${previewB64}` : url}
+                alt={photo.filename}
+                className="absolute inset-0 h-full w-full object-contain pointer-events-none"
+                draggable={false}
+              />
+              {/* …and BEFORE (original) is revealed left of the divider. */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ clipPath: `inset(0 ${100 - splitPct}% 0 0)` }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={parentUrl}
+                  alt="Original"
+                  className="absolute inset-0 h-full w-full object-contain"
+                  draggable={false}
+                />
+              </div>
+              <div
+                className="absolute inset-y-0 w-0.5 bg-white shadow-[0_0_6px_rgba(0,0,0,0.5)] pointer-events-none"
+                style={{ left: `${splitPct}%` }}
+              >
+                <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-8 w-8 rounded-full bg-white shadow grid place-items-center">
+                  <Columns2 className="h-4 w-4 text-slate-700" />
+                </div>
+              </div>
+              <div className="absolute top-3 left-3 bg-slate-900/80 text-white text-[11px] px-2 py-0.5 rounded font-medium pointer-events-none">
+                ORIGINAL
+              </div>
+              <div className="absolute top-3 right-3 bg-ocean-600/90 text-white text-[11px] px-2 py-0.5 rounded font-medium pointer-events-none">
+                ENHANCED
+              </div>
+            </div>
+          ) : displayUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={displayUrl}
@@ -447,7 +521,7 @@ export function PhotoViewer({
             <div className="text-slate-400">Loading…</div>
           )}
 
-          {showBefore && parentUrl && (
+          {!split && showBefore && parentUrl && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-xs px-2 py-0.5 rounded shadow z-10 font-medium">
               BEFORE
             </div>

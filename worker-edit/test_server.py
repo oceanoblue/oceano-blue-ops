@@ -82,6 +82,30 @@ def test_highlight_rolloff_compresses_highs_but_keeps_separation():
     assert rolled[230] < rolled[252]
 
 
+def test_tone_curve_float_recovers_over_range():
+    # v6: the float pipeline lets WB/exposure push near-whites OVER 255 and the
+    # shoulder must bring them back UNDER white with their separation intact —
+    # the mechanism that decouples "expose the room" from "hold the windows".
+    x = np.array([[[255.0] * 3, [265.0] * 3, [272.0] * 3]], np.float32)
+    y = server.tone_curve(
+        x, black_point=1.0, contrast=0.94, airy_gamma=0.86, highlight_rolloff=0.35
+    )
+    v = y[0, :, 0]
+    assert v[0] < v[1] < v[2]  # over-range separation preserved
+    assert v[2] <= 255.5       # everything lands back under white
+    assert v[0] >= 236         # in-range white stays near-white, not dingy
+
+
+def test_tone_curve_float_matches_lut_on_in_range_values():
+    # The uint8 LUT and the float path are the SAME curve — sampled vs analytic.
+    ramp_u8 = np.arange(256, dtype=np.uint8).reshape(1, 256, 1).repeat(3, axis=2)
+    ramp_f = ramp_u8.astype(np.float32)
+    kw = dict(black_point=1.0, contrast=0.94, airy_gamma=0.86, highlight_rolloff=0.35)
+    lut_out = server.tone_curve(ramp_u8, **kw)[0, :, 0].astype(np.float32)
+    f_out = server.tone_curve(ramp_f, **kw)[0, :, 0]
+    assert np.abs(lut_out - f_out).max() <= 0.51  # only rounding apart
+
+
 # ── auto_exposure ─────────────────────────────────────────────────────────────
 def test_auto_exposure_neutral_when_already_on_target():
     # Median already at the target (128/255 ≈ 0.502 ~ target 0.50) → gain ≈ 1.
@@ -127,6 +151,17 @@ def test_auto_exposure_highlight_safe_protects_bright_regions():
     window_lum = float(luminance(out[:, 58:]).mean())
     assert room_lum > 30  # room still gets lifted...
     assert 195 <= window_lum <= 248  # ...but the window is held near the ceiling, not blown to 255
+
+
+def test_auto_exposure_float_preserves_over_range():
+    # v6: on float input nothing clips here — the ceiling sits above white
+    # (1.05) and modest over-range flows through to the tone curve's shoulder.
+    img = np.full((64, 64, 3), 60.0, np.float32)  # dim room
+    img[:, 58:] = 240.0  # bright window strip
+    out = server.auto_exposure(img, target=0.55)
+    assert out.dtype == np.float32
+    assert float(out[:, 58:].max()) > 255.0  # over-range PRESERVED, not clipped
+    assert float(out[:, :50].mean()) > 60.0  # room still lifted
 
 
 # ── auto_white_balance ────────────────────────────────────────────────────────
@@ -215,6 +250,24 @@ def test_fuse_multi_returns_uint8_same_shape():
     assert out.dtype == np.uint8 and out.shape == imgs[0].shape
 
 
+def test_fuse_finalize_preserves_overshoot_separation():
+    # Mertens pyramid reconstruction can overshoot [0,1] at high-contrast edges
+    # (window frames). v6: instead of hard-clipping both overshoot levels to a
+    # flat 255, renormalize so they land inside 8 bits DISTINCT.
+    res = np.full((8, 8, 3), 0.5, np.float32)
+    res[0, 0] = 1.05
+    res[0, 1] = 1.10
+    out = server._fuse_finalize(res)
+    assert int(out[0, 0, 0]) < int(out[0, 1, 0])  # separation kept
+    assert int(out[0, 1, 0]) <= 255
+
+
+def test_fuse_finalize_noop_when_in_range():
+    res = np.full((8, 8, 3), 0.5, np.float32)
+    out = server._fuse_finalize(res)
+    assert int(out[0, 0, 0]) == 127  # 0.5 * 255, untouched (no renormalize)
+
+
 def test_resize_long_edge_noop_and_downscale():
     img = solid((10, 20, 30), h=100, w=200)
     assert server.resize_long_edge(img, 0) is img           # 0 = keep native
@@ -265,6 +318,34 @@ def test_shadow_lift_preserves_fine_detail():
     assert amp_after > amp_before * 0.6  # detail substantially preserved
 
 
+def test_shadow_lift_edge_aware_no_halo():
+    # v6: the v5 Gaussian base smeared window brightness across the window/wall
+    # boundary, so compressing it painted a glow band onto the dark side — the
+    # classic tone-mapping halo that reads "HDR-pushed". With the edge-aware
+    # (guided-filter) base, the compression steps AT the boundary: dark-side
+    # pixels near the seam must land at essentially the same level as dark-side
+    # pixels far from it. (The v5 implementation fails this by ~30 levels.)
+    img = np.zeros((128, 128, 3), np.uint8)
+    img[:, :64] = 40   # dark wall
+    img[:, 64:] = 220  # bright window
+    out_l = luminance(server.shadow_lift(img, amount=0.40))
+    dark_near = float(out_l[:, 48:60].mean())  # hugging the seam
+    dark_far = float(out_l[:, 4:16].mean())
+    assert abs(dark_near - dark_far) <= 12
+
+
+def test_shadow_lift_float_roundtrip():
+    # Float in → float out, unclipped, same compression behavior.
+    img = np.zeros((128, 128, 3), np.float32)
+    img[:, :64] = 40.0
+    img[:, 64:] = 220.0
+    out = server.shadow_lift(img, amount=0.40)
+    assert out.dtype == np.float32
+    gap_before = 220.0 - 40.0
+    gap_after = float(out[:, 100:, 0].mean() - out[:, :30, 0].mean())
+    assert gap_after < gap_before
+
+
 # ── grade end-to-end ──────────────────────────────────────────────────────────
 @pytest.mark.parametrize("style", ["default", "sober"])
 def test_grade_outputs_valid_image(style):
@@ -294,3 +375,19 @@ def test_grade_sober_reaches_bright_airy_level():
     img = solid((90, 90, 90), h=120, w=160)
     out = server.grade(img, style="sober")
     assert float(np.median(luminance(out))) >= 145
+
+
+def test_grade_sober_holds_window_while_lifting_room():
+    # The end-to-end v6 mechanism on a synthetic worst case: dim room + bright
+    # window band. Compress (shadow_lift) → push (auto_exposure, float, ceiling
+    # above white) → recover (shoulder). The room must come up meaningfully AND
+    # the window must land under flat white, still brighter than the room —
+    # the exact combination the uint8 pipeline could not do (v2↔v3 ping-pong).
+    img = np.full((120, 160, 3), 60, np.uint8)  # dim room
+    img[:, 130:] = 235                          # bright window band (~19%)
+    out = server.grade(img, style="sober")
+    room = float(np.median(luminance(out[:, :100])))
+    window = float(np.median(luminance(out[:, 140:])))
+    assert room >= 60 + 25   # room meaningfully lifted (a solid ~2/3 stop plus)
+    assert window <= 254     # window NOT blown to flat white
+    assert window > room     # tonal ordering preserved

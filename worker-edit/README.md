@@ -20,14 +20,19 @@ masked, opt-in operations.
 
 Header `x-edit-secret` must match `EDIT_WORKER_SECRET`. Returns `image/jpeg`.
 
-- **fuse**: align (best-effort) → Mertens multi-scale exposure fusion → [window pull] →
-  [straighten] → resize.
-- **grade** (`grade(img, style)`): [straighten] → lens correction → auto white balance
-  (tint-aware) → auto-exposure (median-based, highlight-aware) → light denoise →
-  (`sober` only: room-scale shadow lift, `shadow_lift()`) → tone curve (black point +
-  gentle de-contrast + airy gamma; `sober` adds a highlight roll-off) → gentle saturation →
-  (`default` only: sky soften) → edge-aware sharpen → [sky replace]. `style` is `default`
-  (MLS / luxury) or `sober` (architectural / interior). See
+- **fuse**: align (best-effort) → Mertens multi-scale exposure fusion (overshoot
+  renormalized, not clipped — keeps window-edge highlight separation) →
+  [window pull] → [straighten] → resize.
+- **grade** (`grade(img, style)`, **v6 float core**): [straighten] → lens correction →
+  light denoise → *float32 section, ONE quantization at the end*: auto white balance
+  (tint-aware, unclipped) → (`sober` only: `shadow_lift()`, edge-aware room-scale
+  dynamic-range compression, halo-free, computed on a proxy) → auto-exposure
+  (median-based; ceiling sits ABOVE white in float — over-range survives) → tone
+  curve (black point + gentle de-contrast + airy gamma; `sober` adds an
+  over-range-aware highlight shoulder that brings pushed near-whites back UNDER
+  255 with separation intact) → gentle saturation → edge-aware sharpen →
+  quantize → (`default` only: sky soften) → [sky replace]. `style` is `default`
+  (unused by profiles) or `sober` (all four production profiles). See
   `../docs/HANDOFF-photo-quality.md` for the live grade parameters and the tuning loop.
 
 ### Real-estate enhancements (P1–P4, opt-in)

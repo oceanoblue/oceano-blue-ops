@@ -1480,11 +1480,20 @@ function Stage2({
                 <span className="text-sm text-slate-700">Blur faces in personal photos</span>
               </label>
             </div>
-            <p className="text-[11px] text-slate-400">
-              Whites stay neutral, the property is preserved exactly (MLS-accurate), and color is
-              enhanced to the lux signature look. Reflection &amp; face-blur edits only affect those
-              elements; sky replacement only runs on exteriors when a preset is chosen.
-            </p>
+            {provider === 'oceano-enhance' ? (
+              <p className="text-[11px] text-slate-400">
+                The Oceano engine is deterministic — it never redraws content. It applies window
+                pulls and perspective correction directly; <span className="text-slate-500">Enhancement
+                style, Sky style, reflections and face-blur are prompt directives that only take
+                effect when a generative provider (below) runs the job.</span>
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-400">
+                Whites stay neutral, the property is preserved exactly (MLS-accurate), and color is
+                enhanced to the lux signature look. Reflection &amp; face-blur edits only affect those
+                elements; sky replacement only runs on exteriors when a preset is chosen.
+              </p>
+            )}
           </section>
 
           <section className="card p-4 grid gap-4 md:grid-cols-2 md:items-end">
@@ -2273,6 +2282,10 @@ function QcReportPanel({
             if (f.ai && f.ai.color_accuracy === 'poor') issues.push('poor color accuracy');
             if (f.blown_highlights)
               issues.push(`blown highlights (${Math.round((f.blown_highlights.fraction ?? 0) * 100)}%)`);
+            if (f.structure?.drifted)
+              issues.push(
+                `possible AI content drift (structure ${Math.round((f.structure.score ?? 0) * 100)}% — check fixtures/furniture vs original)`
+              );
             return (
               <li key={f.photo_id} className="flex items-start gap-2 py-2 text-sm">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
@@ -2365,13 +2378,16 @@ function ProcessedCard({
   // Faithfully re-run the recipe that produced this photo, from the ORIGINAL
   // frame(s) — not a fresh default pass on the already-processed output. Makes
   // an edit reproducible with one click; the old output is kept for comparison.
-  async function rerunRecipe() {
-    setBusy('rerun');
+  async function rerunRecipe(providerOverride?: string) {
+    setBusy(providerOverride ? 'ab' : 'rerun');
     try {
       const r = await fetch('/api/ai/rerun', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ photo_id: photo.id }),
+        body: JSON.stringify({
+          photo_id: photo.id,
+          ...(providerOverride ? { provider: providerOverride } : {}),
+        }),
       });
       if (!r.ok) {
         // No stored recipe (e.g. a pre-recipe output) — fall back to a fresh
@@ -2469,22 +2485,32 @@ function ProcessedCard({
               )}
             </button>
           </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); rerunRecipe(); }}
-            disabled={busy !== null}
-            title={
-              recipeSummary
-                ? `Re-run this recipe from the original frame · ${recipeSummary}`
-                : 'Re-run enhance from the original frame'
-            }
-            className="p-1.5 rounded-md bg-white/15 text-white text-xs hover:bg-ocean-600 transition"
-          >
-            {busy === 'rerun' || busy === 'enhance_single' ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RotateCw className="h-3.5 w-3.5" />
-            )}
-          </button>
+          <div className="flex gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); rerunRecipe(); }}
+              disabled={busy !== null}
+              title={
+                recipeSummary
+                  ? `Re-run this recipe from the original frame · ${recipeSummary}`
+                  : 'Re-run enhance from the original frame'
+              }
+              className="p-1.5 rounded-md bg-white/15 text-white text-xs hover:bg-ocean-600 transition"
+            >
+              {busy === 'rerun' || busy === 'enhance_single' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCw className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); rerunRecipe('openai-gpt-image'); }}
+              disabled={busy !== null}
+              title="A/B: run the same photo through GPT Image (kept alongside this version — compare in the loupe)"
+              className="px-1.5 py-1.5 rounded-md bg-white/15 text-white text-[10px] font-semibold hover:bg-violet-600 transition"
+            >
+              {busy === 'ab' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'A/B'}
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-1">
           {extraEdits.map((e) => {

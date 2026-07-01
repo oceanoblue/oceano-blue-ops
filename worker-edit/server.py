@@ -83,6 +83,21 @@ def _match_sizes(images: List[np.ndarray]) -> List[np.ndarray]:
 
 
 # ── Exposure fusion ────────────────────────────────────────────────────────
+def _fuse_finalize(res: np.ndarray) -> np.ndarray:
+    # Mertens reconstructs from Laplacian pyramids, so the float result can
+    # overshoot [0, 1] at high-contrast edges — exactly the window/frame pixels
+    # we care about. A hard clip flattens that overshoot to 255 and the
+    # separation is gone before the grade ever runs (v6 finding: this was the
+    # FIRST of three places the pipeline threw highlight detail away). When the
+    # result runs hot, renormalize by the 99.9th percentile (robust to a few
+    # specular outliers) so the whole range lands inside 8 bits with its
+    # separation intact.
+    hi = float(np.percentile(res, 99.9))
+    if hi > 1.0:
+        res = res / hi
+    return np.clip(res * 255.0, 0, 255).astype(np.uint8)
+
+
 def fuse(images: List[np.ndarray]) -> np.ndarray:
     if len(images) == 1:
         return images[0]
@@ -100,8 +115,8 @@ def fuse(images: List[np.ndarray]) -> np.ndarray:
     # saturation low so the fusion doesn't bake in a vivid/"HDR" punch (that punch
     # was the main thing reading as not-luxury). The grade adds the airy finish.
     merge = cv2.createMergeMertens(0.15, 0.25, 1.0)
-    res = merge.process(images)  # float32 in [0, 1]
-    return np.clip(res * 255.0, 0, 255).astype(np.uint8)
+    res = merge.process(images)  # float32, nominally [0, 1] but can overshoot
+    return _fuse_finalize(res)
 
 
 # ── Faithful finishing grade ───────────────────────────────────────────────
@@ -161,11 +176,21 @@ def auto_white_balance(img: np.ndarray) -> np.ndarray:
             return float(np.clip(1.0 + (target / c - 1.0) * blend, 0.80, 1.25))
 
         rg, gg, bg = gain(rm), gain(gm), gain(bm)
-        out = img.astype(np.float32)
-        out[..., 2] = np.clip(out[..., 2] * rg, 0, 255)  # R
-        out[..., 1] = np.clip(out[..., 1] * gg, 0, 255)  # G (tint)
-        out[..., 0] = np.clip(out[..., 0] * bg, 0, 255)  # B
-        return out.astype(np.uint8)
+        if img.dtype == np.uint8:
+            out = img.astype(np.float32)
+            out[..., 2] = np.clip(out[..., 2] * rg, 0, 255)  # R
+            out[..., 1] = np.clip(out[..., 1] * gg, 0, 255)  # G (tint)
+            out[..., 0] = np.clip(out[..., 0] * bg, 0, 255)  # B
+            return out.astype(np.uint8)
+        # Float path (the grade's v6 core): apply the gains WITHOUT clipping —
+        # a corrected near-white may briefly exceed 255 and the tone curve's
+        # shoulder recovers it. Clipping here was one of the serial hard clips
+        # that made "brighter" and "windows hold" fight over the same 8 bits.
+        img = img.copy()
+        img[..., 2] *= rg
+        img[..., 1] *= gg
+        img[..., 0] *= bg
+        return img
     except Exception:
         return img
 
@@ -173,7 +198,7 @@ def auto_white_balance(img: np.ndarray) -> np.ndarray:
 def auto_exposure(
     img: np.ndarray,
     target: float = 0.50,
-    highlight_ceiling: float = 0.94,
+    highlight_ceiling: Optional[float] = None,
     highlight_percentile: float = 97.0,
 ) -> np.ndarray:
     # Normalise overall brightness to a target so a dark/bright merge lands at a
@@ -182,17 +207,23 @@ def auto_exposure(
     # luminance (robust to bright-window outliers); the tone curve's highlight
     # roll-off then softens whatever the windows do.
     #
-    # v4 fix (2026-07-01): a real render exposed the flaw — this used to be a
-    # flat multiply capped only by a fixed gain ceiling, so a dark room forced a
-    # big gain that hard-clipped an already-recovered window (window-pull, P1)
-    # straight to 255 BEFORE the tone curve's roll-off ever saw it (a LUT can't
-    # un-clip a value that's already 255). Now the gain is also bounded so the
-    # frame's OWN bright end (the `highlight_percentile`, robust to a handful of
-    # blown specular pixels) doesn't cross `highlight_ceiling` — leaving the
-    # tone curve's shoulder real headroom to do the final soft compression
-    # instead of cleaning up an already-flat white. Multiplicative, so colour
-    # ratios are preserved (no colour shift) either way.
+    # v4 fix: the gain is bounded so the frame's OWN bright end (the
+    # `highlight_percentile`, robust to a few blown specular pixels) doesn't
+    # cross `highlight_ceiling` — a dark room can't force a gain that blows an
+    # already-recovered window (window-pull) flat before the shoulder sees it.
+    #
+    # v6: in the float pipeline the ceiling sits ABOVE white (default 1.05) —
+    # over-range survives (nothing clips here) and the tone curve's shoulder
+    # compresses it back under 255 with its separation intact. That's the
+    # mechanism that finally decouples "expose the room properly" from "hold
+    # the windows": the v2↔v3 ping-pong existed because uint8 forced one knob
+    # to do both. On uint8 input (back-compat path) over-range would be
+    # destroyed by the clip below, so the ceiling stays at 0.94.
+    # Multiplicative either way, so colour ratios are preserved.
     try:
+        is_float = img.dtype != np.uint8
+        if highlight_ceiling is None:
+            highlight_ceiling = 1.05 if is_float else 0.94
         small = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32)
         b, g, r = small[..., 0], small[..., 1], small[..., 2]
         lum = 0.114 * b + 0.587 * g + 0.299 * r
@@ -206,39 +237,87 @@ def auto_exposure(
         if hi > 0.001:
             highlight_safe_gain = highlight_ceiling / hi
             gain = min(gain, max(highlight_safe_gain, 0.6))
+        if is_float:
+            return img * np.float32(gain)  # unclipped — shoulder handles over-range
         out = img.astype(np.float32) * gain
         return np.clip(out, 0, 255).astype(np.uint8)
     except Exception:
         return img
 
 
-def shadow_lift(img: np.ndarray, amount: float = 0.40, radius_frac: float = 0.25) -> np.ndarray:
-    # ROOM-SCALE dynamic-range compression — the "flambient" look a real AutoHDR
-    # comparison showed we're still missing even after auto_exposure/tone_curve:
-    # our output is a stop or more darker in the foreground than the window wall,
-    # while the reference reads nearly flat, floor-to-ceiling.
+_LUM_BGR = np.array([[0.114, 0.587, 0.299]], dtype=np.float32)
+
+
+def _luminance_f32(img: np.ndarray) -> np.ndarray:
+    # cv2.transform is a single SIMD pass (vs three numpy casts + weighted sum),
+    # which matters at native resolution where these are pure memory-bandwidth ops.
+    return cv2.transform(img.astype(np.float32, copy=False), _LUM_BGR).reshape(img.shape[:2])
+
+
+def shadow_lift(
+    img: np.ndarray,
+    amount: float = 0.40,
+    radius_frac: float = 0.20,
+    eps: float = 1500.0,
+    work_edge: int = 384,
+) -> np.ndarray:
+    # ROOM-SCALE dynamic-range compression — the "flambient" look the AutoHDR
+    # side-by-side showed we're missing: our output reads a stop-plus darker in
+    # the foreground than the window wall, the reference reads nearly flat.
+    # Splits luminance into a room-scale BASE ("this corner is shadowed, that
+    # wall is lit") and a DETAIL layer (texture/grain, untouched), compresses
+    # only the base toward its own mean — a uniformly-lit frame is a true no-op.
     #
-    # This is NOT the local_contrast()/CLAHE above (that's a small 16x16-tile
-    # operator for micro-texture and was reverted for reading gritty). This
-    # splits luminance into a large-radius BASE (room-scale — "this corner is
-    # shadowed, that wall is lit") and a DETAIL layer (base subtracted out —
-    # wood grain, edges, fine texture). Only the base is compressed, toward its
-    # OWN mean — so a uniformly-lit frame is a no-op, and a frame with a
-    # shadowed corner next to a bright window wall pulls both toward the
-    # middle, while the untouched detail layer keeps it reading sharp, not
-    # mushy. Runs BEFORE the global tone_curve, which still shapes the overall
-    # look (airy gamma, highlight roll-off) on top.
+    # v6 rebuild, two fixes over the v5 Gaussian version:
+    #  - EDGE-AWARE base (self-guided filter): a Gaussian smears window
+    #    brightness across the window/wall boundary, so compression painted a
+    #    glow band onto the dark side — the exact halo artifact that makes
+    #    photos read "HDR-pushed". The guided filter keeps strong edges (local
+    #    variance >> eps) in the base, so the compression steps AT the edge
+    #    instead of across it. Texture (variance < eps) stays in detail.
+    #  - PROXY-SCALE compute: v5 ran a sigma≈0.25·min(h,w) Gaussian at native
+    #    resolution — a ~10,000-px kernel on a 40MP frame, minutes of CPU. The
+    #    base coefficients are computed on a ≤`work_edge` proxy and upsampled;
+    #    for a room-scale base the result is visually identical and ~100× faster.
+    #
+    # Applied as a multiplicative luminance gain, so hue/chroma ratios are
+    # preserved. Accepts uint8 or float32; float in → float out (no clip).
     try:
-        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
-        l = lab[..., 0]
+        is_float = img.dtype != np.uint8
+        l = _luminance_f32(img)
         h, w = l.shape[:2]
-        sigma = max(8.0, min(h, w) * radius_frac)
-        base = cv2.GaussianBlur(l, (0, 0), sigmaX=sigma)
-        detail = l - base
-        mean = float(base.mean())
-        compressed_base = mean + (base - mean) * (1.0 - amount)
-        lab[..., 0] = np.clip(compressed_base + detail, 0, 255)
-        return cv2.cvtColor(lab.astype(np.uint8), cv2.COLOR_LAB2BGR)
+        scale = work_edge / max(h, w)
+        if scale < 1.0:
+            small = cv2.resize(l, (max(2, round(w * scale)), max(2, round(h * scale))), interpolation=cv2.INTER_AREA)
+        else:
+            small = l
+        r_box = max(4, int(min(small.shape[:2]) * radius_frac))
+        k = (2 * r_box + 1, 2 * r_box + 1)
+        mean = cv2.blur(small, k)
+        var = cv2.blur(small * small, k) - mean * mean
+        a = var / (var + eps)                # →1 at strong edges (kept in base)
+        b_coef = (1.0 - a) * mean            # →mean in flat/textured regions
+        a = cv2.blur(a, k)                   # canonical guided-filter smoothing
+        b_coef = cv2.blur(b_coef, k)         # of the coefficient maps
+        # Full-res section below is pure memory bandwidth at native resolution —
+        # keep it to in-place passes on two single-channel buffers (base, l).
+        base = cv2.resize(a, (w, h), interpolation=cv2.INTER_LINEAR)
+        base *= l
+        base += cv2.resize(b_coef, (w, h), interpolation=cv2.INTER_LINEAR)
+        m = float(base.mean())
+        # gain = clip((l - amount·(base − m)) / max(l, ε), 0.5, 2.5), in place:
+        base -= m
+        base *= -amount
+        base += l                            # base is now new_l
+        np.maximum(l, 1e-3, out=l)
+        base /= l                            # base is now the raw gain
+        np.clip(base, 0.5, 2.5, out=base)
+        out = img.astype(np.float32)
+        out *= base[..., None]
+        if is_float:
+            return out
+        np.clip(out, 0, 255, out=out)
+        return out.astype(np.uint8)
     except Exception:
         return img
 
@@ -259,6 +338,48 @@ def local_contrast(img: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
 
 
+def _shoulder(t: np.ndarray, knee: float = 0.80, rolloff: float = 0.35) -> np.ndarray:
+    # Rational highlight shoulder with real OVER-RANGE headroom. Input t is
+    # normalized luminance (1.0 = white) and may exceed 1.0 in the float
+    # pipeline (exposure/WB run unclipped there). Everything above the knee is
+    # compressed smoothly so that t = H (the headroom limit) lands exactly at
+    # 1.0 — over-range values come back UNDER white with their separation
+    # intact, instead of clipping to a flat 255. g(u) = u / (1 + c·u) is
+    # monotonic, C1 at the knee (unit slope), and hits 1 at the headroom limit.
+    # This is the "expose the room, recover the windows in the shoulder"
+    # mechanism; the modest H keeps in-range whites near-white (255-in maps to
+    # ~241, not a dingy grey).
+    H = 1.0 + 0.18 * rolloff
+    U = (H - knee) / (1.0 - knee)
+    c = (U - 1.0) / U
+    u = np.maximum(t - knee, 0.0) / (1.0 - knee)
+    g = u / (1.0 + c * u)
+    return np.where(t > knee, knee + (1.0 - knee) * g, t)
+
+
+def _tone_map(
+    x: np.ndarray,
+    black_point: float,
+    contrast: float,
+    airy_gamma: float,
+    highlight_rolloff: float,
+) -> np.ndarray:
+    # The curve itself, in float (x in 0..255-and-above). Luxury = bright &
+    # airy, low contrast: a hair of black point (just off muddy), an actual
+    # DE-contrast (<1 = softer), a gentle gamma lift opening the midtones, and
+    # (when rolloff > 0) the over-range-aware shoulder above.
+    y = (x - black_point) * (255.0 / (255.0 - black_point))
+    y = (y - 128.0) * contrast + 128.0
+    y = np.maximum(y, 0.0)
+    y /= 255.0
+    # cv2.pow is a SIMD pass; np.power is scalar transcendental per element —
+    # a real difference on a native-resolution frame.
+    t = cv2.pow(y, airy_gamma) if y.ndim >= 2 else np.power(y, airy_gamma)
+    if highlight_rolloff > 0:
+        t = _shoulder(t, rolloff=highlight_rolloff)
+    return t * 255.0
+
+
 def tone_curve(
     img: np.ndarray,
     black_point: float = 1.0,
@@ -266,33 +387,39 @@ def tone_curve(
     airy_gamma: float = 0.88,
     highlight_rolloff: float = 0.0,
 ) -> np.ndarray:
-    # Luxury = bright & airy, low contrast. A hair of black point (just off muddy),
-    # an actual DE-contrast (<1 compresses the tonal range = softer), plus a gentle
-    # gamma lift opening the midtones so the property feels light and expensive.
-    x = np.arange(256, dtype=np.float32)
-    y = (x - black_point) * (255.0 / (255.0 - black_point))  # light black point
-    y = (y - 128.0) * contrast + 128.0  # contrast (1.0 = none)
-    y = np.clip(y, 0, 255)
-    y = 255.0 * np.power(y / 255.0, airy_gamma)  # airy midtone lift (<1 brightens)
-    if highlight_rolloff > 0:
-        # Soft highlight shoulder: gently compress the top end so bright areas
-        # (windows, bright walls) hold tonal separation instead of clipping to a
-        # flat white — the architectural/editorial "windows keep their view" look.
-        # Monotonic ease-in above the knee; pure white (255) stays 255.
-        t = y / 255.0
-        knee = 0.80
-        u = np.clip((t - knee) / (1.0 - knee), 0.0, 1.0)
-        shoulder = (1.0 - highlight_rolloff) * u + highlight_rolloff * (u * u)
-        t = np.where(t > knee, knee + (1.0 - knee) * shoulder, t)
-        y = t * 255.0
-    lut = np.clip(y, 0, 255).astype(np.uint8)
-    return cv2.LUT(img, lut)
+    # uint8 → applied as a LUT (identical math, sampled at the 256 levels).
+    # float32 (the v6 grade core) → over-range preserved through the shoulder,
+    # no clip (the grade quantizes exactly once, at the end). Applied via a
+    # dense 65k-entry table of the exact curve — a gather instead of several
+    # full-res transcendental passes (~5× faster at native resolution), with
+    # quantization ≤ 0.005 luminance levels (invisible).
+    if img.dtype == np.uint8:
+        x = np.arange(256, dtype=np.float32)
+        y = _tone_map(x, black_point, contrast, airy_gamma, highlight_rolloff)
+        lut = np.clip(np.round(y), 0, 255).astype(np.uint8)
+        return cv2.LUT(img, lut)
+    max_in = 320.0  # covers the exposure/WB over-range headroom with margin
+    n = 65536
+    xs = np.linspace(0.0, max_in, n, dtype=np.float32)
+    table = _tone_map(xs, black_point, contrast, airy_gamma, highlight_rolloff)
+    # Clamp BEFORE the uint16 cast: a stray specular above the 97th-percentile
+    # ceiling (which only bounds the percentile, not the max) would otherwise
+    # wrap the cast and index garbage.
+    idx = np.clip(img * np.float32((n - 1) / max_in), 0, n - 1).astype(np.uint16)
+    return table[idx]
 
 
 def saturate(img: np.ndarray, scale: float = 1.0) -> np.ndarray:
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
-    hsv[..., 1] = np.clip(hsv[..., 1] * scale, 0, 255)
-    return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+    # Luminance-mix saturation: out = lum + (img − lum)·scale. Equivalent to a
+    # gentle chroma scale for the small factors we use, works natively in float
+    # (v6: no more uint8 HSV round-trip, which quantized and could micro-shift
+    # hue), and scale = 0 is exact greyscale.
+    is_float = img.dtype != np.uint8
+    lum = _luminance_f32(img)[..., None]
+    out = lum + (img.astype(np.float32) - lum) * np.float32(scale)
+    if is_float:
+        return out
+    return np.clip(out, 0, 255).astype(np.uint8)
 
 
 def sharpen(img: np.ndarray, amount: float = 0.25) -> np.ndarray:
@@ -337,54 +464,58 @@ def soften_sky(img: np.ndarray, sat_scale: float = 0.88, lift: float = 12.0) -> 
 
 
 def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
-    img = correct_lens(img)  # geometric correction first, before tone/colour
-    img = auto_white_balance(img)  # neutral whites + tint correction
-    # Proper exposure: normalise overall brightness BEFORE tone shaping so a dark
-    # or bright merge lands at a consistent, well-exposed level. sober targets
-    # higher than default (0.55 vs 0.52) since it has a highlight roll-off (and,
-    # as of v4, a highlight-aware exposure cap) to hold windows; default has
-    # neither, so its lower target stays the safety margin.
+    # v6 (2026-07-01, Fable rebuild): the grade now runs a FLOAT32 core with
+    # exactly ONE quantization, at the end. The old pipeline clipped and
+    # re-quantized at every stage, which is why "brighter" and "windows hold"
+    # kept fighting (the v2↔v3 ping-pong): once any stage clipped a window to
+    # 255, no later stage could recover it. In float, WB/exposure may push
+    # near-whites over 255, and the tone curve's over-range shoulder brings
+    # them back UNDER white with their separation intact.
     #
-    # v4 retune (2026-07-01): v3's 0.58 target, combined with the OLD flat gain
-    # cap, blew out windows and bloomed the warm accent lighting on a real
-    # render — dialed back partway, and paired with the auto_exposure
-    # highlight-safety fix above so brightness and highlight-holding aren't
-    # fighting the same knob.
-    img = auto_exposure(img, target=0.55 if style == "sober" else 0.52)
+    # Order matters and is deliberate:
+    #  - lens + denoise on uint8 FIRST: geometry has no precision to gain, and
+    #    denoising the unamplified signal means later gains can't amplify noise
+    #    that a later denoise would then have to chase.
+    #  - shadow_lift BEFORE auto_exposure: compressing the room-scale range
+    #    first RAISES the median and LOWERS the bright end, so the exposure
+    #    push toward target needs less gain and its highlight ceiling binds
+    #    later — compress-then-push is what actually brightens the room
+    #    without re-blowing the windows.
+    img = correct_lens(img)
     img = denoise(img)
-    # (local_contrast/CLAHE intentionally omitted — it was adding the gritty
-    #  micro-contrast that read as too contrasty.)
+    f = img.astype(np.float32)
+    f = auto_white_balance(f)  # neutral whites + tint; unclipped in float
     if style == "sober":
-        # v5 addition (2026-07-01): a real AutoHDR side-by-side showed our output
-        # still a stop-plus darker in the foreground than the window wall, where
-        # the reference reads nearly flat floor-to-ceiling ("flambient"). Global
-        # exposure/gamma alone can't do that without re-blowing the highlights we
-        # just fixed — this is a genuine room-scale dynamic-range compression, not
-        # another global brightness push. Conservative amount; needs confirmation
-        # on a real render like every step in this tuning loop.
-        img = shadow_lift(img, amount=0.40)
-        # Architectural / interior design: BRIGHT, airy, and accurate — the
-        # reference look is luminous, not dark/documentary. "Not HDR-pushed" means
-        # no gritty local-contrast/halos, NOT darker. So: a gentle midtone+shadow
-        # lift (gamma 0.86) opens the room, a light black point (1.0) keeps shadows
-        # from muddying, a touch of de-contrast (0.94) gives the soft editorial
-        # feel, and the highlight roll-off holds window/exterior detail. Colour
-        # stays faithful (no sky stylisation). v4 retune (2026-07-01): v3 (gamma
-        # 0.82) pushed too hard on a real render — dialed the midtone lift back
-        # partway (paired with the auto_exposure highlight-safety fix, so windows
-        # hold without needing as much gamma push to make the room feel airy).
-        img = tone_curve(
-            img, black_point=1.0, contrast=0.94, airy_gamma=0.86, highlight_rolloff=0.35
+        # Room-scale flambient compression (edge-aware, halo-free) — the gap a
+        # real AutoHDR side-by-side showed after v4: foreground a stop-plus
+        # darker than the window wall while the reference reads nearly flat.
+        f = shadow_lift(f, amount=0.40)
+    # sober targets brighter than default (0.55 vs 0.52) and gets the higher
+    # float-headroom ceiling — it has the roll-off shoulder to recover
+    # over-range; default has no shoulder so it keeps the conservative cap.
+    f = auto_exposure(
+        f,
+        target=0.55 if style == "sober" else 0.52,
+        highlight_ceiling=1.05 if style == "sober" else 0.94,
+    )
+    if style == "sober":
+        # Architectural / interior / MLS / luxury (all profiles): BRIGHT, airy,
+        # accurate. Gentle midtone lift (gamma 0.86), light black point, mild
+        # de-contrast (0.94) for the soft editorial feel, and the over-range
+        # shoulder holds window/exterior detail. Colour stays faithful.
+        f = tone_curve(
+            f, black_point=1.0, contrast=0.94, airy_gamma=0.86, highlight_rolloff=0.35
         )
-        img = saturate(img, 0.98)
-        img = sharpen(img)
-    else:
-        # Real-estate (MLS / luxury): bright, airy, low-contrast luxury finish.
-        img = tone_curve(img)
-        img = saturate(img)
-        img = soften_sky(img)
-        img = sharpen(img)
-    return img
+        f = saturate(f, 0.98)
+        f = sharpen(f)
+        return np.clip(np.round(f), 0, 255).astype(np.uint8)  # THE quantization
+    # 'default' (currently unselected by any profile — kept as a possible
+    # punchier tier): airy curve, fuller saturation, sky soften.
+    f = tone_curve(f)
+    f = saturate(f)
+    out = np.clip(np.round(f), 0, 255).astype(np.uint8)
+    out = soften_sky(out)  # HSV masking wants uint8; near the end anyway
+    return sharpen(out)
 
 
 def resize_long_edge(img: np.ndarray, target: int) -> np.ndarray:

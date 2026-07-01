@@ -5,17 +5,22 @@ import { resolveRerun, withCorrection } from '@/lib/ai/rerun-resolve';
 import { getProvider } from '@/lib/ai';
 
 /**
- * POST /api/ai/rerun  { photo_id, correction? }
+ * POST /api/ai/rerun  { photo_id, correction?, provider? }
  *
  * Re-runs the recipe that produced a processed photo, against the SAME original
  * inputs the first edit used. Produces a NEW output (the old one is kept for
  * comparison) — non-destructive. When `correction` is supplied, it's folded into
  * the recipe's editor note so the re-render applies a targeted fix (used by the
- * QC "Fix" actions).
+ * QC "Fix" actions). When `provider` is supplied, the same recipe runs on a
+ * DIFFERENT provider — the one-click A/B ("same photo through GPT Image")
+ * without rebuilding the job by hand in Advanced.
  */
 const Body = z.object({
   photo_id: z.string().uuid(),
   correction: z.string().trim().min(1).optional(),
+  provider: z
+    .enum(['openai-gpt-image', 'gemini-nano-banana-2', 'gemini-nano-banana-pro', 'oceano-enhance'])
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -23,7 +28,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'validation_failed', issues: parsed.error.issues }, { status: 400 });
   }
-  const { photo_id, correction } = parsed.data;
+  const { photo_id, correction, provider: providerOverride } = parsed.data;
 
   const supabase = createClient();
   const {
@@ -38,7 +43,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: resolved.error }, { status });
   }
 
-  const recipe = correction ? withCorrection(resolved.recipe, correction) : resolved.recipe;
+  let recipe = correction ? withCorrection(resolved.recipe, correction) : resolved.recipe;
+  if (providerOverride) recipe = { ...recipe, provider: providerOverride };
 
   // Validate the provider still has its key before enqueuing.
   const provider = getProvider((recipe.provider as any) ?? 'auto', recipe.job_type);
@@ -64,6 +70,7 @@ export async function POST(request: Request) {
         rerun_of: resolved.srcJobId ?? null,
         rerun_from_photo: photo_id,
         ...(correction ? { qc_fix: true } : {}),
+        ...(providerOverride ? { provider_ab: providerOverride } : {}),
       } as any,
     })
     .select('id')

@@ -53,26 +53,43 @@ change the default provider.
 - **DB** migrations → applied via Supabase MCP `apply_migration` (dry-run in a rolled-back txn first; run security advisor after). `0048` + `0049` already applied to prod.
 
 ## 3. Current grade parameters (the tuning starting point)
-`worker-edit/server.py`, `grade(img, style)`. Order: correct_lens → auto_white_balance → auto_exposure → denoise → (sober: shadow_lift) → tone/sat/sharpen.
+`worker-edit/server.py`, `grade(img, style)`. Order (v6): correct_lens → denoise →
+**float32 core** ( auto_white_balance → [sober: shadow_lift] → auto_exposure →
+tone_curve → saturate → sharpen ) → single quantization → [default: soften_sky].
 
-**v5 (2026-07-01), NOT yet render-confirmed:** a real render of v4 held up on
-highlights/cast but showed a genuine room-scale gap next to the AutoHDR
-reference — our output reads a stop-plus darker in the foreground than the
-window wall, where the reference is nearly flat ("flambient"). Added
-`shadow_lift(img, amount=0.40)` for the `sober` style, run right before the
-tone curve: splits luminance into a large-radius BASE (room-scale — "this
-corner is shadowed, that wall is lit") and a DETAIL layer (fine texture/grain,
-untouched), then compresses only the base TOWARD ITS OWN MEAN — so a
-uniformly-lit frame is a no-op, and a shadowed-corner-next-to-lit-wall frame
-narrows that gap without an independent global brightness push (that's still
-auto_exposure/tone_curve's job) and without the "gritty" look the old
-small-tile `local_contrast()`/CLAHE (still unused, see below) caused — that
-one boosted MICRO-texture; this compresses MACRO/room-scale variation, the
-opposite direction. 55 pure-math tests green (monotonicity, no-op-on-uniform,
-narrows-the-gap-on-a-synthetic-two-region-frame, detail-preserved-on-a-
-fine-stripe-pattern) — same caveat as every step in this loop: **needs
-confirmation on a real render**, which this sandbox can't produce (no
-`*.fly.dev` access, no photo rendering).
+**v6 (2026-07-01, Fable rebuild), NOT yet render-confirmed.** A fresh
+architectural review found the root cause of the whole v1→v5 tuning ping-pong
+plus three real defects in v5, all fixed:
+
+- **Float32 core, ONE quantization.** The old pipeline clipped + re-quantized
+  at every stage, so "expose the room" and "hold the windows" fought over the
+  same 8 bits — once any stage clipped a window to 255, nothing later could
+  recover it (that was the v3 blowout). Now WB/exposure run unclipped, and the
+  tone curve's **over-range shoulder** (rational, C1 at the 0.80 knee, headroom
+  H = 1 + 0.18·rolloff) brings pushed near-whites back UNDER 255 with their
+  separation intact. sober's exposure ceiling moves 0.94 → **1.05** (above
+  white — safe now, the shoulder recovers it); target stays 0.55, gamma 0.86.
+- **shadow_lift rebuilt: edge-aware + ~100× faster.** v5's Gaussian base
+  (sigma ≈ 0.25·min(h,w)) at native res was a ~10,000-px kernel — minutes of
+  CPU per 40MP frame — and a Gaussian base halos at window/wall boundaries
+  (the "HDR glow" artifact). v6 uses a self-guided filter (eps 1500) computed
+  on a ≤384px proxy, applied as a multiplicative luminance gain (hue-safe).
+  Order also flipped: shadow_lift now runs BEFORE auto_exposure —
+  compress-then-push raises the median and lowers the bright end, so the
+  exposure push binds later and the room genuinely brightens.
+- **fuse() overshoot preserved.** Mertens reconstruction can exceed [0,1] at
+  window edges; the old hard clip flattened that to 255 before the JPEG. Now
+  renormalized by the 99.9th percentile when hot.
+- Perf @ 24MP on a throttled sandbox: full sober grade ~6s (v5's shadow_lift
+  alone was ~10s there and would be minutes at 40MP+); 61MP frame passes
+  without OOM on the 2 GB layout.
+
+63 pure-math tests green, including: over-range separation through the
+shoulder, float-path == uint8-LUT on in-range values, NO-HALO at a hard
+window/wall edge (v5 fails that test by ~30 levels), and an end-to-end
+dim-room+bright-window grade where the room lifts ≥25 levels while the window
+stays < 255. Same caveat as always: **needs a real render + `fly deploy`**
+(this sandbox can't render photos or reach `*.fly.dev`).
 
 **v4 retune (2026-07-01), confirmed against a REAL render:** all four profiles
 now route to `sober` — the owner reported the `default` style (used only by
