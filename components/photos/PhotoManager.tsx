@@ -1297,6 +1297,10 @@ function Stage2({
   setPhotoUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
 }) {
   const targetCount = selection.size > 0 ? selection.size : inputs.length;
+  // One button by default; the provider/style/sky/toggle knobs stay available
+  // but tucked behind this disclosure so they don't stand between "approve
+  // the merge" and "get the enhanced photo" for the common case.
+  const [showAdvanced, setShowAdvanced] = useState(false);
   return (
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-4">
@@ -1363,6 +1367,46 @@ function Stage2({
           )}
 
           {!autoEnhanceOnUpload && (
+          <>
+          <section className="card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold text-slate-800">Ready to enhance</div>
+              <p className="text-xs text-slate-500 mt-0.5 max-w-prose">
+                One click runs the signature look — accurate, bright, airy, windows held. Open{' '}
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className="underline decoration-dotted underline-offset-2 hover:text-ocean-700"
+                >
+                  Advanced
+                </button>{' '}
+                to change the provider, sky style, or per-photo fixes first.
+              </p>
+            </div>
+            <button
+              onClick={onRun}
+              disabled={running || inputs.length === 0}
+              className="btn-primary shrink-0"
+            >
+              {running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
+              Enhance {targetCount} {targetCount === 1 ? 'photo' : 'photos'}
+            </button>
+          </section>
+
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="text-xs font-medium text-slate-500 hover:text-slate-700 inline-flex items-center gap-1"
+          >
+            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
+            Advanced — provider, style, sky, and per-photo fixes
+          </button>
+
+          {showAdvanced && (
           <>
           <section className="card p-4 space-y-4">
             <div className="flex items-center justify-between">
@@ -1443,7 +1487,7 @@ function Stage2({
             </p>
           </section>
 
-          <section className="card p-4 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+          <section className="card p-4 grid gap-4 md:grid-cols-2 md:items-end">
             <div>
               <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 AI Provider
@@ -1453,10 +1497,10 @@ function Stage2({
                 value={provider}
                 onChange={(e) => onProviderChange(e.target.value as AiProvider)}
               >
-                <option value="openai-gpt-image">GPT Image 2.0 (default)</option>
+                <option value="oceano-enhance">Oceano Smart Enhance (default)</option>
+                <option value="openai-gpt-image">GPT Image 2.0</option>
                 <option value="gemini-nano-banana-2">Nano Banana 2 (Gemini)</option>
                 <option value="gemini-nano-banana-pro">Nano Banana Pro (Gemini)</option>
-                <option value="oceano-enhance">Oceano Smart Enhance</option>
                 <option value="auto">Auto pick</option>
               </select>
             </div>
@@ -1476,19 +1520,9 @@ function Stage2({
                 </span>
               </label>
             </div>
-            <button
-              onClick={onRun}
-              disabled={running || inputs.length === 0}
-              className="btn-primary"
-            >
-              {running ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Wand2 className="h-4 w-4" />
-              )}
-              Enhance {targetCount} {targetCount === 1 ? 'photo' : 'photos'}
-            </button>
           </section>
+          </>
+          )}
           </>
           )}
         </>
