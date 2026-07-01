@@ -166,6 +166,13 @@ export async function runAiJob(jobId: string): Promise<{
 
     // 4. Upload outputs and create photo rows
     const outputPhotoIds: string[] = [];
+    // Bootstrap dataset for a possible future distilled/custom tone-mapping
+    // model: capture (original, output) pairs whenever a NON-deterministic
+    // provider ran — never for our own engine (oceano-enhance), since that's
+    // math we already know, not a target to learn. See training_pairs table
+    // (migration 0050) and docs/HANDOFF-photo-quality.md.
+    const isGenerative = (job.provider ?? 'oceano-enhance') !== 'oceano-enhance';
+    const trainingPairRows: any[] = [];
     for (const out of resp.outputs) {
       // Optional enlargement: only if DELIVERY_LONG_EDGE is set ABOVE the output's
       // real size (default 0 = never). We do not upscale by default — interpolating
@@ -240,6 +247,35 @@ export async function runAiJob(jobId: string): Promise<{
       });
       if (insErr) throw new Error(`Photo insert failed: ${insErr.message}`);
       outputPhotoIds.push(photoId);
+
+      if (isGenerative && inputs[0]) {
+        trainingPairRows.push({
+          order_id: job.order_id,
+          job_id: jobId,
+          source_photo_id: inputs[0].id,
+          output_photo_id: photoId,
+          provider: job.provider ?? 'oceano-enhance',
+          job_type: job.job_type,
+          project_type: (order as any)?.project_type ?? null,
+          source_bucket: inputs[0].bucket,
+          source_storage_path: inputs[0].storage_path,
+          output_bucket: 'processed-photos',
+          output_storage_path: storagePath,
+          recipe: (job.params as any)?.recipe ?? null,
+        });
+      }
+    }
+
+    if (trainingPairRows.length) {
+      // Best-effort: never fail (or slow down) real delivery over a data-
+      // capture write. bucket/path are denormalized snapshots, so this stays
+      // useful even if the photo rows above are deleted later (order
+      // deletion, RAW cleanup).
+      try {
+        await supabase.from('training_pairs').insert(trainingPairRows);
+      } catch (trainingErr) {
+        captureError('ai.runner.trainingCapture', trainingErr, { jobId, orderId: job.order_id });
+      }
     }
 
     // 5. Mark job + inputs complete

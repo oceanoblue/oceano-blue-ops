@@ -3254,6 +3254,86 @@ export type Database = {
         }
         Relationships: []
       }
+      training_pairs: {
+        Row: {
+          created_at: string
+          id: string
+          job_id: string | null
+          job_type: string
+          order_id: string | null
+          output_bucket: string
+          output_photo_id: string | null
+          output_storage_path: string
+          project_type: string | null
+          provider: string
+          recipe: Json | null
+          source_bucket: string
+          source_photo_id: string | null
+          source_storage_path: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          job_type: string
+          order_id?: string | null
+          output_bucket: string
+          output_photo_id?: string | null
+          output_storage_path: string
+          project_type?: string | null
+          provider: string
+          recipe?: Json | null
+          source_bucket: string
+          source_photo_id?: string | null
+          source_storage_path: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          job_type?: string
+          order_id?: string | null
+          output_bucket?: string
+          output_photo_id?: string | null
+          output_storage_path?: string
+          project_type?: string | null
+          provider?: string
+          recipe?: Json | null
+          source_bucket?: string
+          source_photo_id?: string | null
+          source_storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_pairs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "ai_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_pairs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_pairs_output_photo_id_fkey"
+            columns: ["output_photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_pairs_source_photo_id_fkey"
+            columns: ["source_photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transcripts: {
         Row: {
           asset_id: string | null
