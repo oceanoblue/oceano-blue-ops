@@ -223,6 +223,48 @@ def test_resize_long_edge_noop_and_downscale():
     assert max(out.shape[:2]) == 100
 
 
+# ── shadow_lift ────────────────────────────────────────────────────────────────
+def test_shadow_lift_noop_on_uniform_image():
+    # A uniformly-lit frame has nothing to compress: base == its own mean
+    # everywhere, so this must be a true no-op (up to LAB round-trip rounding).
+    img = solid((120, 120, 120), h=128, w=128)
+    out = server.shadow_lift(img, amount=0.40)
+    assert np.abs(out.astype(int) - img.astype(int)).max() <= 2
+
+
+def test_shadow_lift_compresses_dynamic_range():
+    # A dark "shadowed corner" beside a bright "window wall" — the real-world
+    # case a room-scale gap between AutoHDR (near-flat) and our output (still a
+    # stop-plus darker in the foreground) came from. Both large regions must
+    # move toward the middle, narrowing the gap between them.
+    img = np.zeros((128, 128, 3), np.uint8)
+    img[:, :64] = 40    # dark half
+    img[:, 64:] = 220   # bright half
+    out = server.shadow_lift(img, amount=0.40)
+    dark_before, bright_before = 40, 220
+    dark_after = float(luminance(out[:, :30]).mean())   # sample away from the seam
+    bright_after = float(luminance(out[:, 98:]).mean())
+    assert dark_after > dark_before  # shadow lifted...
+    assert bright_after < bright_before  # ...window wall pulled down...
+    assert (bright_after - dark_after) < (bright_before - dark_before)  # ...gap narrows
+
+
+def test_shadow_lift_preserves_fine_detail():
+    # A fine stripe pattern (period tiny relative to the compression radius) on
+    # an otherwise uniform frame lands almost entirely in the DETAIL layer, not
+    # the compressed BASE — so its amplitude must survive, not get smoothed away
+    # (this is the failure mode that made the old small-tile CLAHE read gritty
+    # in the other direction; this must not read mushy in this one).
+    img = np.full((128, 128, 3), 120, np.uint8)
+    img[:, ::2] = 100  # alternating fine stripes
+    img[:, 1::2] = 140
+    out = server.shadow_lift(img, amount=0.40)
+    amp_before = 140 - 100
+    row = luminance(out[64:65, :])
+    amp_after = float(row.max() - row.min())
+    assert amp_after > amp_before * 0.6  # detail substantially preserved
+
+
 # ── grade end-to-end ──────────────────────────────────────────────────────────
 @pytest.mark.parametrize("style", ["default", "sober"])
 def test_grade_outputs_valid_image(style):

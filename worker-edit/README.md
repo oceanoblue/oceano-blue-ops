@@ -23,7 +23,8 @@ Header `x-edit-secret` must match `EDIT_WORKER_SECRET`. Returns `image/jpeg`.
 - **fuse**: align (best-effort) → Mertens multi-scale exposure fusion → [window pull] →
   [straighten] → resize.
 - **grade** (`grade(img, style)`): [straighten] → lens correction → auto white balance
-  (tint-aware) → auto-exposure (median-based) → light denoise → tone curve (black point +
+  (tint-aware) → auto-exposure (median-based, highlight-aware) → light denoise →
+  (`sober` only: room-scale shadow lift, `shadow_lift()`) → tone curve (black point +
   gentle de-contrast + airy gamma; `sober` adds a highlight roll-off) → gentle saturation →
   (`default` only: sky soften) → edge-aware sharpen → [sky replace]. `style` is `default`
   (MLS / luxury) or `sober` (architectural / interior). See

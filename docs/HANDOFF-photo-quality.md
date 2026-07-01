@@ -11,13 +11,26 @@ deploy of `worker-edit`, confirmed live). The pipeline works end-to-end: RAW
 decode → bracket fusion (+ window-pull) → finishing grade → optional
 generative edits.
 
-**Grade tuning v4 is CONFIRMED against a real render** (kitchen photo, HDR
+**Grade tuning v4 fixed the highlight/cast regression** (kitchen photo, HDR
 merge + sober grade): windows on both sides hold the tree/yard view instead of
 blowing to flat white, the ceiling reads neutral white, and the overall cast
 looks balanced (the remaining warmth is the room's real wood tones + accent
-lighting, not a color-cast artifact). This closed out the v1→v4 tuning loop
-(see §3) — no further blind tuning needed unless a different scene surfaces a
-new issue.
+lighting, not a color-cast artifact). That closed out the v1→v4 exposure/tone
+regressions (see §3).
+
+**But a direct side-by-side against the actual AutoHDR reference (same v4
+render) showed a real remaining gap**: AutoHDR's look is a stop-plus brighter
+overall and much flatter — the classic "flambient" real-estate technique where
+foreground shadow and the lit window wall read almost the same brightness.
+Global exposure/gamma can't do that without re-blowing the highlights v4 just
+fixed, since it's a ROOM-SCALE dynamic-range problem, not an overall-level one.
+**v5 (2026-07-01, NOT yet render-confirmed)** adds `shadow_lift()` — a
+large-radius, edge-aware compression of only the frame's own base luminance
+layer (detail/texture passes through untouched), run before the tone curve.
+See §3. Owner is also independently trying a generative provider (GPT Image /
+Nano Banana, already wired up in the ops UI's Advanced panel) on the same
+photo as a fast comparison — that's a parallel experiment, not a decision to
+change the default provider.
 
 ## 1. What shipped this session (PRs #141–#150)
 | PR | What |
@@ -40,7 +53,26 @@ new issue.
 - **DB** migrations → applied via Supabase MCP `apply_migration` (dry-run in a rolled-back txn first; run security advisor after). `0048` + `0049` already applied to prod.
 
 ## 3. Current grade parameters (the tuning starting point)
-`worker-edit/server.py`, `grade(img, style)`. Order: correct_lens → auto_white_balance → auto_exposure → denoise → tone/sat/sharpen.
+`worker-edit/server.py`, `grade(img, style)`. Order: correct_lens → auto_white_balance → auto_exposure → denoise → (sober: shadow_lift) → tone/sat/sharpen.
+
+**v5 (2026-07-01), NOT yet render-confirmed:** a real render of v4 held up on
+highlights/cast but showed a genuine room-scale gap next to the AutoHDR
+reference — our output reads a stop-plus darker in the foreground than the
+window wall, where the reference is nearly flat ("flambient"). Added
+`shadow_lift(img, amount=0.40)` for the `sober` style, run right before the
+tone curve: splits luminance into a large-radius BASE (room-scale — "this
+corner is shadowed, that wall is lit") and a DETAIL layer (fine texture/grain,
+untouched), then compresses only the base TOWARD ITS OWN MEAN — so a
+uniformly-lit frame is a no-op, and a shadowed-corner-next-to-lit-wall frame
+narrows that gap without an independent global brightness push (that's still
+auto_exposure/tone_curve's job) and without the "gritty" look the old
+small-tile `local_contrast()`/CLAHE (still unused, see below) caused — that
+one boosted MICRO-texture; this compresses MACRO/room-scale variation, the
+opposite direction. 55 pure-math tests green (monotonicity, no-op-on-uniform,
+narrows-the-gap-on-a-synthetic-two-region-frame, detail-preserved-on-a-
+fine-stripe-pattern) — same caveat as every step in this loop: **needs
+confirmation on a real render**, which this sandbox can't produce (no
+`*.fly.dev` access, no photo rendering).
 
 **v4 retune (2026-07-01), confirmed against a REAL render:** all four profiles
 now route to `sober` — the owner reported the `default` style (used only by

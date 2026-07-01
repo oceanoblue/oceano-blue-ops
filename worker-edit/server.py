@@ -212,6 +212,37 @@ def auto_exposure(
         return img
 
 
+def shadow_lift(img: np.ndarray, amount: float = 0.40, radius_frac: float = 0.25) -> np.ndarray:
+    # ROOM-SCALE dynamic-range compression — the "flambient" look a real AutoHDR
+    # comparison showed we're still missing even after auto_exposure/tone_curve:
+    # our output is a stop or more darker in the foreground than the window wall,
+    # while the reference reads nearly flat, floor-to-ceiling.
+    #
+    # This is NOT the local_contrast()/CLAHE above (that's a small 16x16-tile
+    # operator for micro-texture and was reverted for reading gritty). This
+    # splits luminance into a large-radius BASE (room-scale — "this corner is
+    # shadowed, that wall is lit") and a DETAIL layer (base subtracted out —
+    # wood grain, edges, fine texture). Only the base is compressed, toward its
+    # OWN mean — so a uniformly-lit frame is a no-op, and a frame with a
+    # shadowed corner next to a bright window wall pulls both toward the
+    # middle, while the untouched detail layer keeps it reading sharp, not
+    # mushy. Runs BEFORE the global tone_curve, which still shapes the overall
+    # look (airy gamma, highlight roll-off) on top.
+    try:
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+        l = lab[..., 0]
+        h, w = l.shape[:2]
+        sigma = max(8.0, min(h, w) * radius_frac)
+        base = cv2.GaussianBlur(l, (0, 0), sigmaX=sigma)
+        detail = l - base
+        mean = float(base.mean())
+        compressed_base = mean + (base - mean) * (1.0 - amount)
+        lab[..., 0] = np.clip(compressed_base + detail, 0, 255)
+        return cv2.cvtColor(lab.astype(np.uint8), cv2.COLOR_LAB2BGR)
+    except Exception:
+        return img
+
+
 def denoise(img: np.ndarray) -> np.ndarray:
     # Light, fast, edge-preserving. Done BEFORE local contrast/sharpen so we
     # never amplify noise into grain.
@@ -324,6 +355,14 @@ def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
     # (local_contrast/CLAHE intentionally omitted — it was adding the gritty
     #  micro-contrast that read as too contrasty.)
     if style == "sober":
+        # v5 addition (2026-07-01): a real AutoHDR side-by-side showed our output
+        # still a stop-plus darker in the foreground than the window wall, where
+        # the reference reads nearly flat floor-to-ceiling ("flambient"). Global
+        # exposure/gamma alone can't do that without re-blowing the highlights we
+        # just fixed — this is a genuine room-scale dynamic-range compression, not
+        # another global brightness push. Conservative amount; needs confirmation
+        # on a real render like every step in this tuning loop.
+        img = shadow_lift(img, amount=0.40)
         # Architectural / interior design: BRIGHT, airy, and accurate — the
         # reference look is luminous, not dark/documentary. "Not HDR-pushed" means
         # no gritty local-contrast/halos, NOT darker. So: a gentle midtone+shadow
