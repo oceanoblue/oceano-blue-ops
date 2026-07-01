@@ -170,15 +170,28 @@ def auto_white_balance(img: np.ndarray) -> np.ndarray:
         return img
 
 
-def auto_exposure(img: np.ndarray, target: float = 0.50) -> np.ndarray:
+def auto_exposure(
+    img: np.ndarray,
+    target: float = 0.50,
+    highlight_ceiling: float = 0.94,
+    highlight_percentile: float = 97.0,
+) -> np.ndarray:
     # Normalise overall brightness to a target so a dark/bright merge lands at a
     # consistent, properly-exposed level (the grade's black-point/gamma only SHAPE
     # tone — they don't set the overall level). Exposes for the ROOM via the MEDIAN
-    # luminance (robust to bright-window outliers) and caps the gain; the tone
-    # curve's highlight roll-off then softens whatever the windows do. (A global
-    # multiply can't both lift a dark room AND fully hold a bright window — that's
-    # local window-pull, Phase D — so we prioritise a correctly-exposed interior.)
-    # Multiplicative, so colour ratios are preserved (no colour shift).
+    # luminance (robust to bright-window outliers); the tone curve's highlight
+    # roll-off then softens whatever the windows do.
+    #
+    # v4 fix (2026-07-01): a real render exposed the flaw — this used to be a
+    # flat multiply capped only by a fixed gain ceiling, so a dark room forced a
+    # big gain that hard-clipped an already-recovered window (window-pull, P1)
+    # straight to 255 BEFORE the tone curve's roll-off ever saw it (a LUT can't
+    # un-clip a value that's already 255). Now the gain is also bounded so the
+    # frame's OWN bright end (the `highlight_percentile`, robust to a handful of
+    # blown specular pixels) doesn't cross `highlight_ceiling` — leaving the
+    # tone curve's shoulder real headroom to do the final soft compression
+    # instead of cleaning up an already-flat white. Multiplicative, so colour
+    # ratios are preserved (no colour shift) either way.
     try:
         small = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32)
         b, g, r = small[..., 0], small[..., 1], small[..., 2]
@@ -186,11 +199,13 @@ def auto_exposure(img: np.ndarray, target: float = 0.50) -> np.ndarray:
         med = float(np.median(lum)) / 255.0
         if med <= 0.001:
             return img
-        # Cap lift at 2.2× (don't manufacture a scene out of near-black) and allow
-        # mild darkening for over-bright merges. Raised from 1.8 (v3 retune,
-        # 2026-07-01): a genuinely dim single-frame source (enhance_single, no
-        # fusion headroom) was hitting the old cap short of the sober target.
-        gain = float(np.clip(target / med, 0.6, 2.2))
+        # Cap lift at 1.8× (don't manufacture a scene out of near-black) and allow
+        # mild darkening for over-bright merges.
+        gain = float(np.clip(target / med, 0.6, 1.8))
+        hi = float(np.percentile(lum, highlight_percentile)) / 255.0
+        if hi > 0.001:
+            highlight_safe_gain = highlight_ceiling / hi
+            gain = min(gain, max(highlight_safe_gain, 0.6))
         out = img.astype(np.float32) * gain
         return np.clip(out, 0, 255).astype(np.uint8)
     except Exception:
@@ -294,13 +309,17 @@ def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
     img = correct_lens(img)  # geometric correction first, before tone/colour
     img = auto_white_balance(img)  # neutral whites + tint correction
     # Proper exposure: normalise overall brightness BEFORE tone shaping so a dark
-    # or bright merge lands at a consistent, well-exposed level. sober now targets
-    # HIGHER than default (0.58 vs 0.52) — v3 retune, 2026-07-01: sober is the
-    # profile actually in production use (mls/luxury/architectural/interior all
-    # route here, see profiles.ts) and it has a highlight roll-off to hold
-    # windows, so it can push brighter without blowing them; default has no
-    # roll-off so its lower target stays the safety margin.
-    img = auto_exposure(img, target=0.58 if style == "sober" else 0.52)
+    # or bright merge lands at a consistent, well-exposed level. sober targets
+    # higher than default (0.55 vs 0.52) since it has a highlight roll-off (and,
+    # as of v4, a highlight-aware exposure cap) to hold windows; default has
+    # neither, so its lower target stays the safety margin.
+    #
+    # v4 retune (2026-07-01): v3's 0.58 target, combined with the OLD flat gain
+    # cap, blew out windows and bloomed the warm accent lighting on a real
+    # render — dialed back partway, and paired with the auto_exposure
+    # highlight-safety fix above so brightness and highlight-holding aren't
+    # fighting the same knob.
+    img = auto_exposure(img, target=0.55 if style == "sober" else 0.52)
     img = denoise(img)
     # (local_contrast/CLAHE intentionally omitted — it was adding the gritty
     #  micro-contrast that read as too contrasty.)
@@ -308,16 +327,15 @@ def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
         # Architectural / interior design: BRIGHT, airy, and accurate — the
         # reference look is luminous, not dark/documentary. "Not HDR-pushed" means
         # no gritty local-contrast/halos, NOT darker. So: a gentle midtone+shadow
-        # lift (gamma 0.82) opens the room, a light black point (1.0) keeps shadows
+        # lift (gamma 0.86) opens the room, a light black point (1.0) keeps shadows
         # from muddying, a touch of de-contrast (0.94) gives the soft editorial
         # feel, and the highlight roll-off holds window/exterior detail. Colour
-        # stays faithful (no sky stylisation). v3 retune (2026-07-01): v2 (gamma
-        # 0.90, target 0.50) still rendered dark/muddy next to the owner's AutoHDR
-        # side-by-side (a bright, evenly-lit kitchen) — raised the exposure target
-        # and lowered the gamma for a meaningfully brighter, airier result while
-        # keeping the same roll-off so windows still hold.
+        # stays faithful (no sky stylisation). v4 retune (2026-07-01): v3 (gamma
+        # 0.82) pushed too hard on a real render — dialed the midtone lift back
+        # partway (paired with the auto_exposure highlight-safety fix, so windows
+        # hold without needing as much gamma push to make the room feel airy).
         img = tone_curve(
-            img, black_point=1.0, contrast=0.94, airy_gamma=0.82, highlight_rolloff=0.35
+            img, black_point=1.0, contrast=0.94, airy_gamma=0.86, highlight_rolloff=0.35
         )
         img = saturate(img, 0.98)
         img = sharpen(img)

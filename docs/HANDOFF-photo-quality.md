@@ -35,24 +35,30 @@ owner's reference screenshots, but needs confirmation on real rendered output.
 ## 3. Current grade parameters (the tuning starting point)
 `worker-edit/server.py`, `grade(img, style)`. Order: correct_lens → auto_white_balance → auto_exposure → denoise → tone/sat/sharpen.
 
-**v3 retune (2026-07-01):** all four profiles now route to `sober` (see below) —
-the owner reported the `default` style (used only by MLS/Luxury before) was
-over-blowing highlights, and `sober` v2 (target 0.50, gamma 0.90) still read
-dark/muddy against a real AutoHDR side-by-side comparison the owner sent
-(a bright, evenly-lit kitchen vs. our darker/heavier output on a similar room).
-Reasoned math-only tune below; **needs confirmation on a real render** (this
-sandbox can't render photos or reach `*.fly.dev`).
+**v4 retune (2026-07-01), confirmed against a REAL render:** all four profiles
+now route to `sober` — the owner reported the `default` style (used only by
+MLS/Luxury before) was over-blowing highlights. `sober` v2 (target 0.50, gamma
+0.90) then read dark/muddy against a real AutoHDR side-by-side (a bright,
+evenly-lit kitchen vs. our darker/heavier output). v3 (target 0.58, gamma
+0.82, gain cap 2.2) over-corrected: a real render came back with **blown
+windows and a warm/sepia bloom** on the accent lighting. Root cause: the old
+`auto_exposure` was a flat multiply bounded only by a fixed gain cap — a dark
+room forced a big gain that hard-clipped an already-recovered window
+(window-pull) straight to 255 *before* the tone curve's highlight roll-off
+ever got a chance (a LUT can't un-clip a value that's already 255).
 
-- **auto_exposure** (both styles): median luminance → target (sober **0.58**,
-  default **0.52**), gain clamped **[0.6, 2.2]** (was 1.8 — a dim single-frame
-  source with no fusion headroom could hit the old cap short of target),
-  multiplicative. Exposes for the ROOM; windows handled by the roll-off (global
-  multiply can't hold a bright window AND lift a dark room — that's Phase D).
-- **auto_white_balance**: anchors **all 3 channels** to the neutral patch's grey (fixes green/magenta tint + warm/cool), gains clamped [0.80, 1.25].
+- **auto_exposure** (both styles): median luminance → target (sober **0.55**,
+  default **0.52**), gain clamped **[0.6, 1.8]** (the 2.2 v3 widening is
+  reverted). **New in v4:** the gain is ALSO capped so the frame's own
+  97th-percentile luminance doesn't cross a 0.94 ceiling — i.e. it backs off
+  the room-brightness gain when doing so would blow out whatever's already
+  bright (windows, hot accent lights), instead of only the previous room-level
+  gain clamp. Multiplicative, so colour ratios are preserved.
+- **auto_white_balance**: anchors **all 3 channels** to the neutral patch's grey (fixes green/magenta tint + warm/cool), gains clamped [0.80, 1.25]. Not touched in v4 — the v3 render's warm bloom looked like an exposure-amplification artifact (hot accent lights blown by the too-high gain), not a WB failure; revisit this if a future render still shows a cast with exposure now under control.
 - **sober** grade (now MLS/luxury/architectural/interior — the only style in
-  production use): `tone_curve(black_point=1.0, contrast=0.94, airy_gamma=0.82,
-  highlight_rolloff=0.35)` (gamma was 0.90 in v2 — lowered for more midtone
-  lift), `saturate=0.98`, **no sky push**.
+  production use): `tone_curve(black_point=1.0, contrast=0.94, airy_gamma=0.86,
+  highlight_rolloff=0.35)` (gamma was 0.90 in v2, overshot to 0.82 in v3, now
+  0.86), `saturate=0.98`, **no sky push**.
 - **default** grade (currently unselected by any profile — kept for reference /
   a possible future punchier tier): `tone_curve(1.0, 0.90, 0.88)`, `saturate=1.0`,
   `soften_sky` on. No highlight roll-off, so it's not safe to push as bright as

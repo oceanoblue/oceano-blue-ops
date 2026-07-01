@@ -43,7 +43,7 @@ def _lut(**kw):
 def test_tone_curve_monotonic_nondecreasing():
     for kw in (
         dict(),  # defaults
-        dict(black_point=1.0, contrast=0.94, airy_gamma=0.82, highlight_rolloff=0.35),  # sober (v3)
+        dict(black_point=1.0, contrast=0.94, airy_gamma=0.86, highlight_rolloff=0.35),  # sober (v4)
     ):
         lut = _lut(**kw)
         assert np.all(np.diff(lut) >= 0), f"tone curve must be monotonic for {kw}"
@@ -53,7 +53,7 @@ def test_tone_curve_white_stays_bright_and_topmost_with_rolloff():
     # The sober de-contrast (0.94) intentionally lands peak white just under 255
     # (~247) for an airy, un-clipped white — NOT a dingy grey. Invariant: the
     # brightest input is still the brightest output and stays near-white.
-    lut = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.82, highlight_rolloff=0.35)
+    lut = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.86, highlight_rolloff=0.35)
     assert lut[255] == lut.max()
     assert lut[255] >= 240  # near-white, not dimmed
 
@@ -74,8 +74,8 @@ def test_airy_gamma_lifts_midtones():
 
 
 def test_highlight_rolloff_compresses_highs_but_keeps_separation():
-    base = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.82, highlight_rolloff=0.0)
-    rolled = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.82, highlight_rolloff=0.35)
+    base = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.86, highlight_rolloff=0.0)
+    rolled = _lut(black_point=1.0, contrast=0.94, airy_gamma=0.86, highlight_rolloff=0.35)
     # Above the knee, the shoulder pulls values DOWN (holds window detail)…
     assert rolled[245] <= base[245]
     # …without collapsing them to a flat white: bright tones stay distinct.
@@ -97,9 +97,9 @@ def test_auto_exposure_lifts_dark_scene_toward_target():
 
 
 def test_auto_exposure_gain_is_clamped():
-    # Near-black must not be manufactured into a scene: gain capped at 2.2×.
+    # Near-black must not be manufactured into a scene: gain capped at 1.8×.
     dark = solid((10, 10, 10))
-    assert float(np.median(luminance(server.auto_exposure(dark, target=0.50)))) <= 10 * 2.2 + 1
+    assert float(np.median(luminance(server.auto_exposure(dark, target=0.50)))) <= 10 * 1.8 + 1
     # Over-bright merges darken, but no more than 0.6×.
     bright = solid((240, 240, 240))
     assert float(np.median(luminance(server.auto_exposure(bright, target=0.50)))) >= 240 * 0.6 - 1
@@ -112,6 +112,21 @@ def test_auto_exposure_preserves_colour_ratio():
     b, g, r = float(out[..., 0].mean()), float(out[..., 1].mean()), float(out[..., 2].mean())
     assert g / b == pytest.approx(2.0, abs=0.05)
     assert r / b == pytest.approx(3.0, abs=0.05)
+
+
+def test_auto_exposure_highlight_safe_protects_bright_regions():
+    # v4 fix: a real render showed a dark room forcing a big gain that blew an
+    # already-recovered window (window-pull) straight to flat white BEFORE the
+    # tone curve's roll-off ever got a chance — a LUT can't un-clip 255. The
+    # gain must now also respect the frame's own bright end (here, a "window"
+    # strip that's ~9% of the frame, well above the 97th-percentile cutoff).
+    img = np.full((64, 64, 3), 30, np.uint8)  # dark room
+    img[:, 58:] = 210  # bright "window" strip
+    out = server.auto_exposure(img, target=0.55)
+    room_lum = float(luminance(out[:, :50]).mean())
+    window_lum = float(luminance(out[:, 58:]).mean())
+    assert room_lum > 30  # room still gets lifted...
+    assert 195 <= window_lum <= 248  # ...but the window is held near the ceiling, not blown to 255
 
 
 # ── auto_white_balance ────────────────────────────────────────────────────────
@@ -228,10 +243,12 @@ def test_grade_sober_is_not_darker_than_input_midtones():
 
 
 def test_grade_sober_reaches_bright_airy_level():
-    # v3 retune (2026-07-01): v2 (target 0.50, gamma 0.90) still read dark/muddy
-    # against the owner's AutoHDR side-by-side. A moderately dim scene (median
-    # ~0.35, e.g. an under-lit interior before grading) must land meaningfully
-    # bright and airy after grading — not just "not darker."
+    # v4 retune (2026-07-01): v2 (target 0.50, gamma 0.90) read dark/muddy against
+    # the owner's AutoHDR side-by-side; v3 (target 0.58, gamma 0.82) overcorrected
+    # on a real render (blown windows, blooming warm accents). v4 settles between
+    # the two (target 0.55, gamma 0.86, plus the auto_exposure highlight-safety
+    # fix). A moderately dim scene (median ~0.35, e.g. an under-lit interior
+    # before grading) must still land meaningfully brighter than v2 (~136).
     img = solid((90, 90, 90), h=120, w=160)
     out = server.grade(img, style="sober")
-    assert float(np.median(luminance(out))) >= 150
+    assert float(np.median(luminance(out))) >= 145
