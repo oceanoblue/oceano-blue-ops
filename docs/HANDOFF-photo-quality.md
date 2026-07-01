@@ -5,12 +5,19 @@
 > `hcxqqbnoextequclrvff`. Companion docs: `HANDOFF-media-pipeline.md` (§8–§10 =
 > photo roadmap), `REAL_ESTATE_PHOTO_PRODUCTION_V3.md`.
 
-## 0. TL;DR state (June 2026)
-Everything below is **merged to `main` and deployed**. The pipeline works
-end-to-end: RAW decode → bracket fusion → finishing grade → optional generative
-edits. The `ai_jobs` log is green (fuse-v1, grade-v1, gpt-image-2 all completing).
-**The only open item is grade tuning** — it's been tuned against the math + the
-owner's reference screenshots, but needs confirmation on real rendered output.
+## 0. TL;DR state (2026-07-01)
+Everything below is **merged to `main` and deployed** (Vercel + a manual Fly
+deploy of `worker-edit`, confirmed live). The pipeline works end-to-end: RAW
+decode → bracket fusion (+ window-pull) → finishing grade → optional
+generative edits.
+
+**Grade tuning v4 is CONFIRMED against a real render** (kitchen photo, HDR
+merge + sober grade): windows on both sides hold the tree/yard view instead of
+blowing to flat white, the ceiling reads neutral white, and the overall cast
+looks balanced (the remaining warmth is the room's real wood tones + accent
+lighting, not a color-cast artifact). This closed out the v1→v4 tuning loop
+(see §3) — no further blind tuning needed unless a different scene surfaces a
+new issue.
 
 ## 1. What shipped this session (PRs #141–#150)
 | PR | What |
