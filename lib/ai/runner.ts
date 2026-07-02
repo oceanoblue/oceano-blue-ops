@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { getProvider } from './index';
 import { analyzePhoto, planEdits } from './vision-analyze';
 import { buildAutoEnhanceJobRow } from './auto-enhance';
+import { editEngineConfigured, runEditEngine } from './edit-engine';
 import { captureError } from '@/lib/observability/report';
 import { profileFor } from '@/lib/photos/profiles';
 import type { AiJob, Photo } from '@/lib/supabase/database.types';
@@ -194,6 +195,7 @@ export async function runAiJob(jobId: string): Promise<{
     // (migration 0050) and docs/HANDOFF-photo-quality.md.
     const isGenerative = (job.provider ?? 'oceano-enhance') !== 'oceano-enhance';
     const trainingPairRows: any[] = [];
+    let lookTransferred = false;
     for (const out of resp.outputs) {
       // Optional enlargement: only if DELIVERY_LONG_EDGE is set ABOVE the output's
       // real size (default 0 = never). We do not upscale by default — interpolating
@@ -201,6 +203,40 @@ export async function runAiJob(jobId: string): Promise<{
       // HDR-merge passthroughs are intermediates (re-enhanced later), left as-is.
       let bytes = out.bytes;
       let mimeType = out.mimeType;
+
+      // LOOK TRANSFER — the fix for "GPT looks right but pixelates": generative
+      // models top out around 3.5MP, far under a 24–61MP master. For a plain
+      // enhance (a global relight — no content edits requested), the render is
+      // used as a GRADE REFERENCE only: the engine re-creates its tone/colour
+      // on the full-resolution input via monotone per-channel quantile mapping.
+      // The deliverable is then 100% real camera pixels at native res — no
+      // upscaling softness and definitionally zero hallucinated content.
+      // Content-editing job types (declutter / staging / sky / twilight) keep
+      // the raw render: there the changed pixels ARE the product. Best-effort:
+      // engine down → ship the render as before. LOOK_TRANSFER=off disables.
+      if (
+        isGenerative &&
+        job.job_type === 'enhance_single' &&
+        editEngineConfigured() &&
+        process.env.LOOK_TRANSFER !== 'off' &&
+        sources[0]?.mimeType === 'image/jpeg'
+      ) {
+        try {
+          bytes = await runEditEngine(
+            [
+              { bytes: sources[0].bytes as Buffer, filename: sources[0].filename ?? 'original.jpg' },
+              { bytes: out.bytes, filename: 'reference.jpg' },
+            ],
+            { mode: 'look', targetLongEdge: 0, quality: 95 }
+          );
+          mimeType = 'image/jpeg';
+          lookTransferred = true;
+        } catch (lookErr) {
+          captureError('ai.runner.lookTransfer', lookErr, { jobId, orderId: job.order_id });
+          bytes = out.bytes; // fall back to the raw render
+        }
+      }
+      const thisOutputTransferred = lookTransferred && bytes !== out.bytes;
       // Name the output after the ORIGINAL frame, not the job type. The merged
       // base keeps the plain name (e.g. OBM03968.jpg); every enhanced output
       // gets a single "-enhanced" suffix (OBM03968-enhanced.jpg) — never
@@ -210,7 +246,9 @@ export async function runAiJob(jobId: string): Promise<{
           ?.filename ?? out.filename;
       const baseName = cleanBaseName(srcName);
       let filename = job.job_type === 'hdr_merge' ? `${baseName}.jpg` : `${baseName}-enhanced.jpg`;
-      if (job.job_type !== 'hdr_merge') {
+      // (skipped after a look transfer — bytes are already native resolution,
+      // and this block measures the RAW render, which would clobber them)
+      if (job.job_type !== 'hdr_merge' && !thisOutputTransferred) {
         try {
           const src = await sharp(out.bytes).metadata();
           const longEdge = Math.max(src.width ?? 0, src.height ?? 0);
@@ -308,7 +346,9 @@ export async function runAiJob(jobId: string): Promise<{
         completed_at: new Date().toISOString(),
         duration_ms: durationMs,
         cost_cents: resp.costCents,
-        model: resp.model,
+        // "+look-v1" = the render was used as a grade reference and the
+        // deliverable is the native-res original wearing that grade.
+        model: lookTransferred ? `${resp.model}+look-v1` : resp.model,
         output_photo_ids: outputPhotoIds,
       })
       .eq('id', jobId);

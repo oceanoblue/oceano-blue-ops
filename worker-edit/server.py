@@ -518,6 +518,46 @@ def grade(img: np.ndarray, style: str = "default") -> np.ndarray:
     return sharpen(out)
 
 
+# ── Look transfer ──────────────────────────────────────────────────────────
+def _fit_look_luts(orig: np.ndarray, ref: np.ndarray, samples: int = 256) -> np.ndarray:
+    """Per-channel quantile mapping original → reference, as three monotone
+    256-entry LUTs (shape (1, 256, 3), BGR, uint8). Fit on small proxies —
+    global tone/colour statistics don't need resolution."""
+    # NEAREST, deliberately: it SUBSAMPLES the pixel population, so the proxy's
+    # histogram is an unbiased draw from the real one. AREA would average
+    # neighbours and narrow the distribution, biasing the fitted tails.
+    o = cv2.resize(orig, (256, 256), interpolation=cv2.INTER_NEAREST).astype(np.float32)
+    r = cv2.resize(ref, (256, 256), interpolation=cv2.INTER_NEAREST).astype(np.float32)
+    qs = np.linspace(0.0, 100.0, samples)
+    x = np.arange(256, dtype=np.float32)
+    luts = []
+    for c in range(3):
+        oq = np.percentile(o[..., c], qs)
+        rq = np.percentile(r[..., c], qs)
+        # Percentiles are nondecreasing; nudge strictly increasing for interp.
+        oq = oq + np.linspace(0.0, 1e-3, samples)
+        lut = np.interp(x, oq, rq)
+        luts.append(np.clip(np.round(lut), 0, 255).astype(np.uint8))
+    return np.stack(luts, axis=-1).reshape(1, 256, 3)
+
+
+def apply_look(orig: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    """Transfer the GLOBAL grade (tone + colour) of `ref` onto `orig` at
+    orig's full resolution.
+
+    Why this exists: generative models (GPT Image) produce the look the owner
+    wants, but top out around 3.5MP — pixelated next to a 24–61MP master. The
+    fix: treat the generative render purely as a COLOUR/TONE REFERENCE and
+    re-create its grade on the native original with a per-channel quantile
+    mapping. The deliverable is then 100% real camera pixels — native
+    resolution, no upscaling softness, and definitionally zero hallucinated
+    content — wearing the reference's grade. Quantile mapping is monotone per
+    channel, so tonal ordering can't invert; it's global, so a reference whose
+    content the model locally redrew still transfers cleanly (its global
+    statistics barely move)."""
+    return cv2.LUT(orig, _fit_look_luts(orig, ref))
+
+
 def resize_long_edge(img: np.ndarray, target: int) -> np.ndarray:
     if target <= 0:
         return img
@@ -580,6 +620,15 @@ async def edit(
         out = grade(img, style=style)
         if sky_mode == "replace":
             out = replace_sky(out, style=style)
+    elif mode == "look":
+        # files[0] = native original, files[1] = styled reference (e.g. a GPT
+        # Image render). Output = the original's pixels wearing the reference's
+        # global grade — native resolution, nothing synthesized.
+        if len(files) < 2:
+            raise HTTPException(status_code=400, detail="look_needs_two_files")
+        orig = _decode(await files[0].read())
+        ref = _decode(await files[1].read())
+        out = apply_look(orig, ref)
     else:
         raise HTTPException(status_code=400, detail="bad_mode")
 

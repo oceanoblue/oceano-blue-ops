@@ -346,6 +346,44 @@ def test_shadow_lift_float_roundtrip():
     assert gap_after < gap_before
 
 
+# ── look transfer ─────────────────────────────────────────────────────────────
+def test_look_identity_when_reference_matches():
+    # Same image as its own reference → the mapping is ~identity.
+    rng = np.random.default_rng(3)
+    img = rng.integers(20, 236, size=(128, 128, 3), dtype=np.uint8)
+    out = server.apply_look(img, img)
+    assert np.abs(out.astype(int) - img.astype(int)).max() <= 2
+
+
+def test_look_transfers_brightness_and_warmth_at_native_res():
+    # The real use: a 3.5MP GPT render carries the wanted grade; the original is
+    # native-res. Transfer must land the original's stats on the reference's —
+    # at the ORIGINAL's resolution.
+    rng = np.random.default_rng(4)
+    orig = rng.integers(30, 200, size=(400, 600, 3), dtype=np.uint8)  # "native"
+    ref = orig.astype(np.float32)
+    ref[..., 2] = np.clip(ref[..., 2] * 1.25 + 10, 0, 255)  # warmer (R up)
+    ref = np.clip(ref * 1.15, 0, 255).astype(np.uint8)      # brighter overall
+    ref_small = ref[::4, ::4]  # low-res reference, like a GPT output
+    out = server.apply_look(orig, ref_small)
+    assert out.shape == orig.shape  # native resolution preserved
+    assert abs(float(out.mean()) - float(ref.mean())) < 6  # grade level matched
+    r_bias_out = float(out[..., 2].mean()) - float(out[..., 0].mean())
+    r_bias_ref = float(ref[..., 2].mean()) - float(ref[..., 0].mean())
+    assert abs(r_bias_out - r_bias_ref) < 8  # colour balance matched
+
+
+def test_look_luts_are_monotone():
+    # Quantile mapping must never invert tonal ordering (no solarization).
+    rng = np.random.default_rng(5)
+    orig = rng.integers(0, 256, size=(96, 96, 3), dtype=np.uint8)
+    ref = np.clip(orig.astype(np.float32) * 0.7 + 40, 0, 255).astype(np.uint8)
+    luts = server._fit_look_luts(orig, ref)
+    assert luts.shape == (1, 256, 3)
+    for c in range(3):
+        assert np.all(np.diff(luts[0, :, c].astype(int)) >= 0)
+
+
 # ── grade end-to-end ──────────────────────────────────────────────────────────
 @pytest.mark.parametrize("style", ["default", "sober"])
 def test_grade_outputs_valid_image(style):

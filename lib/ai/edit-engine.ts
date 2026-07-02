@@ -18,12 +18,15 @@ export function editEngineConfigured(): boolean {
  * Run the edit engine.
  *  - mode 'fuse'  → Mertens exposure fusion of a bracket into one base image.
  *  - mode 'grade' → faithful finishing grade on a single frame / fused base.
+ *  - mode 'look'  → transfer the global grade of inputs[1] (a styled reference,
+ *    e.g. a low-res GPT Image render) onto inputs[0] (the native original) —
+ *    native-resolution output, zero synthesized pixels.
  * Returns the resulting JPEG bytes.
  */
 export async function runEditEngine(
   inputs: EditInput[],
   opts: {
-    mode: 'fuse' | 'grade';
+    mode: 'fuse' | 'grade' | 'look';
     targetLongEdge?: number;
     quality?: number;
     style?: string;
