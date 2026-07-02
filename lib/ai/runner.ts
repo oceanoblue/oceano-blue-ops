@@ -97,9 +97,15 @@ export async function runAiJob(jobId: string): Promise<{
     if (!inputs?.length) throw new Error('No input photos found');
 
     // The deterministic engine (oceano-enhance) can decode RAW via libraw;
-    // generative providers (gpt-image) cannot. So only pull the RAW original for
-    // the deterministic job types — generative jobs keep using the JPEG preview.
-    const deterministic = job.job_type === 'hdr_merge' || job.job_type === 'enhance_single';
+    // generative providers (GPT Image / Gemini) accept ONLY jpeg/png/webp and
+    // 400 on anything labeled image/x-raw. The RAW-passthrough decision must
+    // therefore be per PROVIDER, not just per job type — this used to key off
+    // job_type alone (written when enhance_single always went to our engine),
+    // so running an enhance through GPT Image (Advanced provider pick, or the
+    // A/B rerun) shipped the RAW original to OpenAI and failed the job.
+    const engineProvider = (job.provider ?? 'oceano-enhance') === 'oceano-enhance';
+    const deterministic =
+      engineProvider && (job.job_type === 'hdr_merge' || job.job_type === 'enhance_single');
 
     const sources: SourceImage[] = await Promise.all(
       inputs.map(async (p: Photo) => {
@@ -113,8 +119,10 @@ export async function runAiJob(jobId: string): Promise<{
         // original bytes straight through so the deterministic edit engine
         // (libraw/rawpy in worker-edit) does a full RAW decode. This covers both
         // a RAW uploaded directly AND a RAW original stored beside a preview.
+        // Gated on `deterministic`: only our engine may ever receive x-raw.
         const rawName = useRaw ? rawPath!.split('/').pop() || p.filename : p.filename;
-        if (useRaw || /\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(rawName || '')) {
+        const looksRaw = /\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(rawName || '');
+        if (deterministic && (useRaw || looksRaw)) {
           return {
             bytes: raw,
             filename: rawName,
@@ -127,17 +135,30 @@ export async function runAiJob(jobId: string): Promise<{
         // generative enhance gets enough detail to stay faithful (a downscaled
         // input is what makes it hallucinate). Constrain by the LONG edge so
         // portrait frames aren't left oversized.
-        const processed = await sharp(raw)
-          .rotate()
-          .resize({
-            width: AI_INPUT_LONG_EDGE,
-            height: AI_INPUT_LONG_EDGE,
-            fit: 'inside',
-            withoutEnlargement: true,
-            kernel: 'lanczos3',
-          })
-          .jpeg({ quality: 92, mozjpeg: true })
-          .toBuffer();
+        let processed: Buffer;
+        try {
+          processed = await sharp(raw)
+            .rotate()
+            .resize({
+              width: AI_INPUT_LONG_EDGE,
+              height: AI_INPUT_LONG_EDGE,
+              fit: 'inside',
+              withoutEnlargement: true,
+              kernel: 'lanczos3',
+            })
+            .jpeg({ quality: 92, mozjpeg: true })
+            .toBuffer();
+        } catch (decodeErr) {
+          if (looksRaw) {
+            // A generative job pointed at an actual RAW file with no decodable
+            // preview — say what's wrong and what fixes it, instead of sharp's
+            // cryptic "unsupported image format".
+            throw new Error(
+              `raw_input_generative: ${p.filename} is a camera RAW — generative providers only take JPEG/PNG/WebP. Run the Oceano engine on it (or convert it) first.`
+            );
+          }
+          throw decodeErr;
+        }
         return {
           bytes: processed,
           filename: p.filename,
