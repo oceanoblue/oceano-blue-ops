@@ -352,20 +352,20 @@ export function PhotoViewer({
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 h-[100dvh] w-screen bg-slate-50 text-slate-900 flex flex-col">
+    <div className="fixed inset-0 z-50 h-[100dvh] w-screen bg-neutral-950 text-neutral-100 flex flex-col">
       {/* ─── Top bar ───────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 bg-white">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-neutral-800 bg-neutral-900">
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onClose}
-            className="p-1.5 rounded hover:bg-slate-100 text-slate-600"
+            className="p-1.5 rounded hover:bg-white/10 text-neutral-300"
             title="Close (Esc)"
           >
             <X className="h-4 w-4" />
           </button>
           <div className="min-w-0">
-            <div className="text-sm font-medium truncate">{photo.filename}</div>
-            <div className="text-[11px] text-slate-500 truncate">
+            <div className="text-sm font-medium truncate text-neutral-100">{photo.filename}</div>
+            <div className="text-[11px] text-neutral-400 truncate">
               {photo.kind === 'processed' ? 'Processed' : 'Raw'} · {photo.ai_provider ?? 'no AI'} · {sizeLabel}
             </div>
           </div>
@@ -377,7 +377,7 @@ export function PhotoViewer({
               disabled={!parentUrl}
               title={parentFetching ? 'Loading original…' : 'Toggle before / after (Space)'}
               className={`p-1.5 rounded text-sm transition ${
-                showBefore ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 text-slate-700'
+                showBefore ? 'bg-white text-neutral-900' : 'hover:bg-white/10 text-neutral-300'
               } disabled:opacity-40`}
             >
               {parentFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitCompareArrows className="h-4 w-4" />}
@@ -389,7 +389,7 @@ export function PhotoViewer({
               disabled={!parentUrl}
               title="Split compare — drag the divider (original left, enhanced right)"
               className={`p-1.5 rounded text-sm transition ${
-                split ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 text-slate-700'
+                split ? 'bg-white text-neutral-900' : 'hover:bg-white/10 text-neutral-300'
               } disabled:opacity-40`}
             >
               <Columns2 className="h-4 w-4" />
@@ -399,7 +399,7 @@ export function PhotoViewer({
             onClick={() => rotate(-90)}
             disabled={busy === 'rotate'}
             title="Rotate left"
-            className="p-1.5 rounded hover:bg-slate-100 text-slate-700 disabled:opacity-40"
+            className="p-1.5 rounded hover:bg-white/10 text-neutral-300 disabled:opacity-40"
           >
             <RotateCw className="h-4 w-4 -scale-x-100" />
           </button>
@@ -407,14 +407,14 @@ export function PhotoViewer({
             onClick={() => rotate(90)}
             disabled={busy === 'rotate'}
             title="Rotate right"
-            className="p-1.5 rounded hover:bg-slate-100 text-slate-700 disabled:opacity-40"
+            className="p-1.5 rounded hover:bg-white/10 text-neutral-300 disabled:opacity-40"
           >
             <RotateCw className="h-4 w-4" />
           </button>
           <button
             onClick={download}
             title="Open in new tab"
-            className="p-1.5 rounded hover:bg-slate-100 text-slate-700"
+            className="p-1.5 rounded hover:bg-white/10 text-neutral-300"
           >
             <Download className="h-4 w-4" />
           </button>
@@ -433,24 +433,24 @@ export function PhotoViewer({
       {/* ─── Main area: image + sidebar ────────────────────────────────────── */}
       <div className="flex-1 min-h-0 flex">
         {/* Image canvas */}
-        <div className="flex-1 min-w-0 relative bg-slate-100 grid place-items-center overflow-hidden">
+        <div className="flex-1 min-w-0 relative bg-neutral-900 grid place-items-center overflow-hidden">
           {/* Prev / next */}
           {index > 0 && (
             <button
               onClick={prev}
-              className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 hover:bg-white p-2 shadow z-10"
+              className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-neutral-800/90 hover:bg-neutral-700 p-2 shadow z-10"
               aria-label="Previous"
             >
-              <ChevronLeft className="h-5 w-5 text-slate-700" />
+              <ChevronLeft className="h-5 w-5 text-neutral-200" />
             </button>
           )}
           {index < photos.length - 1 && (
             <button
               onClick={next}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 hover:bg-white p-2 shadow z-10"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-neutral-800/90 hover:bg-neutral-700 p-2 shadow z-10"
               aria-label="Next"
             >
-              <ChevronRight className="h-5 w-5 text-slate-700" />
+              <ChevronRight className="h-5 w-5 text-neutral-200" />
             </button>
           )}
 
@@ -518,7 +518,7 @@ export function PhotoViewer({
               draggable={false}
             />
           ) : (
-            <div className="text-slate-400">Loading…</div>
+            <div className="text-neutral-500">Loading…</div>
           )}
 
           {!split && showBefore && parentUrl && (
@@ -534,10 +534,10 @@ export function PhotoViewer({
           )}
 
           {/* AI revision prompt — anchored bottom */}
-          <div className="absolute inset-x-6 bottom-4 flex items-center gap-2 bg-white rounded-full shadow-lg px-3 py-1.5 z-10">
+          <div className="absolute inset-x-6 bottom-4 flex items-center gap-2 bg-neutral-800 ring-1 ring-neutral-700 rounded-full shadow-lg px-3 py-1.5 z-10">
             <button
               onClick={() => setAiPrompt('')}
-              className="text-slate-400 hover:text-slate-600 px-1"
+              className="text-neutral-500 hover:text-neutral-300 px-1"
               title="Clear"
             >
               <X className="h-3.5 w-3.5" />
@@ -550,7 +550,7 @@ export function PhotoViewer({
                 if (e.key === 'Enter') sendAiPrompt();
               }}
               placeholder="Describe changes for AI revision…"
-              className="flex-1 bg-transparent outline-none text-sm placeholder:text-slate-400"
+              className="flex-1 bg-transparent outline-none text-sm text-neutral-100 placeholder:text-neutral-500"
             />
             <button
               onClick={sendAiPrompt}
@@ -563,7 +563,7 @@ export function PhotoViewer({
         </div>
 
         {/* ─── Right sidebar ─────────────────────────────────────────────── */}
-        <aside className="w-80 shrink-0 border-l border-slate-200 bg-white overflow-y-auto">
+        <aside className="w-80 shrink-0 border-l border-neutral-800 bg-neutral-900 overflow-y-auto">
           <div className="p-4 space-y-5">
             {/* Presets */}
             <SidebarSection title="Profiles">
@@ -574,8 +574,8 @@ export function PhotoViewer({
                     onClick={() => applyPreset(name)}
                     className={`flex flex-col items-center gap-1 p-2 rounded-md text-[11px] transition ${
                       activePreset === name
-                        ? 'bg-ocean-50 ring-1 ring-ocean-500 text-ocean-900'
-                        : 'hover:bg-slate-50 text-slate-700'
+                        ? 'bg-ocean-500/15 ring-1 ring-ocean-400 text-ocean-200'
+                        : 'hover:bg-white/5 text-neutral-300'
                     }`}
                   >
                     <Camera className="h-5 w-5" strokeWidth={1.5} />
@@ -585,7 +585,7 @@ export function PhotoViewer({
               </div>
               <button
                 onClick={resetAll}
-                className="mt-2 w-full text-[11px] text-slate-500 hover:text-slate-700 inline-flex items-center justify-center gap-1 py-1"
+                className="mt-2 w-full text-[11px] text-neutral-400 hover:text-neutral-200 inline-flex items-center justify-center gap-1 py-1"
               >
                 <Trash2 className="h-3 w-3" /> Reset all
               </button>
@@ -614,7 +614,7 @@ export function PhotoViewer({
             </SidebarSection>
 
             {error && (
-              <div className="text-xs text-rose-700 bg-rose-50 rounded px-2 py-1.5">{error}</div>
+              <div className="text-xs text-rose-300 bg-rose-950/60 ring-1 ring-rose-900 rounded px-2 py-1.5">{error}</div>
             )}
           </div>
         </aside>
@@ -636,7 +636,7 @@ export function PhotoViewer({
 function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">{title}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 mb-2">{title}</div>
       <div className="space-y-3">{children}</div>
     </div>
   );
@@ -660,8 +660,8 @@ function Slider({
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        <span className="text-xs text-slate-700">{label}</span>
-        <span className="text-[11px] font-mono text-slate-500">
+        <span className="text-xs text-neutral-300">{label}</span>
+        <span className="text-[11px] font-mono text-neutral-400">
           {value > 0 ? '+' : ''}
           {value.toFixed(2)}
         </span>
@@ -702,13 +702,13 @@ function Filmstrip({
   }, [index]);
 
   return (
-    <div className="border-t border-slate-200 bg-white px-3 py-2 flex items-center gap-2">
+    <div className="border-t border-neutral-800 bg-neutral-900 px-3 py-2 flex items-center gap-2">
       <button
         onClick={() => onSelect(Math.max(0, index - 1))}
         disabled={index === 0}
-        className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-30"
+        className="p-1.5 rounded hover:bg-white/10 disabled:opacity-30"
       >
-        <ChevronLeft className="h-4 w-4 text-slate-600" />
+        <ChevronLeft className="h-4 w-4 text-neutral-400" />
       </button>
       <div
         ref={ref}
@@ -724,14 +724,14 @@ function Filmstrip({
               data-filmstrip-index={i}
               onClick={() => onSelect(i)}
               className={`shrink-0 h-14 aspect-square overflow-hidden rounded ring-2 transition ${
-                active ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'
+                active ? 'ring-ocean-500' : 'ring-transparent hover:ring-neutral-600'
               }`}
             >
               {u ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={u} alt={p.filename} className="h-full w-full object-cover" />
               ) : (
-                <div className="h-full w-full bg-slate-200 grid place-items-center text-slate-400">
+                <div className="h-full w-full bg-neutral-800 grid place-items-center text-neutral-500">
                   <Loader2 className="h-3 w-3 animate-spin" />
                 </div>
               )}
@@ -742,9 +742,9 @@ function Filmstrip({
       <button
         onClick={() => onSelect(Math.min(photos.length - 1, index + 1))}
         disabled={index === photos.length - 1}
-        className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-30"
+        className="p-1.5 rounded hover:bg-white/10 disabled:opacity-30"
       >
-        <ChevronRight className="h-4 w-4 text-slate-600" />
+        <ChevronRight className="h-4 w-4 text-neutral-400" />
       </button>
     </div>
   );

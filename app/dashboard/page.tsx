@@ -27,27 +27,31 @@ const PIPELINE_BUCKETS: Array<{
 export default async function DashboardHome() {
   const supabase = createClient();
 
-  const { data: orders } = await supabase
-    .from('orders')
-    .select('id, order_number, status, scheduled_at, rush, client_id')
-    .order('updated_at', { ascending: false })
-    .limit(8);
-
-  const counts: Record<string, number> = {};
-  for (const b of PIPELINE_BUCKETS) {
-    const { count } = await supabase
+  // One round-trip's latency, not eight: the recent list, all six pipeline
+  // counts, and the upcoming list are independent — fire them together.
+  const [{ data: orders }, bucketCounts, { data: upcoming }] = await Promise.all([
+    supabase
       .from('orders')
-      .select('id', { count: 'exact', head: true })
-      .in('status', b.statuses as OrderStatus[]);
-    counts[b.label] = count ?? 0;
-  }
-
-  const { data: upcoming } = await supabase
-    .from('orders')
-    .select('id, order_number, scheduled_at, status, photographer_id, listing_id, client_id')
-    .gte('scheduled_at', new Date().toISOString())
-    .order('scheduled_at', { ascending: true })
-    .limit(5);
+      .select('id, order_number, status, scheduled_at, rush, client_id')
+      .order('updated_at', { ascending: false })
+      .limit(8),
+    Promise.all(
+      PIPELINE_BUCKETS.map((b) =>
+        supabase
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .in('status', b.statuses as OrderStatus[])
+          .then(({ count }) => [b.label, count ?? 0] as const)
+      )
+    ),
+    supabase
+      .from('orders')
+      .select('id, order_number, scheduled_at, status, photographer_id, listing_id, client_id')
+      .gte('scheduled_at', new Date().toISOString())
+      .order('scheduled_at', { ascending: true })
+      .limit(5),
+  ]);
+  const counts: Record<string, number> = Object.fromEntries(bucketCounts);
 
   return (
     <div className="space-y-8">
