@@ -17,6 +17,7 @@ import { DeleteOrderControl } from '@/components/orders/DeleteOrderControl';
 import { CostSummary } from '@/components/orders/CostSummary';
 import { EditInstructionsEditor } from '@/components/orders/EditInstructionsEditor';
 import { SendToEditEngine } from '@/components/orders/SendToEditEngine';
+import { ExternalEditControl, type ExternalEditBatchView } from '@/components/orders/ExternalEditControl';
 import { ReelFootageList, type FootageView } from '@/components/orders/ReelFootageList';
 import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
 import type { Json } from '@/lib/supabase/database.types';
@@ -129,6 +130,28 @@ export default async function OrderDetailPage({ params }: { params: { id: string
     .eq('kind', 'raw');
   const rawOriginalsCount = ((rawPhotos ?? []) as any[]).filter((p) => RAW_EXT.test(p.filename)).length;
 
+  // Latest external edit batch (Fotello loop) + how many photos an export
+  // would include, for the panel's create button.
+  let externalBatch: ExternalEditBatchView | null = null;
+  let exportablePhotoCount = 0;
+  if (!isReel) {
+    const { data: eb } = await supabase
+      .from('external_edit_batches')
+      .select('id, status, external_url, photo_count, imported_count, sent_at, returned_at, manifest')
+      .eq('order_id', params.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (eb) externalBatch = { ...eb, manifest: (eb.manifest ?? []) as any } as ExternalEditBatchView;
+    const { count } = await supabase
+      .from('photos')
+      .select('id', { count: 'exact', head: true })
+      .eq('order_id', params.id)
+      .in('kind', ['raw', 'bracket_member'])
+      .eq('is_selected', true);
+    exportablePhotoCount = count ?? 0;
+  }
+
   // Latest delivery-QC verdict for an at-a-glance status (team-readable via RLS).
   const { data: latestQc } = await supabase
     .from('photo_qc_reports')
@@ -231,13 +254,29 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               </section>
             </>
           ) : (
-            <section className="card p-6">
-              <h2 className="font-semibold mb-4">Photos</h2>
-              <ProjectTypeControl orderId={order.id} projectType={order.project_type} />
-              <QcVerdictSummary summary={(latestQc as any)?.summary} createdAt={(latestQc as any)?.created_at} />
-              <CaptureChecklist orderId={order.id} projectType={order.project_type} />
-              <PhotoManager orderId={order.id} autoEnhanceOnUpload={autoEnhanceOnUpload} />
-            </section>
+            <>
+              <section className="card p-6">
+                <h2 className="font-semibold mb-1">External editing — Fotello</h2>
+                <p className="mb-4 text-xs text-slate-500">
+                  Interim edit provider (docs/WORKFLOW_FOTELLO_EDIT_LOOP.md): export the shoot as a
+                  zip, edit at Fotello, and drop the results back here — they attach to the
+                  originals and flow into the normal review + delivery below.
+                </p>
+                <ExternalEditControl
+                  orderId={order.id}
+                  batch={externalBatch}
+                  exportablePhotoCount={exportablePhotoCount}
+                />
+              </section>
+
+              <section className="card p-6">
+                <h2 className="font-semibold mb-4">Photos</h2>
+                <ProjectTypeControl orderId={order.id} projectType={order.project_type} />
+                <QcVerdictSummary summary={(latestQc as any)?.summary} createdAt={(latestQc as any)?.created_at} />
+                <CaptureChecklist orderId={order.id} projectType={order.project_type} />
+                <PhotoManager orderId={order.id} autoEnhanceOnUpload={autoEnhanceOnUpload} />
+              </section>
+            </>
           )}
         </div>
 

@@ -1204,6 +1204,72 @@ export type Database = {
           },
         ]
       }
+      external_edit_batches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          external_url: string | null
+          id: string
+          imported_count: number
+          manifest: Json
+          notes: string | null
+          order_id: string
+          photo_count: number
+          provider: string
+          returned_at: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          external_url?: string | null
+          id?: string
+          imported_count?: number
+          manifest?: Json
+          notes?: string | null
+          order_id: string
+          photo_count?: number
+          provider?: string
+          returned_at?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          external_url?: string | null
+          id?: string
+          imported_count?: number
+          manifest?: Json
+          notes?: string | null
+          order_id?: string
+          photo_count?: number
+          provider?: string
+          returned_at?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_edit_batches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_edit_batches_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       external_links: {
         Row: {
           asset_id: string | null
