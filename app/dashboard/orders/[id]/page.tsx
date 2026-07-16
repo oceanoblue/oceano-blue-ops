@@ -17,7 +17,8 @@ import { DeleteOrderControl } from '@/components/orders/DeleteOrderControl';
 import { CostSummary } from '@/components/orders/CostSummary';
 import { EditInstructionsEditor } from '@/components/orders/EditInstructionsEditor';
 import { SendToEditEngine } from '@/components/orders/SendToEditEngine';
-import { ExternalEditControl, type ExternalEditBatchView } from '@/components/orders/ExternalEditControl';
+import { FotelloWorkspace } from '@/components/orders/FotelloWorkspace';
+import { RawIntakeControl } from '@/components/orders/RawIntakeControl';
 import { ReelFootageList, type FootageView } from '@/components/orders/ReelFootageList';
 import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
 import type { Json } from '@/lib/supabase/database.types';
@@ -130,26 +131,24 @@ export default async function OrderDetailPage({ params }: { params: { id: string
     .eq('kind', 'raw');
   const rawOriginalsCount = ((rawPhotos ?? []) as any[]).filter((p) => RAW_EXT.test(p.filename)).length;
 
-  // Latest external edit batch (Fotello loop) + how many photos an export
-  // would include, for the panel's create button.
-  let externalBatch: ExternalEditBatchView | null = null;
-  let exportablePhotoCount = 0;
+  // Fotello workspace counts: originals available for export, finals already in.
+  let originalsCount = 0;
+  let finalsCount = 0;
   if (!isReel) {
-    const { data: eb } = await supabase
-      .from('external_edit_batches')
-      .select('id, status, external_url, photo_count, imported_count, sent_at, returned_at, manifest')
-      .eq('order_id', params.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (eb) externalBatch = { ...eb, manifest: (eb.manifest ?? []) as any } as ExternalEditBatchView;
-    const { count } = await supabase
+    const { count: oc } = await supabase
       .from('photos')
       .select('id', { count: 'exact', head: true })
       .eq('order_id', params.id)
       .in('kind', ['raw', 'bracket_member'])
       .eq('is_selected', true);
-    exportablePhotoCount = count ?? 0;
+    originalsCount = oc ?? 0;
+    const { count: fc } = await supabase
+      .from('photos')
+      .select('id', { count: 'exact', head: true })
+      .eq('order_id', params.id)
+      .eq('kind', 'processed')
+      .eq('ai_provider', 'fotello');
+    finalsCount = fc ?? 0;
   }
 
   // Latest delivery-QC verdict for an at-a-glance status (team-readable via RLS).
@@ -161,13 +160,16 @@ export default async function OrderDetailPage({ params }: { params: { id: string
     .limit(1)
     .maybeSingle();
 
-  // Org setting: auto-enhance bases on upload (default on).
+  // Org settings: the AI-editing kill switch (merge + enhance hidden while
+  // Fotello is the interim editor) and auto-enhance-on-upload.
   const { data: bizSettings } = await supabase
     .from('business_settings')
-    .select('auto_enhance_on_upload')
+    .select('auto_enhance_on_upload, ai_editing_enabled')
     .eq('id', true)
     .maybeSingle();
-  const autoEnhanceOnUpload = (bizSettings as any)?.auto_enhance_on_upload !== false;
+  const aiEditingEnabled = (bizSettings as any)?.ai_editing_enabled === true;
+  const autoEnhanceOnUpload =
+    aiEditingEnabled && (bizSettings as any)?.auto_enhance_on_upload !== false;
 
   const { data: team } = await supabase
     .from('team_members')
@@ -256,16 +258,28 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           ) : (
             <>
               <section className="card p-6">
-                <h2 className="font-semibold mb-1">External editing — Fotello</h2>
+                <h2 className="font-semibold mb-1">Photographer upload</h2>
                 <p className="mb-4 text-xs text-slate-500">
-                  Interim edit provider (docs/WORKFLOW_FOTELLO_EDIT_LOOP.md): export the shoot as a
-                  zip, edit at Fotello, and drop the results back here — they attach to the
-                  originals and flow into the normal review + delivery below.
+                  Send the contractor a one-click Dropbox link for the RAW files — no account
+                  needed on their side.
                 </p>
-                <ExternalEditControl
+                <RawIntakeControl
                   orderId={order.id}
-                  batch={externalBatch}
-                  exportablePhotoCount={exportablePhotoCount}
+                  intakeUrl={(order as any).dropbox_intake_url ?? null}
+                  intakePath={(order as any).dropbox_intake_path ?? null}
+                />
+              </section>
+
+              <section className="card p-6">
+                <h2 className="font-semibold mb-1">Editing — Fotello</h2>
+                <p className="mb-4 text-xs text-slate-500">
+                  Download the originals, edit in Fotello&rsquo;s own window, then drop the
+                  finished photos back here for review and delivery.
+                </p>
+                <FotelloWorkspace
+                  orderId={order.id}
+                  originalsCount={originalsCount}
+                  finalsCount={finalsCount}
                 />
               </section>
 
@@ -274,7 +288,11 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                 <ProjectTypeControl orderId={order.id} projectType={order.project_type} />
                 <QcVerdictSummary summary={(latestQc as any)?.summary} createdAt={(latestQc as any)?.created_at} />
                 <CaptureChecklist orderId={order.id} projectType={order.project_type} />
-                <PhotoManager orderId={order.id} autoEnhanceOnUpload={autoEnhanceOnUpload} />
+                <PhotoManager
+                  orderId={order.id}
+                  autoEnhanceOnUpload={autoEnhanceOnUpload}
+                  aiEditingEnabled={aiEditingEnabled}
+                />
               </section>
             </>
           )}

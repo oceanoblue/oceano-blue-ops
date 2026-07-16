@@ -110,9 +110,14 @@ const STAGE_TITLES: Record<Stage, string> = {
 export function PhotoManager({
   orderId,
   autoEnhanceOnUpload = true,
+  aiEditingEnabled = true,
 }: {
   orderId: string;
   autoEnhanceOnUpload?: boolean;
+  /** When false (interim Fotello workflow), the merge + AI-enhance stages are
+   *  hidden entirely: uploads are stored, originals are viewable, and Review &
+   *  Edit shows the finished files. No AI job is ever triggered from the UI. */
+  aiEditingEnabled?: boolean;
 }) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
@@ -128,7 +133,7 @@ export function PhotoManager({
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
 
-  const [stage, setStage] = useState<Stage>(1);
+  const [stage, setStage] = useState<Stage>(aiEditingEnabled ? 1 : 3);
   // Live progress for the Approve & Merge step (RAW conversion can be slow).
   const [mergeProgress, setMergeProgress] = useState<
     { phase: 'convert' | 'merge'; done: number; total: number; brackets: number } | null
@@ -420,6 +425,7 @@ export function PhotoManager({
   // once triage is done, work flows straight to Review while enhancing happens
   // automatically in the background.
   useEffect(() => {
+    if (!aiEditingEnabled) return; // editing hidden — Review & Edit is the only stage
     if (stage !== 1 || brackets.length > 0) return;
     if (autoEnhanceOnUpload) {
       if (stage3Photos.length > 0 || stage2Inputs.length > 0) setStage(3);
@@ -439,7 +445,7 @@ export function PhotoManager({
   // Keyed on the eligible-set signature so it kicks once per distinct set.
   const autoEnhanceTriedRef = useRef<string>('');
   useEffect(() => {
-    if (!autoEnhanceOnUpload) return;
+    if (!aiEditingEnabled || !autoEnhanceOnUpload) return;
     const eligible = singles
       .filter((s) => !isRawFilename(s.filename) && !hasEnhanceChild(s.id))
       .map((s) => s.id)
@@ -830,7 +836,9 @@ export function PhotoManager({
             : 'Drop photos here, or click to choose files'}
         </p>
         <p className="text-xs text-slate-500">
-          JPEG / PNG / TIFF / WebP run through AI directly. ARW / CR2 / NEF auto-convert via the worker.
+          {aiEditingEnabled
+            ? 'JPEG / PNG / TIFF / WebP run through AI directly. ARW / CR2 / NEF auto-convert via the worker.'
+            : 'Originals are archived here. Finished photos go in the Fotello panel above so they land in Review & delivery.'}
         </p>
       </div>
 
@@ -854,16 +862,18 @@ export function PhotoManager({
         </span>
       </label>
 
-      {/* Stepper */}
-      <Stepper
-        current={stage}
-        onChange={setStage}
-        counts={{
-          1: brackets.length + singles.length,
-          2: stage2Inputs.length,
-          3: stage3Photos.length,
-        }}
-      />
+      {/* Stepper (hidden while AI editing is disabled — Review is the only stage) */}
+      {aiEditingEnabled && (
+        <Stepper
+          current={stage}
+          onChange={setStage}
+          counts={{
+            1: brackets.length + singles.length,
+            2: stage2Inputs.length,
+            3: stage3Photos.length,
+          }}
+        />
+      )}
 
       {/* Background RAW preparation */}
       {bgConvert && !mergeProgress && (
@@ -930,8 +940,29 @@ export function PhotoManager({
         </div>
       )}
 
+      {/* Originals archive (editing-disabled mode): originals stay viewable
+          even though the merge/enhance stages are hidden. */}
+      {!aiEditingEnabled && rawPhotos.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-slate-700">
+            Originals ({rawPhotos.length})
+          </p>
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
+            {rawPhotos.map((p, idx) => (
+              <OriginalTile
+                key={p.id}
+                photo={p}
+                urls={photoUrls}
+                setUrls={setPhotoUrls}
+                onOpen={() => setViewer({ list: 'raw', index: idx })}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Stage content */}
-      {stage === 1 && (
+      {aiEditingEnabled && stage === 1 && (
         <Stage1
           brackets={brackets}
           singles={singles}
@@ -955,7 +986,7 @@ export function PhotoManager({
         />
       )}
 
-      {stage === 2 && (
+      {aiEditingEnabled && stage === 2 && (
         <Stage2
           inputs={stage2Inputs}
           selection={stage2Selection}
@@ -986,7 +1017,7 @@ export function PhotoManager({
         />
       )}
 
-      {stage === 3 && (
+      {(stage === 3 || !aiEditingEnabled) && (
         <Stage3
           orderId={orderId}
           photos={stage3Photos}
@@ -996,7 +1027,9 @@ export function PhotoManager({
           setPhotoUrls={setPhotoUrls}
           openViewer={(idx) => setViewer({ list: 'processed', index: idx })}
           onChange={refresh}
-          onBack={() => setStage(2)}
+          onBack={() => {
+            if (aiEditingEnabled) setStage(2);
+          }}
         />
       )}
 
@@ -2535,5 +2568,60 @@ function ProcessedCard({
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── OriginalTile (editing-disabled mode) ────────────────────────────────────
+// Read-only thumbnail for the Originals archive. RAW files show a file chip
+// (no browser-decodable preview); everything else lazy-loads a thumbnail.
+function OriginalTile({
+  photo,
+  urls,
+  setUrls,
+  onOpen,
+}: {
+  photo: Photo;
+  urls: Record<string, string | null>;
+  setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
+  onOpen: () => void;
+}) {
+  const url = urls[photo.id];
+  const raw = isRawFilename(photo.filename);
+  const { ref, inView } = useInView<HTMLButtonElement>();
+  const ext = (photo.filename.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toUpperCase();
+  const sizeMB = photo.byte_size ? (photo.byte_size / 1024 / 1024).toFixed(1) : null;
+
+  useEffect(() => {
+    if (raw || !inView || url !== undefined) return;
+    fetch(`/api/photo-url?photo_id=${photo.id}&w=640`)
+      .then((r) => r.json())
+      .then((d) => setUrls((u) => ({ ...u, [photo.id]: d.url ?? null })))
+      .catch(() => setUrls((u) => ({ ...u, [photo.id]: null })));
+  }, [photo.id, url, setUrls, raw, inView]);
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onOpen}
+      title={photo.filename}
+      className="relative aspect-[3/2] overflow-hidden rounded-md ring-1 ring-slate-200 transition hover:ring-ocean-400"
+    >
+      {raw ? (
+        <div className="grid h-full w-full place-items-center bg-slate-100 text-center">
+          <div>
+            <p className="text-xs font-bold text-slate-600">{ext || 'RAW'}</p>
+            {sizeMB && <p className="text-[10px] text-slate-400">{sizeMB} MB</p>}
+          </div>
+        </div>
+      ) : url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={photo.filename} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+      ) : (
+        <div className="grid h-full w-full place-items-center bg-slate-100 text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      )}
+    </button>
   );
 }

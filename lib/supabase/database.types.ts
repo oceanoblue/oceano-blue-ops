@@ -709,6 +709,7 @@ export type Database = {
       }
       business_settings: {
         Row: {
+          ai_editing_enabled: boolean
           auto_enhance_on_upload: boolean
           buffer_minutes: number
           business_name: string
@@ -720,6 +721,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_editing_enabled?: boolean
           auto_enhance_on_upload?: boolean
           buffer_minutes?: number
           business_name?: string
@@ -731,6 +733,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_editing_enabled?: boolean
           auto_enhance_on_upload?: boolean
           buffer_minutes?: number
           business_name?: string
@@ -1855,6 +1858,8 @@ export type Database = {
           coordinator_id: string | null
           created_at: string
           delivered_at: string | null
+          dropbox_intake_path: string | null
+          dropbox_intake_url: string | null
           duration_minutes: number | null
           editor_id: string | null
           gcal_event_id: string | null
@@ -1880,6 +1885,8 @@ export type Database = {
           coordinator_id?: string | null
           created_at?: string
           delivered_at?: string | null
+          dropbox_intake_path?: string | null
+          dropbox_intake_url?: string | null
           duration_minutes?: number | null
           editor_id?: string | null
           gcal_event_id?: string | null
@@ -1905,6 +1912,8 @@ export type Database = {
           coordinator_id?: string | null
           created_at?: string
           delivered_at?: string | null
+          dropbox_intake_path?: string | null
+          dropbox_intake_url?: string | null
           duration_minutes?: number | null
           editor_id?: string | null
           gcal_event_id?: string | null

@@ -1,9 +1,34 @@
 # Workflow: RE Photo Production — Fotello Edit Loop (Interim)
 
-Date: 2026-07-12
+Date: 2026-07-12 · **Revised 2026-07-16 (v2)**
 Status: **Current operating standard** until the internal edit engine (worker-edit) reaches acceptable quality.
 Owner: Gustavo
-Supersedes: nothing — narrows REAL_ESTATE_PHOTO_PRODUCTION_V3.md §Next-Required-Work item 4 from "provider comparison" to "Fotello as sole interim provider."
+Supersedes: v1 batch/manifest loop (removed 2026-07-16 — owner wanted a simpler flow).
+
+## v2 changes (2026-07-16)
+
+Owner decisions: in-platform merge and enhancement are not working properly →
+**all editing UI is feature-flagged OFF** (`business_settings.ai_editing_enabled`,
+default false; flip to true to restore, no code change). The batch/manifest
+loop was replaced with a simpler three-button flow on the order page:
+
+1. **Photographer upload** — per-order Dropbox file-request link (contractors
+   upload RAWs with no account; files sync to the office Mac). Optionally the
+   RAWs are also archived on the order via the normal upload zone.
+2. **Editing — Fotello** — "Open Fotello" opens app.fotello.co in its own
+   window (embedding is not possible: bot-challenge + third-party-cookie
+   rules break an iframed login). "Download originals" streams a sequence-
+   named zip for upload into Fotello.
+3. **Finals return** — finished files are dropped onto the panel, registered
+   as `kind='processed'` / `ai_provider='fotello'` photos (no filename
+   matching — they are the deliverables themselves), the order advances to
+   `ready`, and the existing Review & Edit + delivery-link flow takes over.
+
+The `external_edit_batches` table (0051) remains in the DB, unused, for a
+future return to tracked batches/turnaround metrics. The v1 sections below
+are retained for that eventuality.
+
+---
 
 ## Purpose
 
