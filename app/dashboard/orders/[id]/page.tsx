@@ -20,6 +20,7 @@ import { SendToEditEngine } from '@/components/orders/SendToEditEngine';
 import { FotelloWorkspace } from '@/components/orders/FotelloWorkspace';
 import { RawIntakeControl } from '@/components/orders/RawIntakeControl';
 import { ContractorAssignControl, type ContractorOption } from '@/components/orders/ContractorAssignControl';
+import { DeliverablesManager, type DeliverableRow } from '@/components/orders/DeliverablesManager';
 import { ReelFootageList, type FootageView } from '@/components/orders/ReelFootageList';
 import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
 import type { Json } from '@/lib/supabase/database.types';
@@ -150,6 +151,17 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       .eq('kind', 'processed')
       .eq('ai_provider', 'fotello');
     finalsCount = fc ?? 0;
+  }
+
+  // Non-photo deliverables (video / 360 tour / floor plan) for this listing.
+  let deliverables: DeliverableRow[] = [];
+  if (!isReel) {
+    const { data: dv } = await supabase
+      .from('listing_deliverables')
+      .select('id, kind, title, source, external_url, filename, is_published')
+      .eq('listing_id', order.listing_id)
+      .order('created_at', { ascending: true });
+    deliverables = (dv ?? []) as DeliverableRow[];
   }
 
   // Latest delivery-QC verdict for an at-a-glance status (team-readable via RLS).
@@ -301,6 +313,20 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                   orderId={order.id}
                   autoEnhanceOnUpload={autoEnhanceOnUpload}
                   aiEditingEnabled={aiEditingEnabled}
+                />
+              </section>
+
+              <section className="card p-6">
+                <h2 className="font-semibold mb-1">Video, tours &amp; floor plans</h2>
+                <p className="mb-4 text-xs text-slate-500">
+                  Add the property&rsquo;s other media — a walkthrough video, a Matterport/360 tour, a
+                  floor plan — by link or upload. Published items appear in the client&rsquo;s portal
+                  alongside their photos.
+                </p>
+                <DeliverablesManager
+                  orderId={order.id}
+                  listingId={order.listing_id}
+                  initial={deliverables}
                 />
               </section>
             </>

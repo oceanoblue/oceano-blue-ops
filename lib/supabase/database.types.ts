@@ -1530,6 +1530,84 @@ export type Database = {
           },
         ]
       }
+      listing_deliverables: {
+        Row: {
+          bucket: string | null
+          byte_size: number | null
+          created_at: string
+          created_by: string | null
+          external_url: string | null
+          filename: string | null
+          id: string
+          is_published: boolean
+          kind: string
+          listing_id: string
+          mime_type: string | null
+          order_id: string | null
+          sort_order: number
+          source: string
+          storage_path: string | null
+          thumbnail_url: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          bucket?: string | null
+          byte_size?: number | null
+          created_at?: string
+          created_by?: string | null
+          external_url?: string | null
+          filename?: string | null
+          id?: string
+          is_published?: boolean
+          kind: string
+          listing_id: string
+          mime_type?: string | null
+          order_id?: string | null
+          sort_order?: number
+          source: string
+          storage_path?: string | null
+          thumbnail_url?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bucket?: string | null
+          byte_size?: number | null
+          created_at?: string
+          created_by?: string | null
+          external_url?: string | null
+          filename?: string | null
+          id?: string
+          is_published?: boolean
+          kind?: string
+          listing_id?: string
+          mime_type?: string | null
+          order_id?: string | null
+          sort_order?: number
+          source?: string
+          storage_path?: string | null
+          thumbnail_url?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_deliverables_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_deliverables_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       listings: {
         Row: {
           access_method: string | null

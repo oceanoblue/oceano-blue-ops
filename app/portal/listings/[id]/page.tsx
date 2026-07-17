@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { Download, ImageOff } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { fmtAddress, STATUS_LABEL } from '@/lib/utils/format';
 import { ClientGalleryGrid } from '@/components/gallery/ClientGalleryGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PortalHero } from '@/components/portal/PortalHero';
+import { MediaRoom, type DeliverableView } from '@/components/portal/MediaRoom';
+import { toEmbedUrl } from '@/lib/deliverables/embed';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +53,37 @@ export default async function ClientListingDetail({ params }: { params: { id: st
     })
   );
 
+  // Published non-photo deliverables (video / 360 tour / floor plan). RLS
+  // returns only PUBLISHED items for listings this client owns; file URLs are
+  // signed via the admin client after that ownership check.
+  const { data: dvRows } = await supabase
+    .from('listing_deliverables')
+    .select('id, kind, title, source, external_url, bucket, storage_path, filename, mime_type')
+    .eq('listing_id', params.id)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  const admin = createAdminClient();
+  const deliverables: DeliverableView[] = await Promise.all(
+    (dvRows ?? []).map(async (d: any) => {
+      let url: string | null = d.external_url ?? null;
+      if (d.source === 'file' && d.bucket && d.storage_path) {
+        const { data } = await admin.storage.from(d.bucket).createSignedUrl(d.storage_path, 3600);
+        url = data?.signedUrl ?? null;
+      }
+      return {
+        id: d.id,
+        kind: d.kind,
+        title: d.title,
+        source: d.source,
+        url,
+        embedUrl: d.source === 'url' && d.external_url ? toEmbedUrl(d.external_url) : null,
+        mime: d.mime_type,
+        filename: d.filename,
+      } satisfies DeliverableView;
+    })
+  );
+
   const latest = (orders?.[0] as any) ?? null;
   const metaLine = `${l.bedrooms ?? '—'} bd · ${l.bathrooms ?? '—'} ba · ${
     l.sqft ? l.sqft.toLocaleString() : '—'
@@ -78,7 +111,14 @@ export default async function ClientListingDetail({ params }: { params: { id: st
       </PortalHero>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
-        {signed.length === 0 ? (
+        {signed.length > 0 ? (
+          <>
+            <div className="mb-4 text-sm text-slate-600">
+              {signed.length} photo{signed.length === 1 ? '' : 's'} ready to download.
+            </div>
+            <ClientGalleryGrid photos={signed} />
+          </>
+        ) : deliverables.length === 0 ? (
           <div className="card">
             <EmptyState
               icon={ImageOff}
@@ -91,14 +131,9 @@ export default async function ClientListingDetail({ params }: { params: { id: st
               }
             />
           </div>
-        ) : (
-          <>
-            <div className="mb-4 text-sm text-slate-600">
-              {signed.length} photo{signed.length === 1 ? '' : 's'} ready to download.
-            </div>
-            <ClientGalleryGrid photos={signed} />
-          </>
-        )}
+        ) : null}
+
+        <MediaRoom items={deliverables} />
       </main>
     </div>
   );
