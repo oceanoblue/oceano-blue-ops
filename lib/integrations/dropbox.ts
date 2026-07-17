@@ -106,6 +106,71 @@ export function intakeFolderPath(
  * to the same destination, so callers should persist the returned URL and not
  * re-create once one exists.
  */
+/**
+ * Dropbox Business team tokens can't call user endpoints directly — they must
+ * name the member to act as via `Dropbox-API-Select-User`. We detect that
+ * exact 400 ("...access token you provided is for an entire Dropbox Business
+ * team"), resolve the member id once (by DROPBOX_TEAM_MEMBER_EMAIL, or the
+ * sole member of a one-person team), and retry.
+ */
+let cachedMemberId: string | null | undefined;
+
+async function resolveTeamMemberId(token: string): Promise<string | null> {
+  if (cachedMemberId !== undefined) return cachedMemberId;
+  try {
+    const res = await fetch('https://api.dropboxapi.com/2/team/members/list_v2', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: 100 }),
+    });
+    if (!res.ok) {
+      cachedMemberId = null;
+      return null;
+    }
+    const json = (await res.json()) as {
+      members?: { profile?: { team_member_id?: string; email?: string; status?: { '.tag'?: string } } }[];
+    };
+    const members = (json.members ?? [])
+      .map((m) => m.profile)
+      .filter((p): p is NonNullable<typeof p> => Boolean(p?.team_member_id))
+      .filter((p) => (p.status?.['.tag'] ?? 'active') === 'active');
+    const wanted = process.env.DROPBOX_TEAM_MEMBER_EMAIL?.toLowerCase();
+    const match = wanted
+      ? members.find((p) => p.email?.toLowerCase() === wanted)
+      : members.length === 1
+        ? members[0]
+        : undefined;
+    cachedMemberId = match?.team_member_id ?? null;
+    return cachedMemberId;
+  } catch {
+    cachedMemberId = null;
+    return null;
+  }
+}
+
+const TEAM_TOKEN_400 = 'entire Dropbox Business team';
+
+/** POST a user-endpoint call; on the team-token 400, retry as the resolved member. */
+async function dbxUserCall(token: string, url: string, body: unknown): Promise<Response> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  const first = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (first.status !== 400) return first;
+
+  const text = await first.clone().text();
+  if (!text.includes(TEAM_TOKEN_400)) return first;
+
+  const memberId = await resolveTeamMemberId(token);
+  if (!memberId) return first;
+  return fetch(url, {
+    method: 'POST',
+    headers: { ...headers, 'Dropbox-API-Select-User': memberId },
+    body: JSON.stringify(body),
+  });
+}
+
 export async function createPhotoIntakeRequest(
   orderNumber: number,
   slug: string,
@@ -116,27 +181,52 @@ export async function createPhotoIntakeRequest(
   try {
     const token = await getAccessToken();
 
-    // Folder first (409 conflict = already exists = fine).
-    const folderRes = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, autorename: false }),
-    });
+    // Folder first (409 conflict = already exists = fine). Keep Dropbox's
+    // error body in the failure — the status code alone ("400") hides the
+    // actual reason (malformed path vs missing_scope vs team-token rules).
+    const folderRes = await dbxUserCall(
+      token,
+      'https://api.dropboxapi.com/2/files/create_folder_v2',
+      { path, autorename: false }
+    );
     if (!folderRes.ok && folderRes.status !== 409) {
-      return { status: 'failed', error: `dropbox_folder_${folderRes.status}` };
+      return {
+        status: 'failed',
+        error: `dropbox_folder_${folderRes.status}: ${await dropboxErrorDetail(folderRes)} (path: ${path})`,
+      };
     }
 
-    const reqRes = await fetch('https://api.dropboxapi.com/2/file_requests/create', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, destination: path, open: true }),
-    });
-    if (!reqRes.ok) return { status: 'failed', error: `dropbox_request_${reqRes.status}` };
+    const reqRes = await dbxUserCall(
+      token,
+      'https://api.dropboxapi.com/2/file_requests/create',
+      { title, destination: path, open: true }
+    );
+    if (!reqRes.ok) {
+      return {
+        status: 'failed',
+        error: `dropbox_request_${reqRes.status}: ${await dropboxErrorDetail(reqRes)}`,
+      };
+    }
     const json = (await reqRes.json()) as { url?: string };
     if (!json.url) return { status: 'failed', error: 'no_request_url' };
 
     return { status: 'created', url: json.url, path };
   } catch (e: any) {
     return { status: 'failed', error: e?.message ?? 'dropbox_error' };
+  }
+}
+
+/** Compact human-readable reason from a Dropbox error response. */
+async function dropboxErrorDetail(res: Response): Promise<string> {
+  try {
+    const text = (await res.text()).slice(0, 400);
+    try {
+      const j = JSON.parse(text);
+      return j.error_summary || j.error?.['.tag'] || text;
+    } catch {
+      return text;
+    }
+  } catch {
+    return 'no_error_body';
   }
 }
