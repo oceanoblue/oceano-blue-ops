@@ -8,7 +8,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 // to /login and fails with 405.
 const PUBLIC_PATHS = [
   '/', '/book', '/login', '/gallery', '/portal',
+  '/field',            // contractor portal — self-guards in its server components
   '/api/delivery', '/api/booking', '/api/portal',
+  '/api/field',        // contractor API — re-derives contractor via session + RLS
   '/api/products', '/api/availability', '/api/places',
   '/api/worker',       // local worker API — authenticates via Bearer worker key
   '/api/automations',  // Make.com bridge — authenticates via x-pos-automation-secret

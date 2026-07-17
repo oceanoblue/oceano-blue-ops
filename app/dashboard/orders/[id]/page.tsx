@@ -19,6 +19,7 @@ import { EditInstructionsEditor } from '@/components/orders/EditInstructionsEdit
 import { SendToEditEngine } from '@/components/orders/SendToEditEngine';
 import { FotelloWorkspace } from '@/components/orders/FotelloWorkspace';
 import { RawIntakeControl } from '@/components/orders/RawIntakeControl';
+import { ContractorAssignControl, type ContractorOption } from '@/components/orders/ContractorAssignControl';
 import { ReelFootageList, type FootageView } from '@/components/orders/ReelFootageList';
 import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
 import type { Json } from '@/lib/supabase/database.types';
@@ -178,6 +179,14 @@ export default async function OrderDetailPage({ params }: { params: { id: string
   const photographers = ((team ?? []) as any[]).filter((t) => t.role === 'photographer' || t.role === 'admin');
   const editors = ((team ?? []) as any[]).filter((t) => t.role === 'editor' || t.role === 'admin');
 
+  // Active contractor photographers for the assignment dropdown.
+  const { data: contractorRows } = await supabase
+    .from('contractors')
+    .select('id, full_name, pay_rate_cents')
+    .eq('is_active', true)
+    .order('full_name', { ascending: true });
+  const contractors = (contractorRows ?? []) as ContractorOption[];
+
   return (
     <div className="space-y-6">
       <div>
@@ -315,13 +324,18 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               <Row label="Scheduled">{fmtDateTime(order.scheduled_at)}</Row>
               <Row label="Duration">{order.duration_minutes} min</Row>
             </dl>
-            <div className="mt-4">
+            <div className="mt-4 space-y-3">
               <AssignTeamControl
                 orderId={order.id}
                 photographerId={order.photographer_id}
                 editorId={order.editor_id}
                 photographers={photographers}
                 editors={editors}
+              />
+              <ContractorAssignControl
+                orderId={order.id}
+                contractorId={(order as any).contractor_id ?? null}
+                contractors={contractors}
               />
             </div>
           </section>

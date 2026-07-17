@@ -868,6 +868,45 @@ export type Database = {
         }
         Relationships: []
       }
+      contractors: {
+        Row: {
+          auth_user_id: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          pay_rate_cents: number
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          auth_user_id?: string | null
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          pay_rate_cents?: number
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auth_user_id?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          pay_rate_cents?: number
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       delivery_links: {
         Row: {
           created_at: string
@@ -1855,12 +1894,16 @@ export type Database = {
         Row: {
           client_id: string
           client_notes: string | null
+          contractor_id: string | null
           coordinator_id: string | null
           created_at: string
           delivered_at: string | null
           dropbox_intake_path: string | null
           dropbox_intake_url: string | null
           duration_minutes: number | null
+          pay_amount_cents: number
+          pay_status: string
+          source: string
           editor_id: string | null
           gcal_event_id: string | null
           id: string
@@ -1882,12 +1925,16 @@ export type Database = {
         Insert: {
           client_id: string
           client_notes?: string | null
+          contractor_id?: string | null
           coordinator_id?: string | null
           created_at?: string
           delivered_at?: string | null
           dropbox_intake_path?: string | null
           dropbox_intake_url?: string | null
           duration_minutes?: number | null
+          pay_amount_cents?: number
+          pay_status?: string
+          source?: string
           editor_id?: string | null
           gcal_event_id?: string | null
           id?: string
@@ -1909,12 +1956,16 @@ export type Database = {
         Update: {
           client_id?: string
           client_notes?: string | null
+          contractor_id?: string | null
           coordinator_id?: string | null
           created_at?: string
           delivered_at?: string | null
           dropbox_intake_path?: string | null
           dropbox_intake_url?: string | null
           duration_minutes?: number | null
+          pay_amount_cents?: number
+          pay_status?: string
+          source?: string
           editor_id?: string | null
           gcal_event_id?: string | null
           id?: string
@@ -3819,8 +3870,45 @@ export type Database = {
         }
         Returns: string
       }
+      create_field_shoot: {
+        Args: {
+          p_access_notes?: string
+          p_address_line1: string
+          p_address_line2?: string
+          p_bathrooms?: number
+          p_bedrooms?: number
+          p_city?: string
+          p_lat?: number
+          p_lng?: number
+          p_notes?: string
+          p_property_type?: string
+          p_services?: Json
+          p_sqft?: number
+          p_state?: string
+          p_zip?: string
+        }
+        Returns: string
+      }
       create_reel_order: { Args: { p_brief?: Json }; Returns: string }
       current_client_id: { Args: never; Returns: string }
+      current_contractor_id: { Args: never; Returns: string }
+      field_intake_client_id: { Args: never; Returns: string }
+      link_contractor_account: {
+        Args: never
+        Returns: {
+          auth_user_id: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          pay_rate_cents: number
+          phone: string | null
+          updated_at: string
+        }
+      }
+      mark_field_shoot_uploaded: { Args: { p_order_id: string }; Returns: undefined }
       is_internal_user: { Args: never; Returns: boolean }
       is_team_member: { Args: never; Returns: boolean }
       link_client_account: {

@@ -19,6 +19,7 @@ import {
   Sparkles,
   Mic,
   HardDrive,
+  Camera,
 } from 'lucide-react';
 
 export type NavItem = {
@@ -69,6 +70,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
     items: [
       { href: '/dashboard/listings', label: 'Listings', icon: Home },
       { href: '/dashboard/clients', label: 'Clients', icon: Users },
+      { href: '/dashboard/contractors', label: 'Photographers', icon: Camera },
       { href: '/dashboard/assets', label: 'Assets', icon: Boxes },
       { href: '/dashboard/products', label: 'Products', icon: Package },
     ],
