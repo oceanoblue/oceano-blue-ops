@@ -23,6 +23,11 @@ export function defaultFrom(): string {
   return process.env.EMAIL_FROM || 'Oceano Blue <noreply@oceanoblue.net>';
 }
 
+// Where replies to platform email go. Overridable per-send or via EMAIL_REPLY_TO.
+export function defaultReplyTo(): string {
+  return process.env.EMAIL_REPLY_TO || 'info@oceanoblue.net';
+}
+
 export async function sendEmail(params: {
   to: string;
   subject: string;
@@ -43,9 +48,7 @@ export async function sendEmail(params: {
         to: [params.to],
         subject: params.subject,
         html: params.html,
-        ...(params.replyTo || process.env.EMAIL_REPLY_TO
-          ? { reply_to: params.replyTo || process.env.EMAIL_REPLY_TO }
-          : {}),
+        reply_to: params.replyTo || defaultReplyTo(),
       }),
     });
     const body = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
