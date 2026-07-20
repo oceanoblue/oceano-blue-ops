@@ -119,6 +119,56 @@ v1), `cdaef1a`+`1048d44` (contractor portal), `fe0f3f6`/`d8c2c48` (email),
 
 ---
 
+## 5b. DNS → Cloudflare migration — IN PROGRESS (verified inventory)
+
+Started moving oceanoblue.net DNS to Cloudflare (account: info@oceanoblue.net,
+free plan). Zone `oceanoblue.net` is CREATED in Cloudflare but **nameservers are
+still Wix (ns6/ns7.wixdns.net) — NOT yet flipped, nothing is live**.
+
+**Cloudflare assigned nameservers (set these at Wix to go live):**
+`bjorn.ns.cloudflare.com` + `marjory.ns.cloudflare.com`
+
+**CRITICAL LESSON: Cloudflare's auto-scan MISSED custom subdomains.** The real
+zone runs FOUR live services. The authoritative record set (read from Wix
+"Manage DNS Records", values confirmed via DoH):
+
+- **A** `@` → 198.202.211.1  (Webflow site) — in CF ✓, DNS only
+- **CNAME** (all must be **DNS only / grey cloud**):
+  - `www` → cdn.webflow.com — CF ✓
+  - `immersive` → 415b89a24be4ce77.vercel-dns-017.com (Vercel) — CF ✓ (added manually)
+  - `homes` → beb3de23065d0799.vercel-dns-016.com (Vercel) — **NOT in CF yet**
+  - `s1._domainkey.homes` → s1.domainkey.u54997439.wl190.sendgrid.net — **NOT in CF yet**
+  - `s2._domainkey.homes` → s2.domainkey.u54997439.wl190.sendgrid.net — **NOT in CF yet**
+  - `em6474.homes` → u54997439.wl190.sendgrid.net (SendGrid) — **NOT in CF yet**
+- **MX** `@` → Google Workspace: aspmx.l.google.com(10), alt1(20), alt2(30), alt3(40), alt4(50) — CF ✓
+- **TXT** (all in CF ✓):
+  - `@` apple-domain-verification=XEC5wJsvpPYke8d0UITr-Hd6MikXCQOjctXE836CtMU
+  - `@` v=spf1 include:_spf.google.com ~all
+  - `@` google-site-verification=AswKroT3_I3qh36HAEfSWZjJpK3Z8Rs40Ow_zeuf14s
+  - `resend._domainkey` p=MIGf… (Resend DKIM)
+  - `_vercel` vc-domain-verify=… (immersive)
+  - `_webflow` one-time-verification=2f64…
+  - `send` v=spf1 include:amazonses.com ~all (Resend SPF)
+
+**Remaining to make the zone a complete mirror (add in Cloudflare, all DNS only):**
+1. The 4 `homes.*` CNAMEs above (preserves the homes site + its SendGrid email).
+2. **`send` MX → feedback-smtp.us-east-1.amazonses.com priority 10** — the Resend
+   return-path Wix couldn't do; this is the actual email fix. (Verify exact host in
+   the Resend dashboard's SPF section before adding.)
+
+**Then, and only after the zone is verified complete:**
+3. Flip nameservers at Wix: Wix account → Domains → oceanoblue.net ⋯ → (external
+   nameservers flow) → replace ns6/ns7.wixdns.net with the two Cloudflare NS.
+   NOTE: Wix's ⋯ menu showed Manage DNS records / Transfer away / Edit MX — the
+   external-nameserver switch may be inside "Manage DNS records" or need Wix support;
+   confirm Wix allows external nameservers on this plan (some don't).
+4. After propagation (~15–60 min): verify Resend domain; add `app.oceanoblue.net`
+   in Vercel (oceano-blue-ops project) → add the Vercel CNAME target in Cloudflare
+   (DNS only); set Vercel env `EMAIL_FROM=Oceano Blue <noreply@oceanoblue.net>` and
+   `NEXT_PUBLIC_APP_URL=https://app.oceanoblue.net`; redeploy.
+
+App domain chosen: **app.oceanoblue.net**.
+
 ## 6. Controlling Chrome / dashboards from a session
 
 Gustavo's real Chrome IS reachable via the `claude-in-chrome` MCP (Browser 1, macOS,
