@@ -25,7 +25,7 @@ export function BrandLogo({
   );
 }
 
-export function BrandMark({ className = 'h-9 w-9' }: { className?: string }) {
+export function BrandMark({ className = 'h-9 w-auto' }: { className?: string }) {
   return (
     <img
       src="/brand/mark.png"

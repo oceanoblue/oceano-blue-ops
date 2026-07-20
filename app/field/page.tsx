@@ -36,7 +36,7 @@ export default function FieldLanding() {
       <div className="relative w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-xl bg-white/10 ring-1 ring-white/15">
-            <BrandMark className="h-9 w-9" />
+            <BrandMark className="h-9 w-auto" />
           </div>
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-ocean-300">
             Oceano Blue · Photographers

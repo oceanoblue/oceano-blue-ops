@@ -109,7 +109,7 @@ export function SidebarBrand() {
   return (
     <div className="px-5 py-6">
       <Link href="/dashboard" className="group flex items-center gap-3">
-        <BrandMark className="h-9 w-9 transition-transform duration-300 ease-spring group-hover:scale-105 group-hover:rotate-3" />
+        <BrandMark className="h-9 w-auto transition-transform duration-300 ease-spring group-hover:scale-105 group-hover:rotate-3" />
         <div>
           <div className="font-display text-[15px] font-semibold tracking-tight text-white">
             Oceano Blue
