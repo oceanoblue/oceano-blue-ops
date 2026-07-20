@@ -20,6 +20,7 @@ import { SendToEditEngine } from '@/components/orders/SendToEditEngine';
 import { FotelloWorkspace } from '@/components/orders/FotelloWorkspace';
 import { RawIntakeControl } from '@/components/orders/RawIntakeControl';
 import { ContractorAssignControl, type ContractorOption } from '@/components/orders/ContractorAssignControl';
+import { ArchiveOrderControl } from '@/components/orders/ArchiveOrderControl';
 import { DeliverablesManager, type DeliverableRow } from '@/components/orders/DeliverablesManager';
 import { ReelFootageList, type FootageView } from '@/components/orders/ReelFootageList';
 import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
@@ -211,6 +212,10 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             subtitle={order.listings && fmtAddress(order.listings)}
           >
             <StatusBadge status={order.status} />
+            {(order as any).archived_at && (
+              <span className="pill bg-slate-200 text-slate-600">Archived</span>
+            )}
+            <ArchiveOrderControl orderId={order.id} archivedAt={(order as any).archived_at ?? null} />
           </PageHeader>
         </div>
       </div>

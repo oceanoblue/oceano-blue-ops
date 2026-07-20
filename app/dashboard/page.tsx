@@ -33,6 +33,7 @@ export default async function DashboardHome() {
     supabase
       .from('orders')
       .select('id, order_number, status, scheduled_at, rush, client_id')
+      .is('archived_at', null)
       .order('updated_at', { ascending: false })
       .limit(8),
     Promise.all(
@@ -40,6 +41,7 @@ export default async function DashboardHome() {
         supabase
           .from('orders')
           .select('id', { count: 'exact', head: true })
+          .is('archived_at', null)
           .in('status', b.statuses as OrderStatus[])
           .then(({ count }) => [b.label, count ?? 0] as const)
       )
@@ -47,6 +49,7 @@ export default async function DashboardHome() {
     supabase
       .from('orders')
       .select('id, order_number, scheduled_at, status, photographer_id, listing_id, client_id')
+      .is('archived_at', null)
       .gte('scheduled_at', new Date().toISOString())
       .order('scheduled_at', { ascending: true })
       .limit(5),

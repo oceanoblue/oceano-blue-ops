@@ -66,6 +66,7 @@ export default async function SchedulePage({
       listings(address_line1, city, state, zip),
       team_members:photographer_id(full_name)
     `)
+    .is('archived_at', null)
     .gte('scheduled_at', weekStart.toISOString())
     .lt('scheduled_at', weekEnd.toISOString())
     .order('scheduled_at', { ascending: true });

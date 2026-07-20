@@ -42,7 +42,7 @@ const COLUMNS: Column<any>[] = [
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: { status?: string; q?: string; kind?: string };
+  searchParams: { status?: string; q?: string; kind?: string; archived?: string };
 }) {
   const supabase = createClient();
   let query = supabase
@@ -55,6 +55,9 @@ export default async function OrdersPage({
 
   if (searchParams.status) query = query.eq('status', searchParams.status as any);
   if (searchParams.kind === 'reel') query = query.eq('order_kind', 'reel_edit');
+  // Archived shoots stay out of sight unless explicitly requested.
+  if (searchParams.archived === '1') query = query.not('archived_at', 'is', null);
+  else query = query.is('archived_at', null);
 
   const { data: orders, error } = await query;
 
@@ -67,6 +70,7 @@ export default async function OrdersPage({
       <div className="flex flex-wrap gap-2">
         <FilterPill label="All" href="/dashboard/orders" active={!searchParams.status && !searchParams.kind} />
         <FilterPill label="Reels" href="/dashboard/orders?kind=reel" active={searchParams.kind === 'reel'} />
+        <FilterPill label="Archived" href="/dashboard/orders?archived=1" active={searchParams.archived === '1'} />
         {['draft', 'booked', 'scheduled', 'shooting', 'uploaded', 'processing', 'editing', 'ready', 'delivered'].map((s) => (
           <FilterPill
             key={s}

@@ -1970,6 +1970,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          archived_at: string | null
           client_id: string
           client_notes: string | null
           contractor_id: string | null
@@ -2001,6 +2002,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
           client_id: string
           client_notes?: string | null
           contractor_id?: string | null
@@ -2032,6 +2034,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
           client_id?: string
           client_notes?: string | null
           contractor_id?: string | null
