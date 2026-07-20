@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 /**
  * Bold client-portal hero banner: a deep ink gradient with film-grain texture,
@@ -27,6 +28,7 @@ export function PortalHero({
       {/* soft ocean glow */}
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-ocean-500/20 blur-3xl" />
       <div className="relative mx-auto max-w-6xl px-6 py-9 sm:py-11">
+        <BrandLogo variant="white" className="mb-4 h-6 w-auto" />
         {backHref && (
           <Link
             href={backHref}

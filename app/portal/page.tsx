@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function PortalLanding() {
   const [email, setEmail] = useState('');
@@ -33,15 +34,10 @@ export default function PortalLanding() {
       <div className="pointer-events-none absolute -bottom-40 -right-24 h-96 w-96 rounded-full bg-ocean-700/20 blur-3xl" />
 
       <div className="relative w-full max-w-md">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-ocean-400 to-ocean-700 font-display text-xl font-bold text-white shadow-glow">
-            O
-          </div>
-          <div>
-            <div className="font-display text-lg font-semibold tracking-tight text-white">Oceano Blue</div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-ocean-300">
-              Client Portal
-            </div>
+        <div className="mb-6">
+          <BrandLogo variant="white" className="h-9 w-auto" />
+          <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.22em] text-ocean-300">
+            Client Portal
           </div>
         </div>
 

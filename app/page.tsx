@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   ArrowRight,
 } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function HomePage() {
   return (
@@ -35,11 +36,9 @@ export default function HomePage() {
       {/* ─── Nav ─────────────────────────────────────────────── */}
       <header className="relative z-10">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-          <div className="flex items-baseline gap-3">
-            <span className="font-display text-lg font-semibold tracking-tight">
-              Oceano&nbsp;Blue
-            </span>
-            <span className="hidden font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-ocean-400 sm:inline">
+          <div className="flex items-center gap-3">
+            <BrandLogo variant="white" className="h-7 w-auto sm:h-8" />
+            <span className="hidden rounded-full bg-white/10 px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-ocean-300 ring-1 ring-white/10 sm:inline">
               Production OS
             </span>
           </div>
@@ -235,8 +234,8 @@ export default function HomePage() {
       <footer className="relative z-10 border-t border-white/[0.06]">
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 py-10 sm:flex-row sm:items-center">
           <div>
-            <p className="font-display text-base font-semibold">Oceano Blue Media</p>
-            <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-500">
+            <BrandLogo variant="white" className="h-6 w-auto" />
+            <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-500">
               Internal platform · Clients book a shoot above
             </p>
           </div>

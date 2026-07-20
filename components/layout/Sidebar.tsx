@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { BrandMark } from '@/components/ui/BrandLogo';
 import { NAV_GROUPS, isActive, type NavGroupDef } from './nav-items';
 
 const COLLAPSE_KEY = 'obm.nav.collapsed';
@@ -108,9 +109,7 @@ export function SidebarBrand() {
   return (
     <div className="px-5 py-6">
       <Link href="/dashboard" className="group flex items-center gap-3">
-        <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-ocean-400 to-ocean-700 font-display text-lg font-bold text-white shadow-glow transition-transform duration-300 ease-spring group-hover:scale-105 group-hover:rotate-3">
-          O
-        </div>
+        <BrandMark className="h-9 w-9 transition-transform duration-300 ease-spring group-hover:scale-105 group-hover:rotate-3" />
         <div>
           <div className="font-display text-[15px] font-semibold tracking-tight text-white">
             Oceano Blue

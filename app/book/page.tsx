@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { StepHeader } from '@/components/booking/StepHeader';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { OrderSummary } from '@/components/booking/OrderSummary';
 import { AddressStep } from '@/components/booking/AddressStep';
 import { PropertyStep } from '@/components/booking/PropertyStep';
@@ -114,9 +115,8 @@ export default function BookingWizardPage() {
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded bg-ocean-700 grid place-items-center text-white text-sm font-bold">O</div>
-            <span className="font-semibold text-ocean-950">Oceano Blue</span>
+          <Link href="/" className="flex items-center">
+            <BrandLogo variant="dark" className="h-7 w-auto" />
           </Link>
           <StepHeader current={state.step} />
         </div>

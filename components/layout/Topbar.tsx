@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut, Plus, ChevronDown, UserRound } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { MobileNav } from './MobileNav';
 
 /**
@@ -39,11 +40,8 @@ export function Topbar({ userEmail }: { userEmail?: string | null }) {
     <header className="glass sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-ink-100/80 px-4 sm:px-6">
       <div className="flex items-center gap-2 min-w-0">
         <MobileNav />
-        <Link
-          href="/dashboard"
-          className="md:hidden font-display text-[15px] font-semibold tracking-tight text-ink-900"
-        >
-          Oceano Blue
+        <Link href="/dashboard" className="md:hidden">
+          <BrandLogo variant="dark" className="h-6 w-auto" />
         </Link>
       </div>
 

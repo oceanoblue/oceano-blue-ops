@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function LoginPage() {
   // useSearchParams() must live inside a Suspense boundary in Next.js 14
@@ -54,6 +55,7 @@ function LoginForm() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-6">
       <div className="card w-full max-w-sm p-8">
+        <BrandLogo variant="dark" className="mb-6 h-8 w-auto" />
         <h1 className="text-2xl font-semibold text-ocean-900">Team sign in</h1>
         <p className="mt-1 text-sm text-slate-600">Use your Oceano Blue email.</p>
 

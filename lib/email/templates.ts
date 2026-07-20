@@ -8,7 +8,7 @@ function shell(bodyHtml: string, preheader: string): string {
   return `<!doctype html><html><body style="margin:0;padding:0;background:#f4f6f8;">
 <span style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</span>
 <div style="max-width:520px;margin:0 auto;padding:32px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1d2935;">
-  <div style="font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#0c8de9;">Oceano Blue</div>
+  <img src="https://app.oceanoblue.net/brand/lockup-dark.png" alt="Oceano Blue Media" width="170" style="display:block;height:auto;border:0;" />
   <div style="background:#ffffff;border-radius:16px;padding:28px 24px;margin-top:14px;box-shadow:0 1px 3px rgba(12,22,32,0.08);">
     ${bodyHtml}
   </div>

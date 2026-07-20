@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Camera, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { BrandMark } from '@/components/ui/BrandLogo';
 
 /** Contractor photographer sign-in. Magic-link only — same passwordless flow
  *  as the client portal. The email must match a contractor the office added. */
@@ -34,8 +35,8 @@ export default function FieldLanding() {
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-ocean-500/20 blur-3xl" />
       <div className="relative w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl bg-white/10 text-ocean-300 ring-1 ring-white/15">
-            <Camera className="h-6 w-6" />
+          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-xl bg-white/10 ring-1 ring-white/15">
+            <BrandMark className="h-9 w-9" />
           </div>
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-ocean-300">
             Oceano Blue · Photographers
