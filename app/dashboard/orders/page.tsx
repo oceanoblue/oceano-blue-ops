@@ -64,7 +64,7 @@ export default async function OrdersPage({
   return (
     <div className="space-y-6">
       <PageHeader eyebrow="Pipeline" title="Orders" subtitle="Every shoot in the pipeline.">
-        <Link href="/dashboard/orders/new" className="btn-primary">New order</Link>
+        <Link href="/dashboard/orders/new" className="btn-primary">New shoot</Link>
       </PageHeader>
 
       <div className="flex flex-wrap gap-2">
@@ -97,7 +97,7 @@ export default async function OrdersPage({
             }
             action={
               <Link href="/dashboard/orders/new" className="btn-primary">
-                New order
+                New shoot
               </Link>
             }
           />

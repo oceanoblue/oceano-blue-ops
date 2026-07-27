@@ -47,12 +47,12 @@ export function Topbar({ userEmail }: { userEmail?: string | null }) {
 
       <div className="flex items-center gap-2">
         <Link href="/dashboard/orders/new" className="btn-primary hidden sm:inline-flex">
-          <Plus className="h-4 w-4" /> New order
+          <Plus className="h-4 w-4" /> New shoot
         </Link>
         <Link
           href="/dashboard/orders/new"
           className="btn-primary sm:hidden p-2"
-          aria-label="New order"
+          aria-label="New shoot"
         >
           <Plus className="h-4 w-4" />
         </Link>
