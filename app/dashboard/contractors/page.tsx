@@ -3,6 +3,7 @@ import { Camera } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ContractorRoster, type ContractorRow } from '@/components/contractors/ContractorRoster';
+import { PayRequestsPanel, type PendingPayRequest } from '@/components/contractors/PayRequestsPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,7 @@ export default async function ContractorsPage() {
     .maybeSingle();
   if (!teamRow) redirect('/field/shoots');
 
-  const [{ data: contractors }, { data: orders }] = await Promise.all([
+  const [{ data: contractors }, { data: orders }, { data: pendingRequests }] = await Promise.all([
     supabase
       .from('contractors')
       .select('id, full_name, email, phone, pay_rate_cents, is_active, auth_user_id')
@@ -33,6 +34,11 @@ export default async function ContractorsPage() {
       .from('orders')
       .select('contractor_id, status, pay_status, pay_amount_cents, created_at')
       .not('contractor_id', 'is', null),
+    supabase
+      .from('pay_requests')
+      .select('id, period_start, period_end, shoot_count, total_cents, notes, created_at, contractors(full_name, email)')
+      .eq('status', 'submitted')
+      .order('created_at', { ascending: true }),
   ]);
 
   const now = new Date();
@@ -65,6 +71,18 @@ export default async function ContractorsPage() {
     };
   });
 
+  const requests: PendingPayRequest[] = (pendingRequests ?? []).map((r: any) => ({
+    id: r.id,
+    contractorName: r.contractors?.full_name ?? 'Unknown',
+    contractorEmail: r.contractors?.email ?? '',
+    periodStart: r.period_start,
+    periodEnd: r.period_end,
+    shootCount: r.shoot_count,
+    totalCents: r.total_cents,
+    notes: r.notes,
+    submittedAt: r.created_at,
+  }));
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -73,6 +91,7 @@ export default async function ContractorsPage() {
         title="Photographers"
         subtitle="Your contractor photographers — properties shot and pay owed. They log shoots and upload RAWs from the field portal."
       />
+      <PayRequestsPanel requests={requests} />
       <ContractorRoster rows={rows} />
     </div>
   );

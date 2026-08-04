@@ -1982,6 +1982,7 @@ export type Database = {
           duration_minutes: number | null
           pay_amount_cents: number
           pay_status: string
+          pay_request_id: string | null
           source: string
           editor_id: string | null
           gcal_event_id: string | null
@@ -2014,6 +2015,7 @@ export type Database = {
           duration_minutes?: number | null
           pay_amount_cents?: number
           pay_status?: string
+          pay_request_id?: string | null
           source?: string
           editor_id?: string | null
           gcal_event_id?: string | null
@@ -2046,6 +2048,7 @@ export type Database = {
           duration_minutes?: number | null
           pay_amount_cents?: number
           pay_status?: string
+          pay_request_id?: string | null
           source?: string
           editor_id?: string | null
           gcal_event_id?: string | null
@@ -2106,6 +2109,66 @@ export type Database = {
             columns: ["photographer_id"]
             isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_pay_request_id_fkey"
+            columns: ["pay_request_id"]
+            isOneToOne: false
+            referencedRelation: "pay_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pay_requests: {
+        Row: {
+          contractor_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          paid_at: string | null
+          paid_note: string | null
+          period_end: string
+          period_start: string
+          shoot_count: number
+          status: string
+          total_cents: number
+          updated_at: string
+        }
+        Insert: {
+          contractor_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          paid_note?: string | null
+          period_end: string
+          period_start: string
+          shoot_count?: number
+          status?: string
+          total_cents?: number
+          updated_at?: string
+        }
+        Update: {
+          contractor_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          paid_note?: string | null
+          period_end?: string
+          period_start?: string
+          shoot_count?: number
+          status?: string
+          total_cents?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pay_requests_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
             referencedColumns: ["id"]
           },
         ]
@@ -3990,6 +4053,14 @@ export type Database = {
         }
       }
       mark_field_shoot_uploaded: { Args: { p_order_id: string }; Returns: undefined }
+      mark_pay_request_paid: {
+        Args: { p_request_id: string; p_paid_note?: string }
+        Returns: undefined
+      }
+      submit_pay_request: {
+        Args: { p_order_ids: string[]; p_notes?: string }
+        Returns: string
+      }
       is_internal_user: { Args: never; Returns: boolean }
       is_team_member: { Args: never; Returns: boolean }
       link_client_account: {
