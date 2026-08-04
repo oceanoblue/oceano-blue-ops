@@ -59,5 +59,15 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     .in('status', PAYABLE as any)
     .select('id');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // A blanket settle covers any open weekly pay requests too — close them so
+  // the contractor's portal history doesn't show a paid week as pending.
+  const { error: reqError } = await admin
+    .from('pay_requests')
+    .update({ status: 'paid', paid_at: new Date().toISOString() })
+    .eq('contractor_id', params.id)
+    .eq('status', 'submitted');
+  if (reqError) return NextResponse.json({ error: reqError.message }, { status: 500 });
+
   return NextResponse.json({ ok: true, paid: updated?.length ?? 0 });
 }
