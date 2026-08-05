@@ -166,19 +166,19 @@ export function PayRequestForm({
             {error && <p className="text-sm text-rose-600">{error}</p>}
 
             <div className="flex items-center justify-between gap-4 border-t border-slate-100 pt-4">
-              <div>
+              <div className="min-w-0">
                 <div className="text-xs uppercase tracking-wide text-slate-400">Requesting</div>
                 <div className="font-display text-2xl font-semibold text-ink-900">
                   {fmtCents(totalCents)}
-                  <span className="ml-2 text-sm font-normal text-slate-500">
-                    {selected.size} shoot{selected.size === 1 ? '' : 's'}
-                  </span>
+                </div>
+                <div className="text-xs text-slate-500">
+                  {selected.size} shoot{selected.size === 1 ? '' : 's'}
                 </div>
               </div>
               <button
                 type="submit"
                 disabled={busy || selected.size === 0}
-                className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
+                className="btn-primary inline-flex shrink-0 items-center gap-2 whitespace-nowrap disabled:opacity-50"
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
                 Submit pay request
