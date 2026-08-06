@@ -9,7 +9,10 @@ const Body = z.object({
   email: z.string().email(),
   full_name: z.string().min(1),
   phone: z.string().optional(),
-  pay_rate_cents: z.number().int().nonnegative().default(0),
+  // Tiered pay (0058): small home / large home / 360 photos add-on.
+  pay_rate_small_cents: z.number().int().nonnegative().default(6000),
+  pay_rate_large_cents: z.number().int().nonnegative().default(7500),
+  pay_rate_360_cents: z.number().int().nonnegative().default(2000),
 });
 
 export async function POST(request: Request) {
@@ -36,7 +39,9 @@ export async function POST(request: Request) {
       email: b.email,
       full_name: b.full_name,
       phone: b.phone ?? null,
-      pay_rate_cents: b.pay_rate_cents,
+      pay_rate_small_cents: b.pay_rate_small_cents,
+      pay_rate_large_cents: b.pay_rate_large_cents,
+      pay_rate_360_cents: b.pay_rate_360_cents,
     })
     .select('id')
     .single();

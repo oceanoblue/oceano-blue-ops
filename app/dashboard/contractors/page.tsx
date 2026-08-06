@@ -28,7 +28,7 @@ export default async function ContractorsPage() {
   const [{ data: contractors }, { data: orders }, { data: pendingRequests }] = await Promise.all([
     supabase
       .from('contractors')
-      .select('id, full_name, email, phone, pay_rate_cents, is_active, auth_user_id')
+      .select('id, full_name, email, phone, pay_rate_small_cents, pay_rate_large_cents, pay_rate_360_cents, payout_method, payout_details, is_active, auth_user_id')
       .order('full_name', { ascending: true }),
     supabase
       .from('orders')
@@ -36,7 +36,7 @@ export default async function ContractorsPage() {
       .not('contractor_id', 'is', null),
     supabase
       .from('pay_requests')
-      .select('id, period_start, period_end, shoot_count, total_cents, notes, created_at, contractors(full_name, email)')
+      .select('id, period_start, period_end, shoot_count, total_cents, notes, payout_method, payout_details, created_at, contractors(full_name, email)')
       .eq('status', 'submitted')
       .order('created_at', { ascending: true }),
   ]);
@@ -61,7 +61,11 @@ export default async function ContractorsPage() {
       full_name: c.full_name,
       email: c.email,
       phone: c.phone,
-      pay_rate_cents: c.pay_rate_cents,
+      pay_rate_small_cents: c.pay_rate_small_cents,
+      pay_rate_large_cents: c.pay_rate_large_cents,
+      pay_rate_360_cents: c.pay_rate_360_cents,
+      payout_method: c.payout_method,
+      payout_details: c.payout_details,
       is_active: c.is_active,
       linked: Boolean(c.auth_user_id),
       total: payable.length,
@@ -80,6 +84,8 @@ export default async function ContractorsPage() {
     shootCount: r.shoot_count,
     totalCents: r.total_cents,
     notes: r.notes,
+    payoutMethod: r.payout_method,
+    payoutDetails: r.payout_details,
     submittedAt: r.created_at,
   }));
 

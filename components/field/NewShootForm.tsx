@@ -7,6 +7,7 @@ import { AddressAutocomplete, type PickedAddress } from '@/components/AddressAut
 
 const SERVICE_OPTIONS = [
   { value: 'photos', label: 'Photos' },
+  { value: '360', label: '360 photos' },
   { value: 'drone', label: 'Drone' },
   { value: 'video', label: 'Video' },
   { value: 'twilight', label: 'Twilight' },
