@@ -8,7 +8,10 @@ const PAYABLE = ['uploaded', 'processing', 'editing', 'ready', 'delivered'];
 const Body = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('update'),
-    pay_rate_cents: z.number().int().nonnegative().optional(),
+    // Tiered pay (0058): small home / large home / 360 photos add-on.
+    pay_rate_small_cents: z.number().int().nonnegative().optional(),
+    pay_rate_large_cents: z.number().int().nonnegative().optional(),
+    pay_rate_360_cents: z.number().int().nonnegative().optional(),
     is_active: z.boolean().optional(),
   }),
   // Mark all of this contractor's completed-but-unpaid shoots as paid.
@@ -41,8 +44,15 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const admin = createAdminClient();
 
   if (a.action === 'update') {
-    const patch: { pay_rate_cents?: number; is_active?: boolean } = {};
-    if (a.pay_rate_cents !== undefined) patch.pay_rate_cents = a.pay_rate_cents;
+    const patch: {
+      pay_rate_small_cents?: number;
+      pay_rate_large_cents?: number;
+      pay_rate_360_cents?: number;
+      is_active?: boolean;
+    } = {};
+    if (a.pay_rate_small_cents !== undefined) patch.pay_rate_small_cents = a.pay_rate_small_cents;
+    if (a.pay_rate_large_cents !== undefined) patch.pay_rate_large_cents = a.pay_rate_large_cents;
+    if (a.pay_rate_360_cents !== undefined) patch.pay_rate_360_cents = a.pay_rate_360_cents;
     if (a.is_active !== undefined) patch.is_active = a.is_active;
     if (Object.keys(patch).length === 0) return NextResponse.json({ ok: true });
     const { error } = await admin.from('contractors').update(patch).eq('id', params.id);

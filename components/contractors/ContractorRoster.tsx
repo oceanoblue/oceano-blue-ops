@@ -9,7 +9,9 @@ export type ContractorRow = {
   full_name: string;
   email: string;
   phone: string | null;
-  pay_rate_cents: number;
+  pay_rate_small_cents: number;
+  pay_rate_large_cents: number;
+  pay_rate_360_cents: number;
   is_active: boolean;
   linked: boolean;
   total: number;
@@ -27,7 +29,7 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ full_name: '', email: '', phone: '', rate: '' });
+  const [form, setForm] = useState({ full_name: '', email: '', phone: '', small: '60', large: '75', x360: '20' });
 
   async function addContractor(e: React.FormEvent) {
     e.preventDefault();
@@ -41,12 +43,14 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
           full_name: form.full_name,
           email: form.email,
           phone: form.phone || undefined,
-          pay_rate_cents: form.rate ? Math.round(Number(form.rate) * 100) : 0,
+          pay_rate_small_cents: Math.round(Number(form.small || 0) * 100),
+          pay_rate_large_cents: Math.round(Number(form.large || 0) * 100),
+          pay_rate_360_cents: Math.round(Number(form.x360 || 0) * 100),
         }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `Failed (${r.status})`);
-      setForm({ full_name: '', email: '', phone: '', rate: '' });
+      setForm({ full_name: '', email: '', phone: '', small: '60', large: '75', x360: '20' });
       setAdding(false);
       router.refresh();
     } catch (e) {
@@ -56,14 +60,19 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
     }
   }
 
-  async function saveRate(id: string, rate: string) {
+  async function saveRates(id: string, rates: { small: string; large: string; x360: string }) {
     setBusy(`rate-${id}`);
     setError(null);
     try {
       const r = await fetch(`/api/contractors/${id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'update', pay_rate_cents: Math.round(Number(rate) * 100) }),
+        body: JSON.stringify({
+          action: 'update',
+          pay_rate_small_cents: Math.round(Number(rates.small || 0) * 100),
+          pay_rate_large_cents: Math.round(Number(rates.large || 0) * 100),
+          pay_rate_360_cents: Math.round(Number(rates.x360 || 0) * 100),
+        }),
       });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Failed');
       router.refresh();
@@ -119,8 +128,12 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
             <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="label">Rate per property ($)</label>
-            <input inputMode="decimal" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} placeholder="e.g. 75" className="input" />
+            <label className="label">Rates ($ small / large / 360 add-on)</label>
+            <div className="flex items-center gap-2">
+              <input inputMode="decimal" value={form.small} onChange={(e) => setForm({ ...form, small: e.target.value })} placeholder="60" className="input" aria-label="Small home rate" />
+              <input inputMode="decimal" value={form.large} onChange={(e) => setForm({ ...form, large: e.target.value })} placeholder="75" className="input" aria-label="Large home rate" />
+              <input inputMode="decimal" value={form.x360} onChange={(e) => setForm({ ...form, x360: e.target.value })} placeholder="20" className="input" aria-label="360 photos add-on rate" />
+            </div>
           </div>
           <div className="sm:col-span-2 flex items-center gap-2">
             <button type="submit" disabled={busy === 'add'} className="btn-primary inline-flex items-center gap-2 disabled:opacity-50">
@@ -140,7 +153,7 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
             <thead>
               <tr className="border-b border-slate-100 text-left">
                 <th className="table-head px-4 py-3">Photographer</th>
-                <th className="table-head px-4 py-3">Rate</th>
+                <th className="table-head px-4 py-3">Rates (S / L / 360)</th>
                 <th className="table-head px-4 py-3 text-right">This month</th>
                 <th className="table-head px-4 py-3 text-right">Total</th>
                 <th className="table-head px-4 py-3 text-right">Owed</th>
@@ -155,7 +168,7 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
                   </td>
                 </tr>
               ) : (
-                rows.map((c) => <Row key={c.id} c={c} busy={busy} onSaveRate={saveRate} onMarkPaid={markPaid} />)
+                rows.map((c) => <Row key={c.id} c={c} busy={busy} onSaveRates={saveRates} onMarkPaid={markPaid} />)
               )}
             </tbody>
           </table>
@@ -168,16 +181,23 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
 function Row({
   c,
   busy,
-  onSaveRate,
+  onSaveRates,
   onMarkPaid,
 }: {
   c: ContractorRow;
   busy: string | null;
-  onSaveRate: (id: string, rate: string) => void;
+  onSaveRates: (id: string, rates: { small: string; large: string; x360: string }) => void;
   onMarkPaid: (id: string, count: number) => void;
 }) {
-  const [rate, setRate] = useState((c.pay_rate_cents / 100).toString());
-  const dirty = Math.round(Number(rate) * 100) !== c.pay_rate_cents;
+  const [rates, setRates] = useState({
+    small: (c.pay_rate_small_cents / 100).toString(),
+    large: (c.pay_rate_large_cents / 100).toString(),
+    x360: (c.pay_rate_360_cents / 100).toString(),
+  });
+  const dirty =
+    Math.round(Number(rates.small) * 100) !== c.pay_rate_small_cents ||
+    Math.round(Number(rates.large) * 100) !== c.pay_rate_large_cents ||
+    Math.round(Number(rates.x360) * 100) !== c.pay_rate_360_cents;
 
   return (
     <tr className="border-b border-slate-50 last:border-0">
@@ -194,16 +214,36 @@ function Row({
           <span className="text-slate-400">$</span>
           <input
             inputMode="decimal"
-            value={rate}
-            onChange={(e) => setRate(e.target.value)}
-            className="w-16 rounded border-slate-200 px-1.5 py-1 text-sm"
+            value={rates.small}
+            onChange={(e) => setRates({ ...rates, small: e.target.value })}
+            className="w-12 rounded border-slate-200 px-1.5 py-1 text-sm"
+            title="Small home (below the sqft cutoff)"
+            aria-label="Small home rate"
+          />
+          <span className="text-slate-300">/</span>
+          <input
+            inputMode="decimal"
+            value={rates.large}
+            onChange={(e) => setRates({ ...rates, large: e.target.value })}
+            className="w-12 rounded border-slate-200 px-1.5 py-1 text-sm"
+            title="Larger home (at/above the sqft cutoff)"
+            aria-label="Large home rate"
+          />
+          <span className="text-slate-300">/</span>
+          <input
+            inputMode="decimal"
+            value={rates.x360}
+            onChange={(e) => setRates({ ...rates, x360: e.target.value })}
+            className="w-12 rounded border-slate-200 px-1.5 py-1 text-sm"
+            title="360 photos add-on"
+            aria-label="360 photos add-on rate"
           />
           {dirty && (
             <button
-              onClick={() => onSaveRate(c.id, rate)}
+              onClick={() => onSaveRates(c.id, rates)}
               disabled={busy === `rate-${c.id}`}
               className="text-ocean-600 hover:text-ocean-700"
-              title="Save rate"
+              title="Save rates"
             >
               {busy === `rate-${c.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             </button>

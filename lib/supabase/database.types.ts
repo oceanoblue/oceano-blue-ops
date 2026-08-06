@@ -717,6 +717,7 @@ export type Database = {
           id: boolean
           max_notice_days: number
           min_notice_hours: number
+          pay_small_max_sqft: number
           raw_retention_days: number
           updated_at: string
         }
@@ -729,6 +730,7 @@ export type Database = {
           id?: boolean
           max_notice_days?: number
           min_notice_hours?: number
+          pay_small_max_sqft?: number
           raw_retention_days?: number
           updated_at?: string
         }
@@ -741,6 +743,7 @@ export type Database = {
           id?: boolean
           max_notice_days?: number
           min_notice_hours?: number
+          pay_small_max_sqft?: number
           raw_retention_days?: number
           updated_at?: string
         }
@@ -878,6 +881,9 @@ export type Database = {
           is_active: boolean
           notes: string | null
           pay_rate_cents: number
+          pay_rate_small_cents: number
+          pay_rate_large_cents: number
+          pay_rate_360_cents: number
           phone: string | null
           updated_at: string
         }
@@ -890,6 +896,9 @@ export type Database = {
           is_active?: boolean
           notes?: string | null
           pay_rate_cents?: number
+          pay_rate_small_cents?: number
+          pay_rate_large_cents?: number
+          pay_rate_360_cents?: number
           phone?: string | null
           updated_at?: string
         }
@@ -902,6 +911,9 @@ export type Database = {
           is_active?: boolean
           notes?: string | null
           pay_rate_cents?: number
+          pay_rate_small_cents?: number
+          pay_rate_large_cents?: number
+          pay_rate_360_cents?: number
           phone?: string | null
           updated_at?: string
         }
