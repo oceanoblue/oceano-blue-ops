@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, UserPlus, Check, DollarSign } from 'lucide-react';
+import { payoutLabel } from '@/components/field/PayoutMethodCard';
 
 export type ContractorRow = {
   id: string;
@@ -12,6 +13,8 @@ export type ContractorRow = {
   pay_rate_small_cents: number;
   pay_rate_large_cents: number;
   pay_rate_360_cents: number;
+  payout_method: string | null;
+  payout_details: string | null;
   is_active: boolean;
   linked: boolean;
   total: number;
@@ -207,6 +210,12 @@ function Row({
           {!c.is_active && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
         </div>
         <div className="text-xs text-slate-500">{c.email}</div>
+        {c.payout_method && (
+          <div className="text-xs text-slate-500">
+            {payoutLabel(c.payout_method) ?? c.payout_method}
+            {c.payout_details ? ` · ${c.payout_details}` : ''}
+          </div>
+        )}
         {!c.linked && <div className="text-xs text-amber-600">Hasn’t signed in yet</div>}
       </td>
       <td className="px-4 py-3">

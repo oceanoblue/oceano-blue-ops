@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, DollarSign, CheckCircle2 } from 'lucide-react';
+import { Loader2, DollarSign, CheckCircle2, Wallet } from 'lucide-react';
 import { fmtCents, fmtDate } from '@/lib/utils/format';
+import { payoutLabel } from '@/components/field/PayoutMethodCard';
 
 export type PendingPayRequest = {
   id: string;
@@ -14,6 +15,8 @@ export type PendingPayRequest = {
   shootCount: number;
   totalCents: number;
   notes: string | null;
+  payoutMethod: string | null;
+  payoutDetails: string | null;
   submittedAt: string;
 };
 
@@ -73,6 +76,17 @@ export function PayRequestsPanel({ requests }: { requests: PendingPayRequest[] }
                 </div>
                 <div className="text-xs text-slate-500">
                   Submitted {fmtDate(r.submittedAt)} · {r.contractorEmail}
+                </div>
+                <div className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-600">
+                  <Wallet className="h-3 w-3 text-slate-400" />
+                  {r.payoutMethod ? (
+                    <>
+                      {payoutLabel(r.payoutMethod) ?? r.payoutMethod}
+                      {r.payoutDetails ? <span className="text-slate-400"> · {r.payoutDetails}</span> : null}
+                    </>
+                  ) : (
+                    <span className="text-amber-600">No payout method on file — ask them to set one in the portal</span>
+                  )}
                 </div>
                 {r.notes && (
                   <div className="mt-1 rounded bg-slate-50 px-2 py-1 text-xs italic text-slate-600">

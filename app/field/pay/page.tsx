@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { PortalHero } from '@/components/portal/PortalHero';
 import { PayRequestForm, type EligibleShoot, type PayRequestRow } from '@/components/field/PayRequestForm';
+import { PayoutMethodCard } from '@/components/field/PayoutMethodCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,7 @@ export default async function FieldPayPage() {
 
   const { data: me } = await supabase
     .from('contractors')
-    .select('id, full_name')
+    .select('id, full_name, payout_method, payout_details')
     .eq('auth_user_id', user.id)
     .maybeSingle();
   if (!me) redirect('/field/shoots');
@@ -62,7 +63,8 @@ export default async function FieldPayPage() {
         backHref="/field/shoots"
         backLabel="My shoots"
       />
-      <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+      <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        <PayoutMethodCard method={me.payout_method} details={me.payout_details} />
         <PayRequestForm
           shoots={shoots}
           awaitingUploadCount={awaitingUpload ?? 0}

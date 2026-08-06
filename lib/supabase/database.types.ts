@@ -884,6 +884,8 @@ export type Database = {
           pay_rate_small_cents: number
           pay_rate_large_cents: number
           pay_rate_360_cents: number
+          payout_method: string | null
+          payout_details: string | null
           phone: string | null
           updated_at: string
         }
@@ -899,6 +901,8 @@ export type Database = {
           pay_rate_small_cents?: number
           pay_rate_large_cents?: number
           pay_rate_360_cents?: number
+          payout_method?: string | null
+          payout_details?: string | null
           phone?: string | null
           updated_at?: string
         }
@@ -914,6 +918,8 @@ export type Database = {
           pay_rate_small_cents?: number
           pay_rate_large_cents?: number
           pay_rate_360_cents?: number
+          payout_method?: string | null
+          payout_details?: string | null
           phone?: string | null
           updated_at?: string
         }
@@ -2140,6 +2146,8 @@ export type Database = {
           notes: string | null
           paid_at: string | null
           paid_note: string | null
+          payout_details: string | null
+          payout_method: string | null
           period_end: string
           period_start: string
           shoot_count: number
@@ -2154,6 +2162,8 @@ export type Database = {
           notes?: string | null
           paid_at?: string | null
           paid_note?: string | null
+          payout_details?: string | null
+          payout_method?: string | null
           period_end: string
           period_start: string
           shoot_count?: number
@@ -2168,6 +2178,8 @@ export type Database = {
           notes?: string | null
           paid_at?: string | null
           paid_note?: string | null
+          payout_details?: string | null
+          payout_method?: string | null
           period_end?: string
           period_start?: string
           shoot_count?: number
@@ -4067,6 +4079,10 @@ export type Database = {
       mark_field_shoot_uploaded: { Args: { p_order_id: string }; Returns: undefined }
       mark_pay_request_paid: {
         Args: { p_request_id: string; p_paid_note?: string }
+        Returns: undefined
+      }
+      set_contractor_payout: {
+        Args: { p_method: string; p_details?: string }
         Returns: undefined
       }
       submit_pay_request: {
