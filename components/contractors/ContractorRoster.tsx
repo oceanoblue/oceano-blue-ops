@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, UserPlus, Check, DollarSign } from 'lucide-react';
+import { Loader2, UserPlus, Check, DollarSign, Pencil, X } from 'lucide-react';
 import { payoutLabel } from '@/components/field/PayoutMethodCard';
 
 export type ContractorRow = {
@@ -10,6 +10,7 @@ export type ContractorRow = {
   full_name: string;
   email: string;
   phone: string | null;
+  notes: string | null;
   pay_rate_small_cents: number;
   pay_rate_large_cents: number;
   pay_rate_360_cents: number;
@@ -81,6 +82,36 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveDetails(
+    id: string,
+    details: { full_name: string; email: string; phone: string; notes: string }
+  ): Promise<boolean> {
+    setBusy(`details-${id}`);
+    setError(null);
+    try {
+      const r = await fetch(`/api/contractors/${id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          full_name: details.full_name,
+          email: details.email,
+          phone: details.phone,
+          notes: details.notes,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.message || d.error || 'Failed');
+      router.refresh();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return false;
     } finally {
       setBusy(null);
     }
@@ -171,7 +202,9 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
                   </td>
                 </tr>
               ) : (
-                rows.map((c) => <Row key={c.id} c={c} busy={busy} onSaveRates={saveRates} onMarkPaid={markPaid} />)
+                rows.map((c) => (
+                  <Row key={c.id} c={c} busy={busy} onSaveRates={saveRates} onMarkPaid={markPaid} onSaveDetails={saveDetails} />
+                ))
               )}
             </tbody>
           </table>
@@ -186,11 +219,16 @@ function Row({
   busy,
   onSaveRates,
   onMarkPaid,
+  onSaveDetails,
 }: {
   c: ContractorRow;
   busy: string | null;
   onSaveRates: (id: string, rates: { small: string; large: string; x360: string }) => void;
   onMarkPaid: (id: string, count: number) => void;
+  onSaveDetails: (
+    id: string,
+    details: { full_name: string; email: string; phone: string; notes: string }
+  ) => Promise<boolean>;
 }) {
   const [rates, setRates] = useState({
     small: (c.pay_rate_small_cents / 100).toString(),
@@ -202,7 +240,22 @@ function Row({
     Math.round(Number(rates.large) * 100) !== c.pay_rate_large_cents ||
     Math.round(Number(rates.x360) * 100) !== c.pay_rate_360_cents;
 
+  // Inline contact-details editor (name / email / phone / notes).
+  const [editing, setEditing] = useState(false);
+  const [details, setDetails] = useState({
+    full_name: c.full_name,
+    email: c.email,
+    phone: c.phone ?? '',
+    notes: c.notes ?? '',
+  });
+
+  async function saveDetails() {
+    const ok = await onSaveDetails(c.id, details);
+    if (ok) setEditing(false);
+  }
+
   return (
+    <>
     <tr className="border-b border-slate-50 last:border-0">
       <td className="px-4 py-3">
         <div className="font-medium text-ink-900">
@@ -268,17 +321,84 @@ function Row({
         <div className="text-xs text-slate-400">{c.unpaidCount} unpaid</div>
       </td>
       <td className="px-4 py-3 text-right">
-        {c.unpaidCount > 0 && (
+        <div className="inline-flex items-center gap-1.5">
+          {c.unpaidCount > 0 && (
+            <button
+              onClick={() => onMarkPaid(c.id, c.unpaidCount)}
+              disabled={busy === `paid-${c.id}`}
+              className="btn-secondary inline-flex items-center gap-1.5 text-xs"
+            >
+              {busy === `paid-${c.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DollarSign className="h-3.5 w-3.5" />}
+              Mark paid
+            </button>
+          )}
           <button
-            onClick={() => onMarkPaid(c.id, c.unpaidCount)}
-            disabled={busy === `paid-${c.id}`}
-            className="btn-secondary inline-flex items-center gap-1.5 text-xs"
+            onClick={() => setEditing((v) => !v)}
+            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            title="Edit name, email, phone"
+            aria-label="Edit contact details"
           >
-            {busy === `paid-${c.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DollarSign className="h-3.5 w-3.5" />}
-            Mark paid
+            {editing ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
           </button>
-        )}
+        </div>
       </td>
     </tr>
+
+    {editing && (
+      <tr className="border-b border-slate-50 bg-slate-50/60">
+        <td colSpan={6} className="px-4 py-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="label">Full name</label>
+              <input
+                className="input"
+                value={details.full_name}
+                onChange={(e) => setDetails({ ...details, full_name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Email (their sign-in)</label>
+              <input
+                className="input"
+                type="email"
+                value={details.email}
+                onChange={(e) => setDetails({ ...details, email: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Phone</label>
+              <input
+                className="input"
+                value={details.phone}
+                onChange={(e) => setDetails({ ...details, phone: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Notes (office-only)</label>
+              <input
+                className="input"
+                value={details.notes}
+                onChange={(e) => setDetails({ ...details, notes: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={saveDetails}
+              disabled={busy === `details-${c.id}` || !details.full_name.trim() || !details.email.trim()}
+              className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
+            >
+              {busy === `details-${c.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Save details
+            </button>
+            <button type="button" onClick={() => setEditing(false)} className="btn-ghost">Cancel</button>
+            {c.email !== details.email && (
+              <span className="text-xs text-amber-600">Changing their email changes the address they sign in with.</span>
+            )}
+          </div>
+        </td>
+      </tr>
+    )}
+    </>
   );
 }

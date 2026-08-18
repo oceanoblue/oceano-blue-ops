@@ -33,6 +33,7 @@ export default async function ClientsPage() {
         columns={COLUMNS}
         rows={clients ?? []}
         rowKey={(c) => c.id}
+        rowHref={(c) => `/dashboard/clients/${c.id}`}
         empty={
           <EmptyState
             icon={Users}

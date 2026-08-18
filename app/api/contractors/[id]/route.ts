@@ -8,6 +8,11 @@ const PAYABLE = ['uploaded', 'processing', 'editing', 'ready', 'delivered'];
 const Body = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('update'),
+    // Contact details (editable — the DB always allowed this; the form didn't).
+    full_name: z.string().min(1).optional(),
+    email: z.string().email().optional(),
+    phone: z.string().optional(),
+    notes: z.string().optional(),
     // Tiered pay (0058): small home / large home / 360 photos add-on.
     pay_rate_small_cents: z.number().int().nonnegative().optional(),
     pay_rate_large_cents: z.number().int().nonnegative().optional(),
@@ -45,18 +50,33 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   if (a.action === 'update') {
     const patch: {
+      full_name?: string;
+      email?: string;
+      phone?: string | null;
+      notes?: string | null;
       pay_rate_small_cents?: number;
       pay_rate_large_cents?: number;
       pay_rate_360_cents?: number;
       is_active?: boolean;
     } = {};
+    if (a.full_name !== undefined) patch.full_name = a.full_name.trim();
+    if (a.email !== undefined) patch.email = a.email.toLowerCase().trim();
+    if (a.phone !== undefined) patch.phone = a.phone.trim() || null;
+    if (a.notes !== undefined) patch.notes = a.notes.trim() || null;
     if (a.pay_rate_small_cents !== undefined) patch.pay_rate_small_cents = a.pay_rate_small_cents;
     if (a.pay_rate_large_cents !== undefined) patch.pay_rate_large_cents = a.pay_rate_large_cents;
     if (a.pay_rate_360_cents !== undefined) patch.pay_rate_360_cents = a.pay_rate_360_cents;
     if (a.is_active !== undefined) patch.is_active = a.is_active;
     if (Object.keys(patch).length === 0) return NextResponse.json({ ok: true });
     const { error } = await admin.from('contractors').update(patch).eq('id', params.id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      // contractors.email is CITEXT UNIQUE — surface a friendly clash message.
+      const dup = (error as any).code === '23505' || /duplicate|unique/i.test(error.message);
+      return NextResponse.json(
+        { error: dup ? 'email_taken' : error.message, message: dup ? 'Another photographer already uses that email.' : undefined },
+        { status: dup ? 409 : 500 }
+      );
+    }
     return NextResponse.json({ ok: true });
   }
 
