@@ -28,7 +28,7 @@ export default async function ContractorsPage() {
   const [{ data: contractors }, { data: orders }, { data: pendingRequests }] = await Promise.all([
     supabase
       .from('contractors')
-      .select('id, full_name, email, phone, notes, pay_rate_small_cents, pay_rate_large_cents, pay_rate_360_cents, payout_method, payout_details, is_active, auth_user_id')
+      .select('id, full_name, email, phone, pay_rate_small_cents, pay_rate_large_cents, pay_rate_360_cents, payout_method, payout_details, is_active, auth_user_id')
       .order('full_name', { ascending: true }),
     supabase
       .from('orders')
@@ -61,7 +61,6 @@ export default async function ContractorsPage() {
       full_name: c.full_name,
       email: c.email,
       phone: c.phone,
-      notes: c.notes,
       pay_rate_small_cents: c.pay_rate_small_cents,
       pay_rate_large_cents: c.pay_rate_large_cents,
       pay_rate_360_cents: c.pay_rate_360_cents,
