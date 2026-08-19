@@ -19,7 +19,7 @@ import { EditInstructionsEditor } from '@/components/orders/EditInstructionsEdit
 import { SendToEditEngine } from '@/components/orders/SendToEditEngine';
 import { FotelloWorkspace } from '@/components/orders/FotelloWorkspace';
 import { RawIntakeControl } from '@/components/orders/RawIntakeControl';
-import { ContractorAssignControl, type ContractorOption } from '@/components/orders/ContractorAssignControl';
+import { AssignShooterControl } from '@/components/orders/AssignShooterControl';
 import { ContractorResponseNotice } from '@/components/orders/ContractorResponseNotice';
 import { ArchiveOrderControl } from '@/components/orders/ArchiveOrderControl';
 import { DeliverablesManager, type DeliverableRow } from '@/components/orders/DeliverablesManager';
@@ -194,12 +194,28 @@ export default async function OrderDetailPage({ params }: { params: { id: string
   const editors = ((team ?? []) as any[]).filter((t) => t.role === 'editor' || t.role === 'admin');
 
   // Active contractor photographers for the assignment dropdown.
-  const { data: contractorRows } = await supabase
+  const { data: contractorRows } = await (supabase as any)
     .from('contractors')
-    .select('id, full_name, pay_rate_cents')
+    .select('id, full_name, pay_rate_cents, team_member_id')
     .eq('is_active', true)
     .order('full_name', { ascending: true });
-  const contractors = (contractorRows ?? []) as ContractorOption[];
+  const contractors = (contractorRows ?? []) as any[];
+
+  // Unified shooter list: contractors + team photographers, deduped — a person
+  // linked in both tables (e.g. Karen) shows once, as the contractor.
+  const shooters = [
+    ...contractors.map((c) => ({
+      key: `contractor:${c.id}`,
+      kind: 'contractor' as const,
+      id: c.id,
+      name: c.full_name,
+      payRateCents: c.pay_rate_cents,
+      teamMemberId: c.team_member_id ?? null,
+    })),
+    ...photographers
+      .filter((p) => !contractors.some((c) => c.team_member_id === p.id))
+      .map((p) => ({ key: `team:${p.id}`, kind: 'team' as const, id: p.id, name: p.full_name })),
+  ];
 
   return (
     <div className="space-y-6">
@@ -357,17 +373,16 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               <Row label="Duration">{order.duration_minutes} min</Row>
             </dl>
             <div className="mt-4 space-y-3">
+              <AssignShooterControl
+                orderId={order.id}
+                currentContractorId={(order as any).contractor_id ?? null}
+                currentPhotographerId={order.photographer_id}
+                shooters={shooters}
+              />
               <AssignTeamControl
                 orderId={order.id}
-                photographerId={order.photographer_id}
                 editorId={order.editor_id}
-                photographers={photographers}
                 editors={editors}
-              />
-              <ContractorAssignControl
-                orderId={order.id}
-                contractorId={(order as any).contractor_id ?? null}
-                contractors={contractors}
               />
               <ContractorResponseNotice
                 response={(order as any).contractor_response ?? null}
