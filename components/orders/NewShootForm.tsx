@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ClipboardList, User, Home, Calendar, Camera, ChevronDown, Loader2 } from 'lucide-react';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 export interface ClientOpt { id: string; full_name: string; brokerage: string | null }
 export interface ContractorOpt { id: string; full_name: string; pay_rate_cents: number }
@@ -147,7 +148,24 @@ export function NewShootForm({
       {/* Property */}
       <Section icon={<Home className="h-4 w-4" />} title="Property">
         <div className="space-y-3">
-          <Field label="Street address" required value={addr.address_line1} onChange={(v) => setAddr({ ...addr, address_line1: v })} placeholder="123 Palm Blvd" />
+          <div>
+            <label className="label">Street address <span className="text-rose-600">*</span></label>
+            <AddressAutocomplete
+              value={addr.address_line1}
+              onTextChange={(v) => setAddr({ ...addr, address_line1: v })}
+              onPick={(a) =>
+                setAddr((prev) => ({
+                  ...prev,
+                  address_line1: a.address_line1 || prev.address_line1,
+                  address_line2: a.address_line2 || prev.address_line2,
+                  city: a.city || prev.city,
+                  state: a.state || prev.state,
+                  zip: a.zip || prev.zip,
+                }))
+              }
+              placeholder="Start typing an address…"
+            />
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="col-span-2 sm:col-span-2">
               <Field label="City" required value={addr.city} onChange={(v) => setAddr({ ...addr, city: v })} placeholder="Charleston" />
