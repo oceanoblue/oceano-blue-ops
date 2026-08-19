@@ -32,7 +32,7 @@ export default async function DeliveriesPage({
   const [{ data: deliveries }, { data: clientRows }, { data: links }] = await Promise.all([
     query,
     supabase.from('clients').select('id, full_name').eq('is_archived', false).order('full_name'),
-    (supabase as any)
+    supabase
       .from('delivery_links')
       .select('delivery_version_id, view_count, download_count')
       .not('delivery_version_id', 'is', null),

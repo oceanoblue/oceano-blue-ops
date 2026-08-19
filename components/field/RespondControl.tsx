@@ -33,17 +33,18 @@ export function RespondControl({
     setError(null);
     try {
       const supabase = createClient();
-      const { data, error } = await (supabase.rpc as any)('respond_to_assignment', {
+      const { data, error } = await supabase.rpc('respond_to_assignment', {
         p_order_id: orderId,
         p_response: kind,
-        p_note: noteText?.trim() || null,
+        p_note: noteText?.trim() || undefined,
       });
       if (error) throw error;
-      if (data && data.ok === false) {
+      const res = data as { ok?: boolean; reason?: string } | null;
+      if (res && res.ok === false) {
         throw new Error(
-          data.reason === 'not_your_assignment'
+          res.reason === 'not_your_assignment'
             ? "This shoot isn't assigned to you."
-            : data.reason || 'Could not save your response.'
+            : res.reason || 'Could not save your response.'
         );
       }
       setDeclining(false);

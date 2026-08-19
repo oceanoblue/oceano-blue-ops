@@ -60,6 +60,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "activity_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
+          },
         ]
       }
       agents: {
@@ -187,6 +194,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_jobs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
           },
           {
             foreignKeyName: "ai_jobs_tool_run_id_fkey"
@@ -665,6 +679,55 @@ export type Database = {
           },
         ]
       }
+      assignment_events: {
+        Row: {
+          contractor_id: string
+          created_at: string
+          event: string
+          id: string
+          note: string | null
+          order_id: string
+        }
+        Insert: {
+          contractor_id: string
+          created_at?: string
+          event: string
+          id?: string
+          note?: string | null
+          order_id: string
+        }
+        Update: {
+          contractor_id?: string
+          created_at?: string
+          event?: string
+          id?: string
+          note?: string | null
+          order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignment_events_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
+          },
+        ]
+      }
       automation_scenarios: {
         Row: {
           config: Json
@@ -880,13 +943,14 @@ export type Database = {
           id: string
           is_active: boolean
           notes: string | null
-          pay_rate_cents: number
-          pay_rate_small_cents: number
-          pay_rate_large_cents: number
           pay_rate_360_cents: number
-          payout_method: string | null
+          pay_rate_cents: number
+          pay_rate_large_cents: number
+          pay_rate_small_cents: number
           payout_details: string | null
+          payout_method: string | null
           phone: string | null
+          team_member_id: string | null
           updated_at: string
         }
         Insert: {
@@ -897,13 +961,14 @@ export type Database = {
           id?: string
           is_active?: boolean
           notes?: string | null
-          pay_rate_cents?: number
-          pay_rate_small_cents?: number
-          pay_rate_large_cents?: number
           pay_rate_360_cents?: number
-          payout_method?: string | null
+          pay_rate_cents?: number
+          pay_rate_large_cents?: number
+          pay_rate_small_cents?: number
           payout_details?: string | null
+          payout_method?: string | null
           phone?: string | null
+          team_member_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -914,16 +979,25 @@ export type Database = {
           id?: string
           is_active?: boolean
           notes?: string | null
-          pay_rate_cents?: number
-          pay_rate_small_cents?: number
-          pay_rate_large_cents?: number
           pay_rate_360_cents?: number
-          payout_method?: string | null
+          pay_rate_cents?: number
+          pay_rate_large_cents?: number
+          pay_rate_small_cents?: number
           payout_details?: string | null
+          payout_method?: string | null
           phone?: string | null
+          team_member_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "contractors_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       delivery_links: {
         Row: {
@@ -986,6 +1060,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_links_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
           },
         ]
       }
@@ -1120,6 +1201,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "edit_jobs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
           },
           {
             foreignKeyName: "edit_jobs_worker_id_fkey"
@@ -1327,6 +1415,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_edit_batches_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
           },
         ]
       }
@@ -1611,6 +1706,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "listing_deliverables_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "listing_deliverables_listing_id_fkey"
             columns: ["listing_id"]
             isOneToOne: false
@@ -1623,6 +1725,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_deliverables_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
           },
         ]
       }
@@ -1892,6 +2001,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "order_footage_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
+          },
         ]
       }
       order_items: {
@@ -1935,6 +2051,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
           },
           {
             foreignKeyName: "order_items_product_id_fkey"
@@ -1984,6 +2107,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "order_services_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
+          },
         ]
       }
       orders: {
@@ -1992,16 +2122,15 @@ export type Database = {
           client_id: string
           client_notes: string | null
           contractor_id: string | null
+          contractor_responded_at: string | null
+          contractor_response: string | null
+          contractor_response_note: string | null
           coordinator_id: string | null
           created_at: string
           delivered_at: string | null
           dropbox_intake_path: string | null
           dropbox_intake_url: string | null
           duration_minutes: number | null
-          pay_amount_cents: number
-          pay_status: string
-          pay_request_id: string | null
-          source: string
           editor_id: string | null
           gcal_event_id: string | null
           id: string
@@ -2011,9 +2140,14 @@ export type Database = {
           order_kind: Database["public"]["Enums"]["order_kind"]
           order_number: number
           package_name: string | null
+          pay_amount_cents: number
+          pay_request_id: string | null
+          pay_status: string
           photographer_id: string | null
+          project_type: Database["public"]["Enums"]["project_type"]
           rush: boolean
           scheduled_at: string | null
+          source: string
           status: Database["public"]["Enums"]["order_status"]
           subtotal_cents: number | null
           timezone: string | null
@@ -2025,16 +2159,15 @@ export type Database = {
           client_id: string
           client_notes?: string | null
           contractor_id?: string | null
+          contractor_responded_at?: string | null
+          contractor_response?: string | null
+          contractor_response_note?: string | null
           coordinator_id?: string | null
           created_at?: string
           delivered_at?: string | null
           dropbox_intake_path?: string | null
           dropbox_intake_url?: string | null
           duration_minutes?: number | null
-          pay_amount_cents?: number
-          pay_status?: string
-          pay_request_id?: string | null
-          source?: string
           editor_id?: string | null
           gcal_event_id?: string | null
           id?: string
@@ -2044,9 +2177,14 @@ export type Database = {
           order_kind?: Database["public"]["Enums"]["order_kind"]
           order_number?: number
           package_name?: string | null
+          pay_amount_cents?: number
+          pay_request_id?: string | null
+          pay_status?: string
           photographer_id?: string | null
+          project_type?: Database["public"]["Enums"]["project_type"]
           rush?: boolean
           scheduled_at?: string | null
+          source?: string
           status?: Database["public"]["Enums"]["order_status"]
           subtotal_cents?: number | null
           timezone?: string | null
@@ -2058,16 +2196,15 @@ export type Database = {
           client_id?: string
           client_notes?: string | null
           contractor_id?: string | null
+          contractor_responded_at?: string | null
+          contractor_response?: string | null
+          contractor_response_note?: string | null
           coordinator_id?: string | null
           created_at?: string
           delivered_at?: string | null
           dropbox_intake_path?: string | null
           dropbox_intake_url?: string | null
           duration_minutes?: number | null
-          pay_amount_cents?: number
-          pay_status?: string
-          pay_request_id?: string | null
-          source?: string
           editor_id?: string | null
           gcal_event_id?: string | null
           id?: string
@@ -2077,9 +2214,14 @@ export type Database = {
           order_kind?: Database["public"]["Enums"]["order_kind"]
           order_number?: number
           package_name?: string | null
+          pay_amount_cents?: number
+          pay_request_id?: string | null
+          pay_status?: string
           photographer_id?: string | null
+          project_type?: Database["public"]["Enums"]["project_type"]
           rush?: boolean
           scheduled_at?: string | null
+          source?: string
           status?: Database["public"]["Enums"]["order_status"]
           subtotal_cents?: number | null
           timezone?: string | null
@@ -2092,6 +2234,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
             referencedColumns: ["id"]
           },
           {
@@ -2123,17 +2272,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "orders_photographer_id_fkey"
-            columns: ["photographer_id"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "orders_pay_request_id_fkey"
             columns: ["pay_request_id"]
             isOneToOne: false
             referencedRelation: "pay_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_photographer_id_fkey"
+            columns: ["photographer_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -2233,6 +2382,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "photo_qc_reports_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
+          },
         ]
       }
       photos: {
@@ -2257,6 +2413,7 @@ export type Database = {
           order_id: string
           parent_photo_id: string | null
           processing_status: Database["public"]["Enums"]["processing_status"]
+          raw_storage_path: string | null
           room_confidence: number | null
           room_type: string | null
           sort_order: number | null
@@ -2287,6 +2444,7 @@ export type Database = {
           order_id: string
           parent_photo_id?: string | null
           processing_status?: Database["public"]["Enums"]["processing_status"]
+          raw_storage_path?: string | null
           room_confidence?: number | null
           room_type?: string | null
           sort_order?: number | null
@@ -2317,6 +2475,7 @@ export type Database = {
           order_id?: string
           parent_photo_id?: string | null
           processing_status?: Database["public"]["Enums"]["processing_status"]
+          raw_storage_path?: string | null
           room_confidence?: number | null
           room_type?: string | null
           sort_order?: number | null
@@ -2340,6 +2499,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photos_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
           },
           {
             foreignKeyName: "photos_parent_photo_id_fkey"
@@ -2693,6 +2859,7 @@ export type Database = {
           short_description: string | null
           slug: string
           sort_order: number
+          standalone_price_cents: number | null
           updated_at: string
         }
         Insert: {
@@ -2710,6 +2877,7 @@ export type Database = {
           short_description?: string | null
           slug: string
           sort_order?: number
+          standalone_price_cents?: number | null
           updated_at?: string
         }
         Update: {
@@ -2727,6 +2895,7 @@ export type Database = {
           short_description?: string | null
           slug?: string
           sort_order?: number
+          standalone_price_cents?: number | null
           updated_at?: string
         }
         Relationships: []
@@ -3061,6 +3230,13 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "orders"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reel_briefs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
           },
         ]
       }
@@ -3613,6 +3789,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "training_pairs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_shoot_assignee"
+            referencedColumns: ["order_id"]
+          },
+          {
             foreignKeyName: "training_pairs_output_photo_id_fkey"
             columns: ["output_photo_id"]
             isOneToOne: false
@@ -3977,6 +4160,46 @@ export type Database = {
         }
         Relationships: []
       }
+      v_assignment_responses: {
+        Row: {
+          contractor: string | null
+          note: string | null
+          order_number: number | null
+          property: string | null
+          responded_at: string | null
+          response: string | null
+          scheduled_at: string | null
+          status: Database["public"]["Enums"]["order_status"] | null
+        }
+        Relationships: []
+      }
+      v_shoot_assignee: {
+        Row: {
+          assignee_kind: string | null
+          assignee_name: string | null
+          contractor_id: string | null
+          order_id: string | null
+          order_number: number | null
+          photographer_id: string | null
+          schedule_member_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_photographer_id_fkey"
+            columns: ["photographer_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_reel_footage: {
@@ -3994,7 +4217,15 @@ export type Database = {
         }
         Returns: string
       }
+      available_slots: {
+        Args: { days?: number; token: string }
+        Returns: {
+          slot_end: string
+          slot_start: string
+        }[]
+      }
       bump_rate_limit: { Args: { p_key: string }; Returns: number }
+      contractor_me: { Args: never; Returns: Json }
       create_booking_v2: {
         Args: {
           p_access_method: string
@@ -4045,51 +4276,39 @@ export type Database = {
           p_address_line2?: string
           p_bathrooms?: number
           p_bedrooms?: number
-          p_city?: string
+          p_city: string
           p_lat?: number
           p_lng?: number
           p_notes?: string
           p_property_type?: string
           p_services?: Json
           p_sqft?: number
-          p_state?: string
-          p_zip?: string
+          p_state: string
+          p_zip: string
         }
         Returns: string
       }
       create_reel_order: { Args: { p_brief?: Json }; Returns: string }
       current_client_id: { Args: never; Returns: string }
       current_contractor_id: { Args: never; Returns: string }
-      field_intake_client_id: { Args: never; Returns: string }
-      link_contractor_account: {
+      due_sends: {
         Args: never
         Returns: {
-          auth_user_id: string | null
-          created_at: string
+          body: string
+          channel: string
           email: string
-          full_name: string
-          id: string
-          is_active: boolean
-          notes: string | null
-          pay_rate_cents: number
-          phone: string | null
-          updated_at: string
-        }
+          enrollment_id: string
+          lead_id: string
+          phone: string
+          step_no: number
+          subject: string
+        }[]
       }
-      mark_field_shoot_uploaded: { Args: { p_order_id: string }; Returns: undefined }
-      mark_pay_request_paid: {
-        Args: { p_request_id: string; p_paid_note?: string }
-        Returns: undefined
-      }
-      set_contractor_payout: {
-        Args: { p_method: string; p_details?: string }
-        Returns: undefined
-      }
-      submit_pay_request: {
-        Args: { p_order_ids: string[]; p_notes?: string }
-        Returns: string
-      }
+      field_intake_client_id: { Args: never; Returns: string }
+      get_quote: { Args: { token: string }; Returns: Json }
+      intake: { Args: { p: Json }; Returns: Json }
       is_internal_user: { Args: never; Returns: boolean }
+      is_team_admin: { Args: never; Returns: boolean }
       is_team_member: { Args: never; Returns: boolean }
       link_client_account: {
         Args: never
@@ -4113,6 +4332,51 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      link_contractor_account: {
+        Args: never
+        Returns: {
+          auth_user_id: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          pay_rate_360_cents: number
+          pay_rate_cents: number
+          pay_rate_large_cents: number
+          pay_rate_small_cents: number
+          payout_details: string | null
+          payout_method: string | null
+          phone: string | null
+          team_member_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "contractors"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      mark_booked: {
+        Args: { p_note?: string; p_phone: string; p_scheduled_at?: string }
+        Returns: Json
+      }
+      mark_field_shoot_uploaded: {
+        Args: { p_order_id: string }
+        Returns: undefined
+      }
+      mark_pay_request_paid: {
+        Args: { p_paid_note?: string; p_request_id: string }
+        Returns: undefined
+      }
+      mark_sent: {
+        Args: { p_enrollment_id: string; p_step: number }
+        Returns: Json
+      }
+      my_assignments: { Args: never; Returns: Json }
+      opt_out: { Args: { p_phone: string }; Returns: number }
       price_for_sqft: {
         Args: { p_product_id: string; p_sqft: number }
         Returns: number
@@ -4124,7 +4388,21 @@ export type Database = {
           requeued: number
         }[]
       }
+      respond_to_assignment: {
+        Args: { p_note?: string; p_order_id: string; p_response: string }
+        Returns: Json
+      }
+      set_contractor_payout: {
+        Args: { p_details?: string; p_method: string }
+        Returns: undefined
+      }
+      skip_blocked_steps: { Args: never; Returns: Json }
+      submit_pay_request: {
+        Args: { p_notes?: string; p_order_ids: string[] }
+        Returns: string
+      }
       submit_reel_order: { Args: { p_order_id: string }; Returns: undefined }
+      sync_busy: { Args: { p: Json }; Returns: Json }
     }
     Enums: {
       ai_job_type:
@@ -4164,6 +4442,11 @@ export type Database = {
         | "failed"
         | "skipped"
       product_kind: "photo" | "video" | "floor_plan" | "tour" | "fee" | "addon"
+      project_type:
+        | "mls_real_estate"
+        | "luxury_real_estate"
+        | "architectural"
+        | "interior_design"
       reel_type: "monologue" | "qa" | "testimonial" | "montage"
       service_type:
         | "photos_hdr"
@@ -4346,6 +4629,12 @@ export const Constants = {
         "skipped",
       ],
       product_kind: ["photo", "video", "floor_plan", "tour", "fee", "addon"],
+      project_type: [
+        "mls_real_estate",
+        "luxury_real_estate",
+        "architectural",
+        "interior_design",
+      ],
       reel_type: ["monologue", "qa", "testimonial", "montage"],
       service_type: [
         "photos_hdr",
@@ -4365,10 +4654,7 @@ export const Constants = {
   },
 } as const
 
-// ─────────────────────────────────────────────────────────────────────────
-// Named aliases the app imports. Derived from the generated Database so they
-// always track the live schema.
-// ─────────────────────────────────────────────────────────────────────────
+// ── Custom helper aliases (preserved across regen; imported across the app) ──
 export type OrderStatus = Database['public']['Enums']['order_status'];
 export type AiJobType = Database['public']['Enums']['ai_job_type'];
 export type Photo = Database['public']['Tables']['photos']['Row'];

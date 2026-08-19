@@ -194,7 +194,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
   const editors = ((team ?? []) as any[]).filter((t) => t.role === 'editor' || t.role === 'admin');
 
   // Active contractor photographers for the assignment dropdown.
-  const { data: contractorRows } = await (supabase as any)
+  const { data: contractorRows } = await supabase
     .from('contractors')
     .select('id, full_name, pay_rate_cents, team_member_id')
     .eq('is_active', true)
