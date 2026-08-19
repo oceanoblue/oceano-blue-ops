@@ -34,12 +34,17 @@ export function ContractorAssignControl({
     try {
       const supabase = createClient();
       const chosen = contractors.find((c) => c.id === id);
-      const patch: { contractor_id: string | null; pay_amount_cents?: number } = {
+      // Reassigning clears any prior accept/decline so the new photographer
+      // starts fresh (and a resolved decline drops off the office alert).
+      const patch: Record<string, unknown> = {
         contractor_id: id || null,
+        contractor_response: null,
+        contractor_responded_at: null,
+        contractor_response_note: null,
       };
       // Snapshot the rate on assignment (only when assigning someone).
       if (chosen) patch.pay_amount_cents = chosen.pay_rate_cents;
-      const { error } = await supabase.from('orders').update(patch).eq('id', orderId);
+      const { error } = await supabase.from('orders').update(patch as any).eq('id', orderId);
       if (error) throw error;
       router.refresh();
     } catch (e) {

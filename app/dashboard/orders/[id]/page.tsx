@@ -20,6 +20,7 @@ import { SendToEditEngine } from '@/components/orders/SendToEditEngine';
 import { FotelloWorkspace } from '@/components/orders/FotelloWorkspace';
 import { RawIntakeControl } from '@/components/orders/RawIntakeControl';
 import { ContractorAssignControl, type ContractorOption } from '@/components/orders/ContractorAssignControl';
+import { ContractorResponseNotice } from '@/components/orders/ContractorResponseNotice';
 import { ArchiveOrderControl } from '@/components/orders/ArchiveOrderControl';
 import { DeliverablesManager, type DeliverableRow } from '@/components/orders/DeliverablesManager';
 import { ReelFootageList, type FootageView } from '@/components/orders/ReelFootageList';
@@ -367,6 +368,12 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                 orderId={order.id}
                 contractorId={(order as any).contractor_id ?? null}
                 contractors={contractors}
+              />
+              <ContractorResponseNotice
+                response={(order as any).contractor_response ?? null}
+                respondedAt={(order as any).contractor_responded_at ?? null}
+                note={(order as any).contractor_response_note ?? null}
+                contractorName={contractors.find((c) => c.id === (order as any).contractor_id)?.full_name ?? null}
               />
             </div>
           </section>

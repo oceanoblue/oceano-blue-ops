@@ -5,6 +5,7 @@ import { fmtDateTime } from '@/lib/utils/format';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PortalHero } from '@/components/portal/PortalHero';
 import { ShootUpload } from '@/components/field/ShootUpload';
+import { RespondControl } from '@/components/field/RespondControl';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,9 +17,9 @@ export default async function FieldShootDetailPage({ params }: { params: { id: s
   if (!user) redirect('/field');
 
   // RLS returns this only if it's the caller's own shoot.
-  const { data: shoot } = await supabase
+  const { data: shoot } = await (supabase as any)
     .from('orders')
-    .select('id, status, source, created_at, dropbox_intake_url, internal_notes, listings(address_line1, address_line2, city, state, zip, sqft, bedrooms, bathrooms, property_type)')
+    .select('id, status, source, created_at, scheduled_at, dropbox_intake_url, internal_notes, contractor_response, contractor_responded_at, contractor_response_note, listings(address_line1, address_line2, city, state, zip, sqft, bedrooms, bathrooms, property_type)')
     .eq('id', params.id)
     .maybeSingle();
   if (!shoot) notFound();
@@ -38,6 +39,17 @@ export default async function FieldShootDetailPage({ params }: { params: { id: s
       </PortalHero>
 
       <main className="mx-auto max-w-lg space-y-5 px-4 py-6 sm:px-6 sm:py-8">
+        {(['booked', 'scheduled'].includes(shoot.status) || shoot.contractor_response) && (
+          <section className="card p-5">
+            <h2 className="mb-3 font-semibold">This assignment</h2>
+            <RespondControl
+              orderId={shoot.id}
+              response={shoot.contractor_response ?? null}
+              note={shoot.contractor_response_note ?? null}
+            />
+          </section>
+        )}
+
         <section className="card p-5">
           <h2 className="mb-3 font-semibold">Upload RAWs</h2>
           <ShootUpload
