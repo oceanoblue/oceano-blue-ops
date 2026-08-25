@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
   '/api/worker',       // local worker API — authenticates via Bearer worker key
   '/api/automations',  // Make.com bridge — authenticates via x-pos-automation-secret
   '/api/cron',         // background job worker — authenticates via Bearer CRON_SECRET
+  '/api/stripe',       // Stripe webhook — authenticates via signature verification
 ];
 
 function isPublic(pathname: string) {

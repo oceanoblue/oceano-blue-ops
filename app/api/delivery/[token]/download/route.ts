@@ -2,6 +2,7 @@ import archiver from 'archiver';
 import sharp from 'sharp';
 import { createAdminClient } from '@/lib/supabase/server';
 import { isDeliverable } from '@/lib/photos/deliverable';
+import { paywallFor } from '@/lib/payments/gate';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +43,18 @@ export async function GET(req: Request, { params }: { params: { token: string } 
   if (!link) return new Response('Not found', { status: 404 });
   if (link.expires_at && new Date(link.expires_at) < new Date()) {
     return new Response('Expired', { status: 410 });
+  }
+
+  // Paywall: a priced, unpaid order can't be downloaded. The gallery swaps the
+  // button for an unlock CTA, but we enforce it here too so the URL can't be hit
+  // directly to bypass payment.
+  const { data: order } = await supabase
+    .from('orders')
+    .select('total_cents, download_paid_at')
+    .eq('id', link.order_id)
+    .single();
+  if (paywallFor(order as any).active) {
+    return new Response('Payment required to download this gallery.', { status: 402 });
   }
 
   const { data: photos } = await supabase
