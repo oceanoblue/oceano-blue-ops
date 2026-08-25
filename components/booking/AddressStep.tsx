@@ -162,7 +162,7 @@ export function AddressStep({
       )}
 
       <p className="mt-4 text-center text-xs text-slate-500">
-        We service the East Coast — primarily SC, NJ, NY, PA, CT, and FL.
+        We service the Lowcountry &amp; Coastal Empire — Hilton Head, Bluffton, Beaufort, Savannah &amp; surrounding areas.
       </p>
     </div>
   );
