@@ -39,10 +39,22 @@ export function AssignShooterControl({
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const current =
-    currentContractorId ? `contractor:${currentContractorId}`
-    : currentPhotographerId ? `team:${currentPhotographerId}`
-    : '';
+  // Resolve the current selection to a key that actually exists in the deduped
+  // list. A person who is both a team photographer AND a contractor (e.g. Karen)
+  // is shown once, as the contractor — so an order assigned via photographer_id
+  // (how the booking engine auto-assigns team shooters) must map to that
+  // contractor entry, otherwise the picker can't match itself and shows
+  // "Unassigned" despite a real assignment.
+  const current = (() => {
+    if (currentContractorId) return `contractor:${currentContractorId}`;
+    if (currentPhotographerId) {
+      const linked = shooters.find(
+        (s) => s.kind === 'contractor' && s.teamMemberId === currentPhotographerId
+      );
+      return linked ? linked.key : `team:${currentPhotographerId}`;
+    }
+    return '';
+  })();
   const assigned = shooters.find((s) => s.key === current);
   const contractorAssigned = assigned?.kind === 'contractor';
 
