@@ -2128,6 +2128,9 @@ export type Database = {
           coordinator_id: string | null
           created_at: string
           delivered_at: string | null
+          download_paid_at: string | null
+          download_paid_cents: number | null
+          download_stripe_session_id: string | null
           dropbox_intake_path: string | null
           dropbox_intake_url: string | null
           duration_minutes: number | null
@@ -2165,6 +2168,9 @@ export type Database = {
           coordinator_id?: string | null
           created_at?: string
           delivered_at?: string | null
+          download_paid_at?: string | null
+          download_paid_cents?: number | null
+          download_stripe_session_id?: string | null
           dropbox_intake_path?: string | null
           dropbox_intake_url?: string | null
           duration_minutes?: number | null
@@ -2202,6 +2208,9 @@ export type Database = {
           coordinator_id?: string | null
           created_at?: string
           delivered_at?: string | null
+          download_paid_at?: string | null
+          download_paid_cents?: number | null
+          download_stripe_session_id?: string | null
           dropbox_intake_path?: string | null
           dropbox_intake_url?: string | null
           duration_minutes?: number | null
