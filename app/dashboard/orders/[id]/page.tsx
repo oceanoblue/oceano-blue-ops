@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ClipboardList } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { fmtDateTime, fmtAddress, fmtCents } from '@/lib/utils/format';
+import { fmtDateTime, fmtDateTimeTz, fmtAddress, fmtCents } from '@/lib/utils/format';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { OrderStatusControl } from '@/components/orders/OrderStatusControl';
@@ -369,7 +369,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           <section className="card p-6">
             <h2 className="font-semibold mb-4">Schedule + team</h2>
             <dl className="text-sm space-y-2">
-              <Row label="Scheduled">{fmtDateTime(order.scheduled_at)}</Row>
+              <Row label="Scheduled">{fmtDateTimeTz(order.scheduled_at, (order as any).timezone)}</Row>
               <Row label="Duration">{order.duration_minutes} min</Row>
             </dl>
             <div className="mt-4 space-y-3">
