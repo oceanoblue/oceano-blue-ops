@@ -12,11 +12,14 @@ export const runtime = 'nodejs';
  * only obtainable after payment.
  */
 function watermarkSvg(w: number, h: number): string {
+  // Denser, higher-contrast tiling. The thin dark stroke keeps the white mark
+  // legible over both bright and dark photos.
   return `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <pattern id="wm" width="360" height="230" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)">
-      <text x="0" y="120" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="700"
-            fill="#ffffff" fill-opacity="0.30" letter-spacing="5">OCEANO BLUE</text>
+    <pattern id="wm" width="300" height="180" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)">
+      <text x="0" y="100" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="800"
+            fill="#ffffff" fill-opacity="0.46" stroke="#0b1220" stroke-opacity="0.14" stroke-width="0.7"
+            letter-spacing="6">OCEANO BLUE</text>
     </pattern>
   </defs>
   <rect width="100%" height="100%" fill="url(#wm)"/>
