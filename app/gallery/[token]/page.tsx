@@ -47,10 +47,10 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null);
   const [size, setSize] = useState<DeliverySize>('full');
   const [sizeOpen, setSizeOpen] = useState(false);
-  // Default to the room-organized view when the photos have been classified;
-  // clients can switch to a single flat grid via the toggle. (No effect when
-  // nothing is classified — hasRooms gates the grouped render below.)
-  const [byRoom, setByRoom] = useState(true);
+  // Default to the single "all photos" grid; clients can switch to the
+  // room-organized view via the toggle. (Grouping only appears when photos have
+  // been classified — hasRooms gates the grouped render below.)
+  const [byRoom, setByRoom] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
 
   const load = useCallback(async (): Promise<GalleryData | null> => {
