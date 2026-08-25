@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, Plus, ChevronDown, UserRound } from 'lucide-react';
+import { LogOut, Plus, ChevronDown, UserRound, LifeBuoy } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { MobileNav } from './MobileNav';
@@ -55,6 +55,20 @@ export function Topbar({ userEmail }: { userEmail?: string | null }) {
           aria-label="New shoot"
         >
           <Plus className="h-4 w-4" />
+        </Link>
+
+        <Link
+          href="/dashboard/help"
+          className="hidden sm:inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-600 hover:bg-ink-50 hover:text-ink-900 transition-colors"
+        >
+          <LifeBuoy className="h-4 w-4" /> Help
+        </Link>
+        <Link
+          href="/dashboard/help"
+          className="sm:hidden grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-ink-50 hover:text-ink-900"
+          aria-label="Help & guides"
+        >
+          <LifeBuoy className="h-4 w-4" />
         </Link>
 
         <div className="relative" ref={menuRef}>
