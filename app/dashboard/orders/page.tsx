@@ -6,8 +6,12 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Avatar } from '@/components/ui/Avatar';
 
 export const dynamic = 'force-dynamic';
+
+const usd = (cents?: number | null) =>
+  cents && cents > 0 ? `$${(cents / 100).toLocaleString('en-US')}` : '—';
 
 const COLUMNS: Column<any>[] = [
   {
@@ -29,13 +33,29 @@ const COLUMNS: Column<any>[] = [
     header: 'Client',
     className: 'text-slate-700',
     cell: (o) => (
-      <>
-        <div>{o.clients?.full_name ?? '—'}</div>
-        <div className="text-xs text-slate-500">{o.clients?.brokerage ?? ''}</div>
-      </>
+      <div className="flex items-center gap-2.5">
+        <Avatar name={o.clients?.full_name} />
+        <div className="min-w-0">
+          <div className="truncate font-medium text-ocean-900">{o.clients?.full_name ?? '—'}</div>
+          {o.clients?.brokerage && (
+            <div className="truncate text-xs text-slate-500">{o.clients.brokerage}</div>
+          )}
+        </div>
+      </div>
     ),
   },
   { key: 'scheduled', header: 'Scheduled', className: 'text-slate-700', cell: (o) => fmtDateTime(o.scheduled_at) },
+  {
+    key: 'total',
+    header: 'Total',
+    className: 'text-slate-700 tabular-nums',
+    cell: (o) => (
+      <span className="inline-flex items-center gap-1.5">
+        {usd(o.total_cents)}
+        {o.download_paid_at && <span className="pill bg-emerald-100 text-emerald-700">PAID</span>}
+      </span>
+    ),
+  },
   { key: 'status', header: 'Status', cell: (o) => <StatusBadge status={o.status} /> },
 ];
 
@@ -48,7 +68,7 @@ export default async function OrdersPage({
   let query = supabase
     .from('orders')
     .select(
-      'id, order_number, status, scheduled_at, rush, order_kind, listing_id, client_id, listings(address_line1, city, state, zip), clients(full_name, brokerage)'
+      'id, order_number, status, scheduled_at, rush, order_kind, listing_id, client_id, total_cents, download_paid_at, listings(address_line1, city, state, zip), clients(full_name, brokerage)'
     )
     .order('updated_at', { ascending: false })
     .limit(50);
