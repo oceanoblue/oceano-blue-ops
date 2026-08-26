@@ -1,5 +1,6 @@
 import { buildPrompt, type EnhanceDirectives } from './prompts';
 import type { EnhanceRecipe } from './recipe';
+import { AUTO_SCENE_FIXES } from './vision-analyze';
 
 /**
  * Auto-enhance on upload — shared job construction.
@@ -18,7 +19,12 @@ export function buildAutoEnhanceJobRow(opts: {
   baseId: string;
   providerId: string;
   createdBy: string | null;
+  /** Auto-apply the NON-DESTRUCTIVE scene fixes (sky/window/lawn) where vision
+   *  flags them. Default true (org setting business_settings.auto_scene_fixes).
+   *  Destructive ops (declutter/twilight/stage) always stay opt-in per photo. */
+  sceneFixes?: boolean;
 }) {
+  const sceneFixes = opts.sceneFixes ?? true;
   const directives = AUTO_ENHANCE_DIRECTIVES;
   const recipe: EnhanceRecipe = {
     job_type: 'enhance_single',
@@ -35,9 +41,15 @@ export function buildAutoEnhanceJobRow(opts: {
     prompt: recipe.prompt,
     status: 'pending' as const,
     created_by: opts.createdBy,
-    // auto_chain_fixes off: the signature enhance must not auto-apply sky /
-    // window / lawn / declutter / twilight (content-altering, opt-in per photo).
-    // auto_enhanced_on_upload marks provenance; recipe makes it re-runnable.
-    params: { auto_chain_fixes: false, recipe, auto_enhanced_on_upload: true } as any,
+    // After the signature enhance, chain the non-destructive scene fixes
+    // (sky/window/lawn) SCOPED by auto_chain_scope — never declutter/twilight/
+    // stage automatically. auto_enhanced_on_upload marks provenance; recipe
+    // makes it re-runnable.
+    params: {
+      auto_chain_fixes: sceneFixes,
+      auto_chain_scope: AUTO_SCENE_FIXES,
+      recipe,
+      auto_enhanced_on_upload: true,
+    } as any,
   };
 }

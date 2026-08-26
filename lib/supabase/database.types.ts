@@ -774,6 +774,7 @@ export type Database = {
         Row: {
           ai_editing_enabled: boolean
           auto_enhance_on_upload: boolean
+          auto_scene_fixes: boolean
           buffer_minutes: number
           business_name: string
           default_timezone: string
@@ -787,6 +788,7 @@ export type Database = {
         Insert: {
           ai_editing_enabled?: boolean
           auto_enhance_on_upload?: boolean
+          auto_scene_fixes?: boolean
           buffer_minutes?: number
           business_name?: string
           default_timezone?: string
@@ -800,6 +802,7 @@ export type Database = {
         Update: {
           ai_editing_enabled?: boolean
           auto_enhance_on_upload?: boolean
+          auto_scene_fixes?: boolean
           buffer_minutes?: number
           business_name?: string
           default_timezone?: string
