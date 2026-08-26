@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+testdata/
+# local tuning/experiment scripts (not part of the service)
+compare.py
+tune.py
+straighten_test.py

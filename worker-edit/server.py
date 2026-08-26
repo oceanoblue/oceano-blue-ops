@@ -20,6 +20,7 @@ Van Reeth 2007.)
 """
 
 import io
+import math
 import os
 from typing import List, Optional
 
@@ -433,6 +434,61 @@ def sharpen(img: np.ndarray, amount: float = 0.25) -> np.ndarray:
 LENS_K1 = float(os.environ.get("LENS_K1", "-0.16"))
 
 
+# Auto-level: correct small camera tilt so walls/verticals sit straight. This is
+# a precise ROTATION (never a perspective guess) derived from the dominant
+# near-vertical / near-horizontal lines — so it can't invent geometry. Runs on
+# the composed frame before delivery/generative finish. Env: STRAIGHTEN=0 to
+# disable, STRAIGHTEN_MAX_DEG to bound the correction.
+STRAIGHTEN = os.environ.get("STRAIGHTEN", "1") != "0"
+STRAIGHTEN_MAX_DEG = float(os.environ.get("STRAIGHTEN_MAX_DEG", "6.0"))
+
+
+def _detect_tilt(img: np.ndarray, max_deg: float) -> float:
+    try:
+        g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        w0 = 1024
+        g = cv2.resize(g, (w0, max(1, int(w0 * g.shape[0] / g.shape[1]))), interpolation=cv2.INTER_AREA)
+        edges = cv2.Canny(g, 60, 180)
+        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=90,
+                                minLineLength=g.shape[0] // 4, maxLineGap=20)
+        if lines is None:
+            return 0.0
+        devs = []
+        for x1, y1, x2, y2 in np.asarray(lines).reshape(-1, 4):
+            ang = math.degrees(math.atan2(float(y2 - y1), float(x2 - x1)))
+            for ref in (0.0, 90.0, -90.0, 180.0, -180.0):
+                d = ang - ref
+                if abs(d) <= max_deg:
+                    devs.append(d)
+                    break
+        if len(devs) < 8:
+            return 0.0
+        return float(np.median(devs))
+    except Exception:
+        return 0.0
+
+
+def straighten(img: np.ndarray) -> np.ndarray:
+    if not STRAIGHTEN:
+        return img
+    tilt = _detect_tilt(img, STRAIGHTEN_MAX_DEG)
+    if abs(tilt) < 0.15:  # already level — skip the resample + crop
+        return img
+    try:
+        h, w = img.shape[:2]
+        M = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), tilt, 1.0)
+        rot = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+        a = math.radians(abs(tilt))
+        cw = int(w - h * math.sin(a) - w * (1 - math.cos(a)))
+        ch = int(h - w * math.sin(a) - h * (1 - math.cos(a)))
+        if cw < w * 0.6 or ch < h * 0.6:  # implausible crop → skip
+            return img
+        x0, y0 = (w - cw) // 2, (h - ch) // 2
+        return rot[y0:y0 + ch, x0:x0 + cw]
+    except Exception:
+        return img
+
+
 def correct_lens(img: np.ndarray, k1: float = None) -> np.ndarray:
     # Parametric radial-distortion correction. Tuned for a ~16mm full-frame wide
     # lens; precise per-lens (lensfun) correction can replace this later. alpha=0
@@ -632,6 +688,7 @@ async def edit(
     else:
         raise HTTPException(status_code=400, detail="bad_mode")
 
+    out = straighten(out)  # level small camera tilt before delivery / generative finish
     out = resize_long_edge(out, target_long_edge)
     ok, buf = cv2.imencode(".jpg", out, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
     if not ok:
