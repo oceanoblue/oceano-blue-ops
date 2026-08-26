@@ -8,6 +8,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // to /login and fails with 405.
 const PUBLIC_PATHS = [
   '/', '/book', '/login', '/gallery', '/portal',
+  '/quote',            // shareable client quote pages (SSR, token-gated)
   '/guides',           // static onboarding guides — meant to be shared publicly
   '/field',            // contractor portal — self-guards in its server components
   '/api/delivery', '/api/booking', '/api/portal',

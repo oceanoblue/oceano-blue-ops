@@ -22,6 +22,7 @@ import {
   Mic,
   HardDrive,
   Camera,
+  FileText,
 } from 'lucide-react';
 
 export type NavItem = {
@@ -52,6 +53,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
     items: [
       { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
       { href: '/dashboard/orders', label: 'Orders', icon: ClipboardList },
+      { href: '/dashboard/quotes', label: 'Quotes', icon: FileText },
       { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays },
     ],
   },
