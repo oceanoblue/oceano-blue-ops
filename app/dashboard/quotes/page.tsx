@@ -18,7 +18,10 @@ const COLUMNS: Column<any>[] = [
       <div className="flex items-center gap-2.5">
         <Avatar name={q.client_name || q.address_line1} />
         <div className="min-w-0">
-          <div className="truncate font-medium text-ocean-900">{q.client_name || '—'}</div>
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium text-ocean-900">{q.client_name || '—'}</span>
+            {q.client_type === 'builder' && <span className="pill bg-amber-100 text-amber-700">Builder</span>}
+          </div>
           <div className="truncate text-xs text-slate-500">{q.address_line1}{q.city ? `, ${q.city}` : ''}</div>
         </div>
       </div>
@@ -42,7 +45,7 @@ export default async function QuotesPage() {
   const supabase = createClient() as any; // quotes table not yet in generated types
   const { data: quotes, error } = await supabase
     .from('quotes')
-    .select('id, token, client_name, address_line1, city, subtotal_cents, status, expires_at, created_at')
+    .select('id, token, client_type, client_name, address_line1, city, subtotal_cents, status, expires_at, created_at')
     .order('created_at', { ascending: false })
     .limit(100);
 

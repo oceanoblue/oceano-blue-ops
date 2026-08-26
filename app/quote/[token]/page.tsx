@@ -56,7 +56,7 @@ export default async function QuotePage({ params }: { params: { token: string } 
         <BrandLogo variant="dark" className="mb-12 h-6 w-auto" />
 
         <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-ocean-700">
-          Prepared for {q.client_name || 'you'}
+          {q.client_type === 'builder' ? 'Builder & Architectural · ' : ''}Prepared for {q.client_name || 'you'}
         </p>
         <h1 className="mt-3 font-display text-[clamp(2.1rem,8vw,3.2rem)] font-normal leading-[1.05] tracking-tight text-ocean-950">
           {q.address_line1}
