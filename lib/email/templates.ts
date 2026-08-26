@@ -66,3 +66,29 @@ export function contractorAssignmentEmail(p: {
     html: shell(body, `Upload the RAWs for ${p.address}`),
   };
 }
+
+export function galleryReadyEmail(p: {
+  recipientName?: string | null;
+  address: string;
+  cityStateZip?: string | null;
+  galleryUrl: string;
+}): { subject: string; html: string } {
+  const first = (p.recipientName || '').split(' ')[0] || 'there';
+  const body = `
+    <p style="font-size:16px;margin:0 0 4px;">Hi ${escapeHtml(first)},</p>
+    <p style="font-size:15px;line-height:1.5;color:#324354;margin:0 0 18px;">
+      Your gallery is ready. View, share, and download the final photos and video below.
+    </p>
+    <div style="border:1px solid #e6eaee;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
+      <div style="font-size:17px;font-weight:600;color:#0c1620;">${escapeHtml(p.address)}</div>
+      ${p.cityStateZip ? `<div style="font-size:13px;color:#708698;margin-top:3px;">${escapeHtml(p.cityStateZip)}</div>` : ''}
+    </div>
+    <div style="margin-bottom:16px;">${button(p.galleryUrl, 'View your gallery')}</div>
+    <p style="font-size:13px;color:#708698;margin:0;">
+      Or open it here: <a href="${escapeAttr(p.galleryUrl)}" style="color:#0c8de9;">${escapeHtml(p.galleryUrl)}</a>
+    </p>`;
+  return {
+    subject: `Your gallery is ready — ${p.address}`,
+    html: shell(body, `Gallery ready for ${p.address}`),
+  };
+}
