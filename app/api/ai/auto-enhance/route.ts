@@ -44,12 +44,13 @@ export async function POST(request: Request) {
   // Respect the org setting (default on).
   const { data: bs } = await admin
     .from('business_settings')
-    .select('auto_enhance_on_upload')
+    .select('auto_enhance_on_upload, auto_scene_fixes')
     .eq('id', true)
     .maybeSingle();
   if ((bs as any)?.auto_enhance_on_upload === false) {
     return NextResponse.json({ queued: [], reason: 'disabled' });
   }
+  const sceneFixes = (bs as any)?.auto_scene_fixes !== false; // default on
 
   // Candidate singles: JPEG raw-kind frames for this order.
   const { data: photos } = await admin
@@ -100,6 +101,7 @@ export async function POST(request: Request) {
       baseId: p.id,
       providerId: enhanceProvider.id,
       createdBy: user.id,
+      sceneFixes,
     })
   );
   const { data: inserted, error: insErr } = await admin.from('ai_jobs').insert(rows).select('id');

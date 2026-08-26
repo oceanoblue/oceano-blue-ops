@@ -286,7 +286,11 @@ export async function runAiJob(jobId: string): Promise<{
         if (finalOutput) {
           const analysis = await analyzePhoto(finalOutput.bytes);
           if (analysis) {
-            const planned = planEdits(analysis);
+            // Scope the auto-chain to the caller's allowlist when present (the
+            // default-on scene chain permits only sky/window/lawn); an explicit
+            // wider chain (manual Stage-2) passes no scope → all edits.
+            const scope = (job.params as any)?.auto_chain_scope;
+            const planned = planEdits(analysis, undefined, scope);
             if (planned.length > 0) {
               const outputId = outputPhotoIds[0];
               await supabase.from('ai_jobs').insert(
@@ -320,10 +324,11 @@ export async function runAiJob(jobId: string): Promise<{
       try {
         const { data: bs } = await supabase
           .from('business_settings')
-          .select('auto_enhance_on_upload')
+          .select('auto_enhance_on_upload, auto_scene_fixes')
           .eq('id', true)
           .maybeSingle();
         if ((bs as any)?.auto_enhance_on_upload !== false) {
+          const sceneFixes = (bs as any)?.auto_scene_fixes !== false; // default on
           const enhanceProvider = getProvider('auto', 'enhance_single');
           if (enhanceProvider.isConfigured()) {
             const rows: any[] = [];
@@ -342,6 +347,7 @@ export async function runAiJob(jobId: string): Promise<{
                   baseId,
                   providerId: enhanceProvider.id,
                   createdBy: job.created_by,
+                  sceneFixes,
                 })
               );
             }
