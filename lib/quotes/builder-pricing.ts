@@ -2,8 +2,8 @@
 // Clients: builders, construction companies, architects. More time on site,
 // architectural detail photography, more delivered images. Packages (pick one)
 // are priced per completed home by heated square footage, straight from the
-// "Builder and Architectural Photo and Video" sheet — EXCEPT video, which is
-// sqft-tiered here (the sheet had it flat $550 at every size).
+// "Builder and Architectural Photo and Video" sheet (video is a flat $550, as
+// shared with builders).
 
 export type BuilderLineItem = { slug: string; name: string; price_cents: number; complimentary?: boolean };
 
@@ -13,10 +13,10 @@ export type BuilderPackage = 'photo' | 'video' | 'feature' | 'signature';
 // and floors at the top tier here.
 const TIERS: { max: number; images: string; photo: number; video: number; feature: number; signature: number }[] = [
   { max: 1500, images: '25–30', photo: 45000, video: 55000, feature: 117500, signature: 145000 },
-  { max: 2500, images: '30–40', photo: 50000, video: 60000, feature: 122500, signature: 150000 },
-  { max: 3500, images: '40–50', photo: 57500, video: 65000, feature: 130000, signature: 157500 },
-  { max: 5000, images: '50–65', photo: 65000, video: 75000, feature: 137500, signature: 165000 },
-  { max: 7500, images: '65–80', photo: 75000, video: 85000, feature: 147500, signature: 175000 },
+  { max: 2500, images: '30–40', photo: 50000, video: 55000, feature: 122500, signature: 150000 },
+  { max: 3500, images: '40–50', photo: 57500, video: 55000, feature: 130000, signature: 157500 },
+  { max: 5000, images: '50–65', photo: 65000, video: 55000, feature: 137500, signature: 165000 },
+  { max: 7500, images: '65–80', photo: 75000, video: 55000, feature: 147500, signature: 175000 },
 ];
 
 export const BUILDER_PACKAGES: { slug: BuilderPackage; name: string; desc: string }[] = [
