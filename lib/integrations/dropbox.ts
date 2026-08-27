@@ -216,6 +216,77 @@ export async function createPhotoIntakeRequest(
   }
 }
 
+// ─── Reading intake files back out (cloud processing) ────────────────────────
+// The office no longer relies on Dropbox desktop-sync to a Mac: the server lists
+// the per-order intake folder directly and (in the cloud worker) pulls bytes via
+// a temporary link.
+
+export type DropboxFile = {
+  name: string;
+  path_lower: string;
+  id: string;
+  size: number;
+  client_modified?: string;
+};
+
+export type ListFolderResult =
+  | { status: 'ok'; files: DropboxFile[] }
+  | { status: 'not_found' }
+  | { status: 'not_configured' }
+  | { status: 'failed'; error: string };
+
+/** List the files in a Dropbox folder (non-recursive, paginated). */
+export async function listFolder(path: string): Promise<ListFolderResult> {
+  if (!isDropboxConfigured()) return { status: 'not_configured' };
+  try {
+    const token = await getAccessToken();
+    const files: DropboxFile[] = [];
+    const collect = (entries: any[]) => {
+      for (const e of entries ?? []) {
+        if (e['.tag'] === 'file') {
+          files.push({ name: e.name, path_lower: e.path_lower, id: e.id, size: e.size, client_modified: e.client_modified });
+        }
+      }
+    };
+
+    let res = await dbxUserCall(token, 'https://api.dropboxapi.com/2/files/list_folder', {
+      path,
+      recursive: false,
+      limit: 2000,
+    });
+    if (!res.ok) {
+      const detail = await dropboxErrorDetail(res);
+      if (res.status === 409 && detail.includes('not_found')) return { status: 'not_found' };
+      return { status: 'failed', error: `dropbox_list_${res.status}: ${detail}` };
+    }
+    let json = (await res.json()) as any;
+    collect(json.entries);
+    while (json.has_more) {
+      res = await dbxUserCall(token, 'https://api.dropboxapi.com/2/files/list_folder/continue', { cursor: json.cursor });
+      if (!res.ok) break;
+      json = await res.json();
+      collect(json.entries);
+    }
+    return { status: 'ok', files };
+  } catch (e: any) {
+    return { status: 'failed', error: e?.message ?? 'dropbox_error' };
+  }
+}
+
+/** A short-lived (~4 hr) direct download URL for a Dropbox file. Used by the cloud worker. */
+export async function getTemporaryLink(path: string): Promise<string | null> {
+  if (!isDropboxConfigured()) return null;
+  try {
+    const token = await getAccessToken();
+    const res = await dbxUserCall(token, 'https://api.dropboxapi.com/2/files/get_temporary_link', { path });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { link?: string };
+    return json.link ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Compact human-readable reason from a Dropbox error response. */
 async function dropboxErrorDetail(res: Response): Promise<string> {
   try {
