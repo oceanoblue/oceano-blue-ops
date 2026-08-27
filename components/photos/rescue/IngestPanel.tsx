@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FolderOpen, Loader2, UploadCloud } from 'lucide-react';
+import { FolderOpen, Loader2, UploadCloud, CloudDownload } from 'lucide-react';
 import { generateThumbnail, blobToBase64 } from '@/lib/photos/client-thumbnail';
 
 const IMAGE_EXT = /\.(jpe?g|png|tiff?|heic|webp|arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i;
@@ -40,6 +40,35 @@ export function IngestPanel({ jobId }: { jobId: string }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dbxBusy, setDbxBusy] = useState(false);
+  const [dbxMsg, setDbxMsg] = useState<string | null>(null);
+
+  // Pull the photographer's uploads straight from the order's Dropbox intake
+  // folder — no local machine, no desktop sync. Registers assets + groups.
+  async function importFromDropbox() {
+    setDbxBusy(true);
+    setDbxMsg(null);
+    setError(null);
+    try {
+      const res = await fetch('/api/re-photo/import-dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message ?? json.error ?? 'import_failed');
+      setDbxMsg(
+        json.imported > 0
+          ? `Imported ${json.imported} file${json.imported === 1 ? '' : 's'} — ${json.groups} bracket group${json.groups === 1 ? '' : 's'}${json.needs_review ? `, ${json.needs_review} need review` : ''}.`
+          : (json.message ?? 'Nothing new to import.')
+      );
+      router.refresh();
+    } catch (e: any) {
+      setError(e?.message ?? 'Dropbox import failed');
+    } finally {
+      setDbxBusy(false);
+    }
+  }
 
   // Enable directory selection without fighting TypeScript's input typings.
   useEffect(() => {
@@ -163,15 +192,24 @@ export function IngestPanel({ jobId }: { jobId: string }) {
     <div className="card p-5">
       <h2 className="mb-1 font-semibold text-slate-900">Ingest photos</h2>
       <p className="mb-4 text-sm text-slate-600">
-        Select a shoot folder (or files). EXIF is read locally and only metadata
-        is registered — your originals stay on this machine.
+        Import the photographer&apos;s uploads from the order&apos;s Dropbox intake folder, or select a
+        local shoot folder. Either way only metadata is registered and brackets are grouped.
       </p>
 
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
           className="btn-primary"
-          disabled={busy}
+          disabled={dbxBusy || busy}
+          onClick={importFromDropbox}
+        >
+          {dbxBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />}
+          Import from Dropbox
+        </button>
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={busy || dbxBusy}
           onClick={() => folderRef.current?.click()}
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderOpen className="h-4 w-4" />}
@@ -203,6 +241,7 @@ export function IngestPanel({ jobId }: { jobId: string }) {
         />
       </div>
 
+      {dbxMsg && <p className="mt-3 text-sm text-emerald-700">{dbxMsg}</p>}
       {progress && <p className="mt-3 text-sm text-slate-600">{progress}</p>}
       {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
     </div>
