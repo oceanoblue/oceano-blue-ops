@@ -9,6 +9,23 @@ export function fmtDateTime(d: string | Date | null | undefined) {
   return fmtDate(d, "MMM d, yyyy 'at' h:mm a");
 }
 
+/**
+ * Like fmtDateTime but rendered in a specific IANA timezone (e.g. the shoot's
+ * `America/New_York`). Uses Intl so a UTC-stored instant shows the LOCAL shoot
+ * time, matching the Schedule view — instead of the server's UTC.
+ */
+export function fmtDateTimeTz(d: string | Date | null | undefined, tz?: string | null) {
+  if (!d) return '—';
+  const date = typeof d === 'string' ? new Date(d) : d;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+    timeZone: tz || undefined,
+  }).formatToParts(date);
+  const g = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  return `${g('month')} ${g('day')}, ${g('year')} at ${g('hour')}:${g('minute')} ${g('dayPeriod')}`;
+}
+
 export function fmtRelative(d: string | Date | null | undefined) {
   if (!d) return '—';
   return formatDistanceToNow(typeof d === 'string' ? new Date(d) : d, { addSuffix: true });

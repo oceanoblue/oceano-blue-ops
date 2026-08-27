@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CalendarClock, FileEdit, CalendarCheck2, Camera, Cog, PackageCheck, Send } from 'lucide-react';
+import { CalendarClock, FileEdit, CalendarCheck2, Camera, Cog, PackageCheck, Send, AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { fmtDateTime } from '@/lib/utils/format';
 import type { OrderStatus } from '@/lib/supabase/database.types';
@@ -29,7 +29,7 @@ export default async function DashboardHome() {
 
   // One round-trip's latency, not eight: the recent list, all six pipeline
   // counts, and the upcoming list are independent — fire them together.
-  const [{ data: orders }, bucketCounts, { data: upcoming }] = await Promise.all([
+  const [{ data: orders }, bucketCounts, { data: upcoming }, { data: declined }] = await Promise.all([
     supabase
       .from('orders')
       .select('id, order_number, status, scheduled_at, rush, client_id')
@@ -53,6 +53,15 @@ export default async function DashboardHome() {
       .gte('scheduled_at', new Date().toISOString())
       .order('scheduled_at', { ascending: true })
       .limit(5),
+    // Shoots the assigned photographer declined — surfaced so a hand-back isn't
+    // silent. Cast: contractor_response lives in the DB but not the typed schema.
+    (supabase as any)
+      .from('orders')
+      .select('id, order_number, contractor_response_note, contractor_responded_at, listings(address_line1, city), contractors(full_name)')
+      .eq('contractor_response', 'declined')
+      .is('archived_at', null)
+      .order('contractor_responded_at', { ascending: false })
+      .limit(10),
   ]);
   const counts: Record<string, number> = Object.fromEntries(bucketCounts);
 
@@ -73,6 +82,37 @@ export default async function DashboardHome() {
           />
         ))}
       </div>
+
+      {(declined ?? []).length > 0 && (
+        <section className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+          <h2 className="inline-flex items-center gap-2 font-semibold text-rose-800">
+            <AlertTriangle className="h-4 w-4" /> Declined shoots need reassigning ({(declined ?? []).length})
+          </h2>
+          <ul className="mt-2 divide-y divide-rose-100">
+            {(declined ?? []).map((o: any) => (
+              <li key={o.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <Link href={`/dashboard/orders/${o.id}`} className="font-medium text-rose-900 hover:underline">
+                    #{o.order_number}
+                  </Link>
+                  <span className="text-rose-700"> — {o.contractors?.full_name ?? 'Photographer'} declined</span>
+                  {o.contractor_response_note && <span className="text-rose-600"> · “{o.contractor_response_note}”</span>}
+                  <div className="text-xs text-rose-500">
+                    {[o.listings?.address_line1, o.listings?.city].filter(Boolean).join(', ')}
+                    {o.contractor_responded_at ? ` · ${fmtDateTime(o.contractor_responded_at)}` : ''}
+                  </div>
+                </div>
+                <Link
+                  href={`/dashboard/orders/${o.id}`}
+                  className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100"
+                >
+                  Reassign
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card p-6">

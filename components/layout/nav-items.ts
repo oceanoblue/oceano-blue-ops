@@ -4,6 +4,7 @@ import {
   ClipboardList,
   Home,
   Users,
+  Users2,
   Image as ImageIcon,
   Package,
   Settings,
@@ -15,11 +16,13 @@ import {
   MessageSquare,
   Zap,
   Plug,
+  LifeBuoy,
   Send,
   Sparkles,
   Mic,
   HardDrive,
   Camera,
+  FileText,
 } from 'lucide-react';
 
 export type NavItem = {
@@ -50,6 +53,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
     items: [
       { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
       { href: '/dashboard/orders', label: 'Orders', icon: ClipboardList },
+      { href: '/dashboard/quotes', label: 'Quotes', icon: FileText },
       { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays },
     ],
   },
@@ -71,6 +75,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { href: '/dashboard/listings', label: 'Listings', icon: Home },
       { href: '/dashboard/clients', label: 'Clients', icon: Users },
       { href: '/dashboard/contractors', label: 'Photographers', icon: Camera },
+      { href: '/dashboard/team', label: 'Team', icon: Users2 },
       { href: '/dashboard/assets', label: 'Assets', icon: Boxes },
       { href: '/dashboard/products', label: 'Products', icon: Package },
     ],
@@ -84,6 +89,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { href: '/dashboard/workflows', label: 'Workflows', icon: Workflow },
       { href: '/dashboard/automations', label: 'Automations', icon: Zap },
       { href: '/dashboard/integrations', label: 'Integrations', icon: Plug },
+      { href: '/dashboard/help', label: 'Help & Guides', icon: LifeBuoy },
       { href: '/dashboard/settings', label: 'Settings', icon: Settings },
     ],
   },

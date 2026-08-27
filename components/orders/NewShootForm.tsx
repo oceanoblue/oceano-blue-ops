@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ClipboardList, User, Home, Calendar, Camera, ChevronDown, Loader2 } from 'lucide-react';
+import { ClipboardList, User, Home, Calendar, Camera, ChevronDown, Loader2, Package } from 'lucide-react';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 export interface ClientOpt { id: string; full_name: string; brokerage: string | null }
 export interface ContractorOpt { id: string; full_name: string; pay_rate_cents: number }
 export interface TeamOpt { id: string; full_name: string }
+export interface ProductOpt { id: string; name: string; kind: string; is_addon: boolean; base_price_cents: number }
 
 /**
  * One-screen "New Shoot" — client + property + assignment + (auto) Dropbox link
@@ -18,10 +20,12 @@ export function NewShootForm({
   clients,
   contractors,
   team,
+  products,
 }: {
   clients: ClientOpt[];
   contractors: ContractorOpt[];
   team: TeamOpt[];
+  products: ProductOpt[];
 }) {
   const router = useRouter();
 
@@ -49,6 +53,20 @@ export function NewShootForm({
 
   const [pkg, setPkg] = useState('Essential');
   const [instructions, setInstructions] = useState('');
+
+  // Products on this shoot → priced order_items. qty 0 / absent = not selected.
+  const [items, setItems] = useState<Record<string, number>>({});
+  const setQty = (id: string, qty: number) =>
+    setItems((prev) => {
+      const next = { ...prev };
+      if (qty <= 0) delete next[id];
+      else next[id] = qty;
+      return next;
+    });
+  const coreProducts = products.filter((p) => !p.is_addon);
+  const addonProducts = products.filter((p) => p.is_addon);
+  const estTotal = products.reduce((s, p) => s + (items[p.id] ?? 0) * p.base_price_cents, 0);
+  const fmtUsd = (c: number) => `$${(c / 100).toLocaleString('en-US')}`;
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -88,6 +106,9 @@ export function NewShootForm({
       package_name: pkg,
       instructions: instructions.trim(),
       create_intake_link: true,
+      items: Object.entries(items)
+        .filter(([, q]) => q > 0)
+        .map(([product_id, quantity]) => ({ product_id, quantity })),
     };
     if (clientMode === 'existing') payload.client_id = clientId;
     else payload.new_client = { ...nc, email: nc.email.trim(), full_name: nc.full_name.trim() };
@@ -147,7 +168,24 @@ export function NewShootForm({
       {/* Property */}
       <Section icon={<Home className="h-4 w-4" />} title="Property">
         <div className="space-y-3">
-          <Field label="Street address" required value={addr.address_line1} onChange={(v) => setAddr({ ...addr, address_line1: v })} placeholder="123 Palm Blvd" />
+          <div>
+            <label className="label">Street address <span className="text-rose-600">*</span></label>
+            <AddressAutocomplete
+              value={addr.address_line1}
+              onTextChange={(v) => setAddr({ ...addr, address_line1: v })}
+              onPick={(a) =>
+                setAddr((prev) => ({
+                  ...prev,
+                  address_line1: a.address_line1 || prev.address_line1,
+                  address_line2: a.address_line2 || prev.address_line2,
+                  city: a.city || prev.city,
+                  state: a.state || prev.state,
+                  zip: a.zip || prev.zip,
+                }))
+              }
+              placeholder="Start typing an address…"
+            />
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="col-span-2 sm:col-span-2">
               <Field label="City" required value={addr.city} onChange={(v) => setAddr({ ...addr, city: v })} placeholder="Charleston" />
@@ -233,6 +271,49 @@ export function NewShootForm({
         </div>
       </Section>
 
+      {/* Products — priced line items → order total (what the paywall charges) */}
+      {products.length > 0 && (
+        <Section icon={<Package className="h-4 w-4" />} title="Products">
+          <div className="space-y-4">
+            {coreProducts.length > 0 && (
+              <div className="space-y-2">
+                {coreProducts.map((p) => (
+                  <ProductRow
+                    key={p.id}
+                    name={p.name}
+                    price={`from ${fmtUsd(p.base_price_cents)}`}
+                    qty={items[p.id] ?? 0}
+                    onQty={(q) => setQty(p.id, q)}
+                  />
+                ))}
+              </div>
+            )}
+            {addonProducts.length > 0 && (
+              <div>
+                <div className="label mb-2">Add-ons</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {addonProducts.map((p) => (
+                    <ProductRow
+                      key={p.id}
+                      name={p.name}
+                      price={p.base_price_cents ? `from ${fmtUsd(p.base_price_cents)}` : '—'}
+                      qty={items[p.id] ?? 0}
+                      onQty={(q) => setQty(p.id, q)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-sm">
+              <span className="text-slate-500" title="Final price is calculated from the property's square footage at delivery.">
+                Estimated total (final price by sq ft)
+              </span>
+              <span className="font-semibold text-ocean-900 tabular-nums">{fmtUsd(estTotal)}</span>
+            </div>
+          </div>
+        </Section>
+      )}
+
       {/* Package + instructions */}
       <Section icon={<ClipboardList className="h-4 w-4" />} title="Package &amp; instructions">
         <div className="space-y-3">
@@ -300,6 +381,41 @@ function Toggle({ active, onClick, disabled, children }: { active: boolean; onCl
     >
       {children}
     </button>
+  );
+}
+
+function ProductRow({
+  name, price, qty, onQty,
+}: {
+  name: string; price: string; qty: number; onQty: (q: number) => void;
+}) {
+  const on = qty > 0;
+  return (
+    <div
+      className={`flex items-center justify-between rounded-lg border px-3 py-2 transition-colors ${
+        on ? 'border-ocean-300 bg-ocean-50/50' : 'border-slate-200'
+      }`}
+    >
+      <label className="flex cursor-pointer items-center gap-2">
+        <input
+          type="checkbox"
+          checked={on}
+          onChange={(e) => onQty(e.target.checked ? 1 : 0)}
+          className="h-4 w-4 rounded border-slate-300 text-ocean-600"
+        />
+        <span className="text-sm text-ocean-900">{name}</span>
+      </label>
+      <div className="flex items-center gap-3">
+        {on && (
+          <div className="inline-flex items-center rounded-md border border-slate-200 text-slate-600">
+            <button type="button" onClick={() => onQty(qty - 1)} className="px-2 py-0.5 hover:bg-slate-50" aria-label="Decrease">−</button>
+            <span className="w-6 text-center text-sm tabular-nums">{qty}</span>
+            <button type="button" onClick={() => onQty(qty + 1)} className="px-2 py-0.5 hover:bg-slate-50" aria-label="Increase">+</button>
+          </div>
+        )}
+        <span className="text-sm tabular-nums text-slate-500">{price}</span>
+      </div>
+    </div>
   );
 }
 

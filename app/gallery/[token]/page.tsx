@@ -2,8 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Download, Image as ImageIcon, ChevronDown, LayoutGrid, Rows3, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, Image as ImageIcon, ChevronDown, LayoutGrid, Rows3, X, ChevronLeft, ChevronRight, Lock, ShieldCheck, Loader2 } from 'lucide-react';
 import { groupByRoom, roomLabel } from '@/lib/photos/rooms';
+import { MediaRoom, type DeliverableView } from '@/components/portal/MediaRoom';
+
+const money = (cents: number) =>
+  (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 type DeliverySize = 'full' | 'print' | 'web';
 
@@ -22,10 +26,19 @@ interface GalleryPhoto {
   url: string | null;
 }
 
+interface Paywall {
+  active: boolean;
+  paid: boolean;
+  price_cents: number;
+  currency: string;
+}
+
 interface GalleryData {
   order: { id: string; order_number: number };
   listing: { address_line1: string; city: string; state: string; zip: string } | null;
   photos: GalleryPhoto[];
+  deliverables?: DeliverableView[];
+  paywall?: Paywall;
 }
 
 export default function GalleryPage({ params }: { params: { token: string } }) {
@@ -34,20 +47,64 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null);
   const [size, setSize] = useState<DeliverySize>('full');
   const [sizeOpen, setSizeOpen] = useState(false);
-  // Default to the room-organized view when the photos have been classified;
-  // clients can switch to a single flat grid via the toggle. (No effect when
-  // nothing is classified — hasRooms gates the grouped render below.)
-  const [byRoom, setByRoom] = useState(true);
+  // Default to the single "all photos" grid; clients can switch to the
+  // room-organized view via the toggle. (Grouping only appears when photos have
+  // been classified — hasRooms gates the grouped render below.)
+  const [byRoom, setByRoom] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+
+  const load = useCallback(async (): Promise<GalleryData | null> => {
+    try {
+      const r = await fetch(`/api/delivery/${params.token}`);
+      const d = await r.json();
+      if (d.error) {
+        setErr(d.error);
+        return null;
+      }
+      setData(d);
+      return d as GalleryData;
+    } catch (e) {
+      setErr(String(e));
+      return null;
+    }
+  }, [params.token]);
 
   useEffect(() => {
-    fetch(`/api/delivery/${params.token}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) setErr(d.error);
-        else setData(d);
-      })
-      .catch((e) => setErr(String(e)));
-  }, [params.token]);
+    let cancelled = false;
+    const justPaid =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('paid') === '1';
+    (async () => {
+      let d = await load();
+      // Stripe redirects back on success before its webhook has necessarily
+      // marked the order paid — poll briefly until the lock clears.
+      if (justPaid && d?.paywall?.active) {
+        for (let i = 0; i < 6 && !cancelled; i++) {
+          await new Promise((r) => setTimeout(r, 1500));
+          d = await load();
+          if (!d?.paywall?.active) break;
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  async function unlock() {
+    setUnlocking(true);
+    try {
+      const r = await fetch(`/api/delivery/${params.token}/checkout`, { method: 'POST' });
+      const j = await r.json();
+      if (j.url) {
+        window.location.href = j.url;
+        return;
+      }
+      setUnlocking(false);
+    } catch {
+      setUnlocking(false);
+    }
+  }
 
   // The flat photo order as currently displayed (grouped-by-room or flat), so
   // lightbox prev/next walks the same sequence the client sees.
@@ -119,6 +176,15 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
 
   const hasRooms = data.photos.some((p) => p.room_type);
   const roomGroups = groupByRoom(data.photos);
+  const locked = !!data.paywall?.active;
+  const price = data.paywall?.price_cents ?? 0;
+
+  const UnlockButton = ({ className = 'btn-primary' }: { className?: string }) => (
+    <button type="button" onClick={unlock} disabled={unlocking} className={className}>
+      {unlocking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+      {unlocking ? 'Starting checkout…' : `Unlock downloads · ${money(price)}`}
+    </button>
+  );
 
   const PhotoTile = (p: GalleryPhoto) => (
     <button
@@ -128,7 +194,14 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
     >
       {p.url && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={p.url} alt={p.filename} className="h-full w-full object-cover transition-transform duration-500 ease-swift group-hover:scale-[1.04]" loading="lazy" />
+        <img
+          src={p.url}
+          alt={p.filename}
+          className="h-full w-full object-cover transition-transform duration-500 ease-swift group-hover:scale-[1.04]"
+          loading="lazy"
+          draggable={!locked}
+          onContextMenu={locked ? (e) => e.preventDefault() : undefined}
+        />
       )}
     </button>
   );
@@ -155,56 +228,83 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
                 {byRoom ? 'All photos' : 'By room'}
               </button>
             )}
-            {/* Resolution selector — clients pick full / print / web */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setSizeOpen((o) => !o)}
-                onBlur={() => setTimeout(() => setSizeOpen(false), 150)}
-                className="btn-secondary"
-                title="Choose download resolution"
-              >
-                {SIZE_OPTIONS.find((o) => o.value === size)?.label}
-                <ChevronDown className="h-4 w-4" />
-              </button>
-              {sizeOpen && (
-                <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lift">
-                  {SIZE_OPTIONS.map((o) => (
-                    <button
-                      key={o.value}
-                      type="button"
-                      onClick={() => {
-                        setSize(o.value);
-                        setSizeOpen(false);
-                      }}
-                      className={`block w-full px-4 py-2.5 text-left transition-colors hover:bg-slate-50 ${
-                        o.value === size ? 'bg-ocean-50' : ''
-                      }`}
-                    >
-                      <div className="text-sm font-medium text-ocean-950">{o.label}</div>
-                      <div className="text-xs text-slate-500">{o.hint}</div>
-                    </button>
-                  ))}
+            {locked ? (
+              data.photos.length > 0 && <UnlockButton />
+            ) : (
+              <>
+                {/* Resolution selector — clients pick full / print / web */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setSizeOpen((o) => !o)}
+                    onBlur={() => setTimeout(() => setSizeOpen(false), 150)}
+                    className="btn-secondary"
+                    title="Choose download resolution"
+                  >
+                    {SIZE_OPTIONS.find((o) => o.value === size)?.label}
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                  {sizeOpen && (
+                    <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lift">
+                      {SIZE_OPTIONS.map((o) => (
+                        <button
+                          key={o.value}
+                          type="button"
+                          onClick={() => {
+                            setSize(o.value);
+                            setSizeOpen(false);
+                          }}
+                          className={`block w-full px-4 py-2.5 text-left transition-colors hover:bg-slate-50 ${
+                            o.value === size ? 'bg-ocean-50' : ''
+                          }`}
+                        >
+                          <div className="text-sm font-medium text-ocean-950">{o.label}</div>
+                          <div className="text-xs text-slate-500">{o.hint}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <a
-              href={`/api/delivery/${params.token}/download${size === 'full' ? '' : `?size=${size}`}`}
-              className="btn-primary"
-              download
-              title={SIZE_OPTIONS.find((o) => o.value === size)?.hint}
-            >
-              <Download className="h-4 w-4" /> Download all ({data.photos.length})
-            </a>
+                <a
+                  href={`/api/delivery/${params.token}/download${size === 'full' ? '' : `?size=${size}`}`}
+                  className="btn-primary"
+                  download
+                  title={SIZE_OPTIONS.find((o) => o.value === size)?.hint}
+                >
+                  <Download className="h-4 w-4" /> Download all ({data.photos.length})
+                </a>
+              </>
+            )}
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
-        {data.photos.length === 0 ? (
+        {locked && data.photos.length > 0 && (
+          <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-700">
+                <Lock className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="font-medium text-ocean-950">These are watermarked previews</div>
+                <p className="text-sm text-slate-600">
+                  Unlock to download the full-resolution, watermark-free files for this listing.
+                </p>
+              </div>
+            </div>
+            <UnlockButton className="btn-primary shrink-0" />
+          </div>
+        )}
+        {data.paywall?.paid && (
+          <div className="mb-6 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-800">
+            <ShieldCheck className="h-4 w-4" /> Payment received — downloads are unlocked. Thank you!
+          </div>
+        )}
+        {data.photos.length === 0 && (data.deliverables?.length ?? 0) === 0 ? (
           <div className="card p-12 text-center text-slate-500">
             <ImageIcon className="mx-auto h-8 w-8 opacity-40" />
-            <p className="mt-2">No photos delivered yet.</p>
+            <p className="mt-2">Nothing delivered yet.</p>
           </div>
         ) : byRoom && hasRooms ? (
           <div className="space-y-10">
@@ -227,6 +327,10 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
             {data.photos.map(PhotoTile)}
           </div>
         )}
+
+        {/* Rich-media showcase: video, 360° tours, floor plans (renders nothing
+            when the listing has no published deliverables). */}
+        <MediaRoom items={data.deliverables ?? []} />
       </main>
 
       {lightbox && (() => {
@@ -249,9 +353,13 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
                 )}
               </span>
               <div className="flex items-center gap-2">
-                <a href={lightbox.url!} download={lightbox.filename} className="btn-primary">
-                  <Download className="h-4 w-4" /> Save
-                </a>
+                {locked ? (
+                  <UnlockButton />
+                ) : (
+                  <a href={lightbox.url!} download={lightbox.filename} className="btn-primary">
+                    <Download className="h-4 w-4" /> Save
+                  </a>
+                )}
                 <button
                   onClick={() => setLightbox(null)}
                   className="rounded-md p-2 text-white hover:bg-white/10"
@@ -277,6 +385,8 @@ export default function GalleryPage({ params }: { params: { token: string } }) {
                 src={lightbox.url!}
                 alt={lightbox.filename}
                 onClick={(e) => e.stopPropagation()}
+                draggable={!locked}
+                onContextMenu={locked ? (e) => e.preventDefault() : undefined}
                 className="max-h-full max-w-full object-contain animate-scale-in rounded-md"
               />
               {many && (

@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server';
+import { deleteEvent } from '@/lib/google-calendar/api';
 
 export interface DeleteOrderResult {
   order_id: string;
@@ -11,6 +12,8 @@ export interface DeleteOrderResult {
   by_bucket: Record<string, number>;
   /** Whether the order row itself was deleted (cascades to all child rows). */
   order_deleted: boolean;
+  /** Whether the shoot's Google Calendar event was removed. */
+  calendar_event_removed: boolean;
   errors: string[];
 }
 
@@ -40,8 +43,17 @@ export async function deleteOrderCompletely(
     bytes: 0,
     by_bucket: {},
     order_deleted: false,
+    calendar_event_removed: false,
     errors: [],
   };
+
+  // The shoot's calendar event lives on the assigned photographer's calendar —
+  // capture it before we delete the row so we can un-book them afterward.
+  const { data: ord } = await admin
+    .from('orders')
+    .select('photographer_id, gcal_event_id')
+    .eq('id', orderId)
+    .maybeSingle();
 
   // Every photo row across all kinds carries its bucket + storage_path.
   const { data: photos, error } = await admin
@@ -81,5 +93,19 @@ export async function deleteOrderCompletely(
     return result;
   }
   result.order_deleted = true;
+
+  // 3) Un-book the photographer's Google Calendar (best-effort — never fail the
+  //    delete over a calendar hiccup).
+  const photographerId = (ord as any)?.photographer_id as string | null | undefined;
+  const eventId = (ord as any)?.gcal_event_id as string | null | undefined;
+  if (photographerId && eventId) {
+    try {
+      await deleteEvent(photographerId, eventId);
+      result.calendar_event_removed = true;
+    } catch (e) {
+      result.errors.push(`calendar_event: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   return result;
 }

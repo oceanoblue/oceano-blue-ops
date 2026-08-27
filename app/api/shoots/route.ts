@@ -54,6 +54,13 @@ const Body = z.object({
   package_name: z.string().optional().default(''),
   instructions: z.string().optional().default(''), // what to capture → internal_notes
 
+  // Products on this shoot → priced order_items + order total (what the
+  // download paywall charges). Priced sqft-tiered, same as the public booking.
+  items: z
+    .array(z.object({ product_id: z.string().uuid(), quantity: z.number().int().min(1).default(1) }))
+    .optional()
+    .default([]),
+
   // Auto-provision the Dropbox upload link when a contractor is assigned.
   create_intake_link: z.boolean().optional().default(true),
 });
@@ -197,6 +204,19 @@ export async function POST(request: Request) {
     );
   }
 
+  // 3b) Itemize the order with priced products so it carries a total (the
+  //     amount the download paywall charges). Best-effort: a pricing hiccup
+  //     shouldn't lose the shoot — surface a warning and let the office fix it.
+  let pricingWarning: string | null = null;
+  if (b.items.length > 0) {
+    const { error: pErr } = await admin.rpc('add_order_items_priced', {
+      p_order_id: order.id,
+      p_items: b.items,
+      p_sqft: b.sqft ?? 0,
+    });
+    if (pErr) pricingWarning = pErr.message ?? 'pricing_failed';
+  }
+
   // 4) When a contractor is assigned, provision the Dropbox upload link now so
   //    it's ready to send. Best-effort: a link failure must NOT lose the shoot
   //    that was just created — surface a warning and let them retry on the page.
@@ -227,5 +247,6 @@ export async function POST(request: Request) {
     order_number: order.order_number,
     intake_url: intakeUrl,
     intake_warning: intakeWarning,
+    pricing_warning: pricingWarning,
   });
 }

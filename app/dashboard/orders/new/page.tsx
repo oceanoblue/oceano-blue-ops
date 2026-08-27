@@ -14,23 +14,29 @@ export const dynamic = 'force-dynamic';
 export default async function NewShootPage() {
   const supabase = createClient();
 
-  const [{ data: clients }, { data: contractorRows }, { data: team }] = await Promise.all([
-    supabase
-      .from('clients')
-      .select('id, full_name, brokerage')
-      .eq('is_archived', false)
-      .order('full_name'),
-    supabase
-      .from('contractors')
-      .select('id, full_name, pay_rate_cents')
-      .eq('is_active', true)
-      .order('full_name'),
-    supabase
-      .from('team_members')
-      .select('id, full_name, role')
-      .eq('is_active', true)
-      .order('full_name'),
-  ]);
+  const [{ data: clients }, { data: contractorRows }, { data: team }, { data: productRows }] =
+    await Promise.all([
+      supabase
+        .from('clients')
+        .select('id, full_name, brokerage')
+        .eq('is_archived', false)
+        .order('full_name'),
+      supabase
+        .from('contractors')
+        .select('id, full_name, pay_rate_cents')
+        .eq('is_active', true)
+        .order('full_name'),
+      supabase
+        .from('team_members')
+        .select('id, full_name, role')
+        .eq('is_active', true)
+        .order('full_name'),
+      supabase
+        .from('products')
+        .select('id, name, kind, is_addon, base_price_cents, sort_order')
+        .eq('is_active', true)
+        .order('sort_order'),
+    ]);
 
   const photographers = ((team ?? []) as any[])
     .filter((t) => t.role === 'photographer' || t.role === 'admin')
@@ -59,6 +65,7 @@ export default async function NewShootPage() {
         clients={(clients ?? []) as any}
         contractors={(contractorRows ?? []) as any}
         team={photographers}
+        products={(productRows ?? []) as any}
       />
     </div>
   );

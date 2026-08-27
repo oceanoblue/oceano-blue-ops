@@ -115,7 +115,8 @@ export async function analyzePhoto(bytes: Buffer): Promise<VisionAnalysis | null
  */
 export function planEdits(
   analysis: VisionAnalysis,
-  threshold = 0.65
+  threshold = 0.65,
+  allow?: readonly AnalyzeEdit[]
 ): AnalyzeEdit[] {
   const plan: AnalyzeEdit[] = [];
   const rec = analysis.recommendations;
@@ -129,5 +130,11 @@ export function planEdits(
   if ((rec.lawn_enhance ?? 0) >= threshold) plan.push('lawn_enhance');
   if ((rec.declutter ?? 0) >= threshold) plan.push('declutter');
 
-  return plan;
+  // Optional allowlist: the automatic (default-on) scene chain permits only the
+  // NON-DESTRUCTIVE fixes (sky/window/lawn); destructive ops (declutter,
+  // twilight) only run when the caller opts in with a wider allowlist / none.
+  return allow ? plan.filter((e) => allow.includes(e)) : plan;
 }
+
+/** The non-destructive scene fixes safe to auto-apply by default. */
+export const AUTO_SCENE_FIXES: readonly AnalyzeEdit[] = ['sky_replace', 'window_pull', 'lawn_enhance'];

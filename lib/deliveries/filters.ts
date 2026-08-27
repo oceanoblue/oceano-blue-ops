@@ -1,6 +1,8 @@
 import { DELIVERY_STATUSES, DELIVERY_TYPES } from './constants';
 
-export type DeliveryFilters = { status: string | null; type: string | null };
+export type DeliveryFilters = { status: string | null; type: string | null; client: string | null };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Normalize Next.js `searchParams` into a validated filter pair.
@@ -11,9 +13,12 @@ export type DeliveryFilters = { status: string | null; type: string | null };
 export function parseDeliveryFilters(
   params: Record<string, string | string[] | undefined> | undefined,
 ): DeliveryFilters {
+  const rawClient = Array.isArray(params?.client) ? params?.client[0] : params?.client;
   return {
     status: pick(params?.status, DELIVERY_STATUSES),
     type: pick(params?.type, DELIVERY_TYPES),
+    // client is a dynamic id, so validate shape (uuid) rather than a fixed list.
+    client: rawClient && UUID_RE.test(rawClient) ? rawClient : null,
   };
 }
 
@@ -31,6 +36,7 @@ export function buildDeliveryQuery(filters: Partial<DeliveryFilters>): string {
   const qs = new URLSearchParams();
   if (filters.status) qs.set('status', filters.status);
   if (filters.type) qs.set('type', filters.type);
+  if (filters.client) qs.set('client', filters.client);
   const s = qs.toString();
   return s ? `?${s}` : '';
 }
