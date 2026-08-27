@@ -50,25 +50,29 @@ export function ProcessPanel({
   tasks: ProcessTask[];
 }) {
   const router = useRouter();
-  const [profile, setProfile] = useState<'natural' | 'airy' | 'luxury'>('natural');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // Cloud pipeline: merge + enhance the order's Dropbox uploads via ai_jobs.
   async function queueProcess() {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/re-photo/process', {
+      const res = await fetch('/api/re-photo/process-dropbox', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: jobId, profile }),
+        body: JSON.stringify({ job_id: jobId }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessage(json.hint || json.error || 'Processing could not be queued.');
+        setMessage(json.message || json.error || 'Processing could not be queued.');
         return;
       }
-      setMessage(`Queued ${json.items} item(s).`);
+      setMessage(
+        json.queued > 0
+          ? `Queued ${json.queued} job(s) — merging + enhancing in the cloud. Outputs appear in the gallery.`
+          : (json.message ?? 'Nothing new to process.')
+      );
       router.refresh();
     } finally {
       setBusy(false);
@@ -84,23 +88,13 @@ export function ProcessPanel({
             Process outputs
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Creates local derivative outputs from reviewed bracket sets and active singles.
+            Merges + enhances the order&apos;s Dropbox uploads in the cloud. Outputs land in the gallery.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            className="rounded-md border border-slate-200 px-2 py-1.5 text-sm"
-            value={profile}
-            disabled={busy}
-            onChange={(e) => setProfile(e.target.value as typeof profile)}
-          >
-            <option value="natural">Natural</option>
-            <option value="airy">Airy</option>
-            <option value="luxury">Luxury</option>
-          </select>
           <button className="btn-primary" disabled={busy} onClick={queueProcess}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            Queue processing
+            Process from Dropbox
           </button>
         </div>
       </div>
