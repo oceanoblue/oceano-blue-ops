@@ -8,6 +8,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { StatCard } from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { getStuckWorkerTasks } from '@/lib/workers/health';
+import { StuckTasksAlert } from '@/components/workers/StuckTasksAlert';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +66,7 @@ export default async function DashboardHome() {
       .limit(10),
   ]);
   const counts: Record<string, number> = Object.fromEntries(bucketCounts);
+  const { groups: stuckGroups } = await getStuckWorkerTasks(supabase);
 
   return (
     <div className="space-y-8">
@@ -82,6 +85,8 @@ export default async function DashboardHome() {
           />
         ))}
       </div>
+
+      <StuckTasksAlert groups={stuckGroups} />
 
       {(declined ?? []).length > 0 && (
         <section className="rounded-xl border border-rose-200 bg-rose-50 p-4">
