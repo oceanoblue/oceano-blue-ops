@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
@@ -9,6 +10,9 @@ export default function PortalLanding() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [codeMsg, setCodeMsg] = useState<string | null>(null);
 
   async function sendLink(e: React.FormEvent) {
     e.preventDefault();
@@ -25,6 +29,29 @@ export default function PortalLanding() {
       setSent(true);
       setMsg('Check your email for a sign-in link.');
     }
+  }
+
+  // Alternative to tapping the emailed link: type the 6-digit code from the
+  // same email. Essential in the installed (home-screen) app, where the link
+  // would open the separate browser instead of the app.
+  async function verifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    setVerifying(true);
+    setCodeMsg(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.verifyOtp({ email, token: code.trim(), type: 'email' });
+    if (error) {
+      setVerifying(false);
+      setCodeMsg(
+        error.message.toLowerCase().includes('expired') || error.message.toLowerCase().includes('invalid')
+          ? 'That code didn’t match — double-check it, or request a fresh email.'
+          : error.message
+      );
+      return;
+    }
+    // Bind the clients row to this auth user (same as the link callback).
+    await supabase.rpc('link_client_account');
+    window.location.href = '/portal/listings';
   }
 
   return (
@@ -50,8 +77,41 @@ export default function PortalLanding() {
           </p>
 
           {sent ? (
-            <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-              {msg} Open it on this device to finish signing in.
+            <div className="mt-6 space-y-4">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                {msg} Tap the link on this device — or enter the 6-digit code from the same email
+                below.
+              </div>
+              <form onSubmit={verifyCode} className="space-y-3">
+                <input
+                  className="input text-center font-mono text-lg tracking-[0.3em]"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="••••••"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                />
+                <button
+                  className="btn-primary w-full inline-flex items-center justify-center gap-2"
+                  disabled={verifying || code.trim().length < 6}
+                >
+                  {verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Sign in with code
+                </button>
+                {codeMsg && <p className="text-sm text-rose-600">{codeMsg}</p>}
+              </form>
+              <button
+                type="button"
+                onClick={() => {
+                  setSent(false);
+                  setCode('');
+                  setCodeMsg(null);
+                }}
+                className="text-xs text-slate-500 underline-offset-2 hover:underline"
+              >
+                Use a different email
+              </button>
             </div>
           ) : (
             <form onSubmit={sendLink} className="mt-6 space-y-4">
