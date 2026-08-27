@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { RegisterWorkerButton } from '@/components/workers/RegisterWorkerButton';
 import { EnqueueScanForm } from '@/components/workers/EnqueueScanForm';
+import { getStuckWorkerTasks } from '@/lib/workers/health';
+import { StuckTasksAlert } from '@/components/workers/StuckTasksAlert';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +25,8 @@ export default async function WorkersPage() {
     .order('created_at', { ascending: false })
     .limit(50);
   const jobOptions = (jobs ?? []).map((j: any) => ({ id: j.id, title: j.title ?? j.id }));
+
+  const { groups: stuckGroups } = await getStuckWorkerTasks(supabase);
 
   const { data: recentTasks } = await supabase
     .from('worker_tasks')
@@ -50,6 +54,8 @@ export default async function WorkersPage() {
         </div>
         <RegisterWorkerButton />
       </div>
+
+      <StuckTasksAlert groups={stuckGroups} />
 
       <EnqueueScanForm jobs={jobOptions} />
 
