@@ -79,16 +79,18 @@ export default function PortalLanding() {
           {sent ? (
             <div className="mt-6 space-y-4">
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                {msg} Tap the link on this device — or enter the 6-digit code from the same email
+                {msg} Tap the link on this device — or enter the one-time code from the same email
                 below.
               </div>
               <form onSubmit={verifyCode} className="space-y-3">
+                {/* Code length is a Supabase project setting (6–10 digits) — accept
+                    any of them rather than hardcoding one. */}
                 <input
                   className="input text-center font-mono text-lg tracking-[0.3em]"
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  maxLength={6}
-                  placeholder="••••••"
+                  maxLength={10}
+                  placeholder="••••••••"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                 />
