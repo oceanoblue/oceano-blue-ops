@@ -21,6 +21,20 @@ export const metadata: Metadata = {
   title: 'Oceano Blue — Production OS',
   description:
     'The Oceano Blue Media operating system: bookings, AI photo and video production, podcasts, and client delivery.',
+  // Installable app (realtor portal): manifest + iOS home-screen treatment.
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'Oceano Blue',
+    statusBarStyle: 'black-translucent',
+  },
+  icons: {
+    apple: '/icons/apple-touch-icon.png',
+  },
+};
+
+export const viewport = {
+  themeColor: '#0c1624',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
