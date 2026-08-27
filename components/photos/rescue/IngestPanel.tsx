@@ -43,28 +43,29 @@ export function IngestPanel({ jobId }: { jobId: string }) {
   const [dbxBusy, setDbxBusy] = useState(false);
   const [dbxMsg, setDbxMsg] = useState<string | null>(null);
 
-  // Pull the photographer's uploads straight from the order's Dropbox intake
-  // folder — no local machine, no desktop sync. Registers assets + groups.
-  async function importFromDropbox() {
+  // Process the photographer's uploads straight from the order's Dropbox intake
+  // folder through the cloud AI pipeline — no NAS, no desktop sync. Detects
+  // brackets, enqueues HDR merge + Nano Banana enhance, and the drain runs it.
+  async function processFromDropbox() {
     setDbxBusy(true);
     setDbxMsg(null);
     setError(null);
     try {
-      const res = await fetch('/api/re-photo/import-dropbox', {
+      const res = await fetch('/api/re-photo/process-dropbox', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job_id: jobId }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.message ?? json.error ?? 'import_failed');
+      if (!res.ok) throw new Error(json.message ?? json.error ?? 'process_failed');
       setDbxMsg(
-        json.imported > 0
-          ? `Imported ${json.imported} file${json.imported === 1 ? '' : 's'} — ${json.groups} bracket group${json.groups === 1 ? '' : 's'}${json.needs_review ? `, ${json.needs_review} need review` : ''}.`
-          : (json.message ?? 'Nothing new to import.')
+        json.queued > 0
+          ? `Queued ${json.queued} job${json.queued === 1 ? '' : 's'} from ${json.imported} file${json.imported === 1 ? '' : 's'} (${json.brackets} bracket${json.brackets === 1 ? '' : 's'}, ${json.singles} single${json.singles === 1 ? '' : 's'}). Merging + enhancing in the cloud now.`
+          : (json.message ?? 'Nothing new to process.')
       );
       router.refresh();
     } catch (e: any) {
-      setError(e?.message ?? 'Dropbox import failed');
+      setError(e?.message ?? 'Dropbox processing failed');
     } finally {
       setDbxBusy(false);
     }
@@ -192,8 +193,8 @@ export function IngestPanel({ jobId }: { jobId: string }) {
     <div className="card p-5">
       <h2 className="mb-1 font-semibold text-slate-900">Ingest photos</h2>
       <p className="mb-4 text-sm text-slate-600">
-        Import the photographer&apos;s uploads from the order&apos;s Dropbox intake folder, or select a
-        local shoot folder. Either way only metadata is registered and brackets are grouped.
+        Process the photographer&apos;s uploads straight from the order&apos;s Dropbox intake folder — brackets
+        are merged and enhanced in the cloud, no NAS needed. Or select a local shoot folder to index.
       </p>
 
       <div className="flex flex-wrap gap-3">
@@ -201,10 +202,10 @@ export function IngestPanel({ jobId }: { jobId: string }) {
           type="button"
           className="btn-primary"
           disabled={dbxBusy || busy}
-          onClick={importFromDropbox}
+          onClick={processFromDropbox}
         >
           {dbxBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />}
-          Import from Dropbox
+          Process from Dropbox
         </button>
         <button
           type="button"

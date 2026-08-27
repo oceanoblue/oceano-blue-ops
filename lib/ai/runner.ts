@@ -5,6 +5,7 @@ import { getProvider } from './index';
 import { analyzePhoto, planEdits } from './vision-analyze';
 import { buildAutoEnhanceJobRow } from './auto-enhance';
 import { editEngineConfigured, runEditEngine } from './edit-engine';
+import { getTemporaryLink } from '@/lib/integrations/dropbox';
 import { captureError } from '@/lib/observability/report';
 import { profileFor } from '@/lib/photos/profiles';
 import type { AiJob, Photo } from '@/lib/supabase/database.types';
@@ -110,6 +111,34 @@ export async function runAiJob(jobId: string): Promise<{
 
     const sources: SourceImage[] = await Promise.all(
       inputs.map(async (p: Photo) => {
+        // Cloud pipeline: the RAW lives in Dropbox (per-order intake folder), not
+        // Supabase Storage. Resolve a temporary link and download the bytes here
+        // — in the drain worker, which is built for heavy work — so RAWs never
+        // transit Supabase. Only the deterministic engine (libraw) can decode RAW.
+        const dropboxPath = (p as any).dropbox_path as string | null | undefined;
+        if (dropboxPath) {
+          const link = await getTemporaryLink(dropboxPath);
+          if (!link) throw new Error(`Dropbox temp link failed: ${dropboxPath}`);
+          const dlResp = await fetch(link);
+          if (!dlResp.ok) throw new Error(`Dropbox download failed: ${dropboxPath} (${dlResp.status})`);
+          const dbxBytes = Buffer.from(await dlResp.arrayBuffer());
+          const dbxName = dropboxPath.split('/').pop() || p.filename;
+          const dbxLooksRaw = /\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(dbxName);
+          if (deterministic && dbxLooksRaw) {
+            return { bytes: dbxBytes, filename: dbxName, mimeType: 'image/x-raw', bracketIndex: (p.exif as any)?.ExposureBiasValue };
+          }
+          if (dbxLooksRaw) {
+            throw new Error(`raw_input_generative: ${dbxName} is a camera RAW — run the Oceano engine on it first.`);
+          }
+          // Non-RAW (jpeg) Dropbox source: normalize with sharp like the Storage path.
+          const dbxProcessed = await sharp(dbxBytes)
+            .rotate()
+            .resize({ width: AI_INPUT_LONG_EDGE, height: AI_INPUT_LONG_EDGE, fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
+            .jpeg({ quality: 92, mozjpeg: true })
+            .toBuffer();
+          return { bytes: dbxProcessed, filename: dbxName, mimeType: 'image/jpeg', bracketIndex: (p.exif as any)?.ExposureBiasValue };
+        }
+
         const rawPath = (p as any).raw_storage_path as string | null | undefined;
         const useRaw = deterministic && !!rawPath;
         const dlPath = useRaw ? (rawPath as string) : p.storage_path;
@@ -424,7 +453,10 @@ export async function runAiJob(jobId: string): Promise<{
           .select('auto_enhance_on_upload, auto_scene_fixes')
           .eq('id', true)
           .maybeSingle();
-        if ((bs as any)?.auto_enhance_on_upload !== false) {
+        // Per-job override lets a specific flow (e.g. the cloud Dropbox pipeline)
+        // force the signature enhance even when the org setting is off.
+        const forceAuto = (job.params as any)?.force_auto_enhance === true;
+        if ((bs as any)?.auto_enhance_on_upload !== false || forceAuto) {
           const sceneFixes = (bs as any)?.auto_scene_fixes !== false; // default on
           const enhanceProvider = getProvider('auto', 'enhance_single');
           if (enhanceProvider.isConfigured()) {
