@@ -91,25 +91,53 @@ export async function runAiJob(jobId: string): Promise<{
     .in('id', job.input_photo_ids);
 
   try {
-    // 2. Load input photos and download bytes
-    const { data: inputs } = await supabase
-      .from('photos')
-      .select('*')
-      .in('id', job.input_photo_ids);
-    if (!inputs?.length) throw new Error('No input photos found');
-
+    // 2. Load input bytes.
     // The deterministic engine (oceano-enhance) can decode RAW via libraw;
     // generative providers (GPT Image / Gemini) accept ONLY jpeg/png/webp and
-    // 400 on anything labeled image/x-raw. The RAW-passthrough decision must
-    // therefore be per PROVIDER, not just per job type — this used to key off
-    // job_type alone (written when enhance_single always went to our engine),
-    // so running an enhance through GPT Image (Advanced provider pick, or the
-    // A/B rerun) shipped the RAW original to OpenAI and failed the job.
+    // 400 on anything labeled image/x-raw — so the RAW-passthrough decision is
+    // per PROVIDER, not just per job type.
     const engineProvider = (job.provider ?? 'oceano-enhance') === 'oceano-enhance';
     const deterministic =
       engineProvider && (job.job_type === 'hdr_merge' || job.job_type === 'enhance_single');
 
-    const sources: SourceImage[] = await Promise.all(
+    // Cloud Dropbox jobs carry their inputs in params — NO photo rows. This
+    // avoids colliding with the order's photo manager / raw cleanup, which was
+    // deleting fake 'raw' rows mid-run ("No input photos found"). Everything
+    // else reads input photo rows from Supabase Storage.
+    const dropboxInputs = ((job.params as any)?.dropbox_inputs ?? []) as { path: string; filename?: string }[];
+
+    let inputs: Photo[] = [];
+    let sources: SourceImage[];
+
+    if (dropboxInputs.length) {
+      sources = await Promise.all(
+        dropboxInputs.map(async (di) => {
+          let link: string;
+          try {
+            link = await getTemporaryLink(di.path);
+          } catch (linkErr: any) {
+            throw new Error(`Dropbox download failed for ${di.path}: ${linkErr?.message ?? linkErr}`);
+          }
+          const dlResp = await fetch(link);
+          if (!dlResp.ok) throw new Error(`Dropbox download failed for ${di.path} (${dlResp.status})`);
+          const bytes = Buffer.from(await dlResp.arrayBuffer());
+          const name = di.filename || di.path.split('/').pop() || 'file';
+          const looksRaw = /\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(name);
+          if (deterministic && looksRaw) return { bytes, filename: name, mimeType: 'image/x-raw' } as SourceImage;
+          if (looksRaw) throw new Error(`raw_input_generative: ${name} is a camera RAW — run the Oceano engine on it first.`);
+          const processed = await sharp(bytes)
+            .rotate()
+            .resize({ width: AI_INPUT_LONG_EDGE, height: AI_INPUT_LONG_EDGE, fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
+            .jpeg({ quality: 92, mozjpeg: true })
+            .toBuffer();
+          return { bytes: processed, filename: name, mimeType: 'image/jpeg' } as SourceImage;
+        })
+      );
+    } else {
+      const { data: loaded } = await supabase.from('photos').select('*').in('id', job.input_photo_ids);
+      if (!loaded?.length) throw new Error('No input photos found');
+      inputs = loaded as Photo[];
+      sources = await Promise.all(
       inputs.map(async (p: Photo) => {
         // Cloud pipeline: the RAW lives in Dropbox (per-order intake folder), not
         // Supabase Storage. Resolve a temporary link and download the bytes here
@@ -200,7 +228,8 @@ export async function runAiJob(jobId: string): Promise<{
           bracketIndex: (p.exif as any)?.ExposureBiasValue,
         };
       })
-    );
+      );
+    }
 
     // 3. Run provider. The order's photo profile selects the finishing-grade
     // style (e.g. 'sober' for architectural/interior — accurate, not HDR-pushed).
