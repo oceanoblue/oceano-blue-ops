@@ -117,8 +117,12 @@ export async function runAiJob(jobId: string): Promise<{
         // transit Supabase. Only the deterministic engine (libraw) can decode RAW.
         const dropboxPath = (p as any).dropbox_path as string | null | undefined;
         if (dropboxPath) {
-          const link = await getTemporaryLink(dropboxPath);
-          if (!link) throw new Error(`Dropbox temp link failed: ${dropboxPath}`);
+          let link: string;
+          try {
+            link = await getTemporaryLink(dropboxPath);
+          } catch (linkErr: any) {
+            throw new Error(`Dropbox download failed for ${dropboxPath}: ${linkErr?.message ?? linkErr}`);
+          }
           const dlResp = await fetch(link);
           if (!dlResp.ok) throw new Error(`Dropbox download failed: ${dropboxPath} (${dlResp.status})`);
           const dbxBytes = Buffer.from(await dlResp.arrayBuffer());

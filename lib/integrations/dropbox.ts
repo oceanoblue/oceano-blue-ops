@@ -273,18 +273,19 @@ export async function listFolder(path: string): Promise<ListFolderResult> {
   }
 }
 
-/** A short-lived (~4 hr) direct download URL for a Dropbox file. Used by the cloud worker. */
-export async function getTemporaryLink(path: string): Promise<string | null> {
-  if (!isDropboxConfigured()) return null;
-  try {
-    const token = await getAccessToken();
-    const res = await dbxUserCall(token, 'https://api.dropboxapi.com/2/files/get_temporary_link', { path });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { link?: string };
-    return json.link ?? null;
-  } catch {
-    return null;
-  }
+/**
+ * A short-lived (~4 hr) direct download URL for a Dropbox file. Throws with the
+ * real Dropbox reason on failure (e.g. missing_scope), so the caller's error is
+ * actionable instead of a bare "temp link failed".
+ */
+export async function getTemporaryLink(path: string): Promise<string> {
+  if (!isDropboxConfigured()) throw new Error('dropbox_not_configured');
+  const token = await getAccessToken();
+  const res = await dbxUserCall(token, 'https://api.dropboxapi.com/2/files/get_temporary_link', { path });
+  if (!res.ok) throw new Error(`dropbox_temp_link_${res.status}: ${await dropboxErrorDetail(res)}`);
+  const json = (await res.json()) as { link?: string };
+  if (!json.link) throw new Error('dropbox_temp_link_no_link');
+  return json.link;
 }
 
 // ─── Archival (delivered orders) ─────────────────────────────────────────────

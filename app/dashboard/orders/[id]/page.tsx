@@ -20,6 +20,7 @@ import { SendToEditEngine } from '@/components/orders/SendToEditEngine';
 import { FotelloWorkspace } from '@/components/orders/FotelloWorkspace';
 import { RawIntakeControl } from '@/components/orders/RawIntakeControl';
 import { ProcessFromDropboxControl } from '@/components/orders/ProcessFromDropboxControl';
+import { OrderProcessingProgress } from '@/components/orders/OrderProcessingProgress';
 import { AssignShooterControl } from '@/components/orders/AssignShooterControl';
 import { ContractorResponseNotice } from '@/components/orders/ContractorResponseNotice';
 import { ArchiveOrderControl } from '@/components/orders/ArchiveOrderControl';
@@ -316,6 +317,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                   orderId={order.id}
                   hasIntake={!!(order as any).dropbox_intake_path}
                 />
+                <OrderProcessingProgress orderId={order.id} />
               </section>
 
               <section className="card p-6">
