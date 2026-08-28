@@ -19,7 +19,11 @@ export const dynamic = 'force-dynamic';
 const RAW_EXTS = new Set(['cr3', 'cr2', 'arw', 'nef', 'raf', 'rw2', 'dng', 'orf', 'srw', 'pef', 'raw', 'tif', 'tiff', 'jpg', 'jpeg']);
 const ext = (name: string) => (name.split('.').pop() ?? '').toLowerCase();
 
-const Body = z.object({ job_id: z.string().uuid() });
+// Anchored on the ORDER — it carries the Dropbox intake folder and is the
+// ai_jobs scope. (job_id accepted for back-compat, resolved to its order.)
+const Body = z
+  .object({ order_id: z.string().uuid().optional(), job_id: z.string().uuid().optional() })
+  .refine((b) => b.order_id || b.job_id, { message: 'order_id or job_id required' });
 
 export async function POST(request: Request) {
   const supabase = createClient();
@@ -29,21 +33,20 @@ export async function POST(request: Request) {
 
   const parsed = Body.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: 'validation_failed' }, { status: 400 });
-  const { job_id } = parsed.data;
+  const { order_id, job_id } = parsed.data;
 
   const admin = createAdminClient() as any;
 
-  // The order for this job carries the Dropbox intake path and is the ai_jobs scope.
-  const { data: order } = await admin
-    .from('orders')
-    .select('id, dropbox_intake_path')
-    .eq('job_id', job_id)
-    .not('dropbox_intake_path', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  let q = admin.from('orders').select('id, dropbox_intake_path');
+  q = order_id
+    ? q.eq('id', order_id)
+    : q.eq('job_id', job_id).not('dropbox_intake_path', 'is', null).order('created_at', { ascending: false }).limit(1);
+  const { data: order } = await q.maybeSingle();
   if (!order?.dropbox_intake_path) {
-    return NextResponse.json({ error: 'no_intake_folder', message: 'This job has no Dropbox intake folder yet — create the upload link on the order first.' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'no_intake_folder', message: 'This order has no Dropbox upload link yet — create it on the order first.' },
+      { status: 400 }
+    );
   }
 
   const listing = await listFolder(order.dropbox_intake_path);
