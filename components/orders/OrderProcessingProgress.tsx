@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Loader2, AlertTriangle, RotateCcw } from 'lucide-react';
 
 type Progress = {
   total: number;
@@ -20,6 +20,8 @@ type Progress = {
  */
 export function OrderProcessingProgress({ orderId }: { orderId: string }) {
   const [p, setP] = useState<Progress | null>(null);
+  const [nonce, setNonce] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -44,7 +46,17 @@ export function OrderProcessingProgress({ orderId }: { orderId: string }) {
       cancelled = true;
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [orderId]);
+  }, [orderId, nonce]);
+
+  async function retry() {
+    setRetrying(true);
+    try {
+      await fetch(`/api/orders/${orderId}/retry-failed`, { method: 'POST' });
+      setNonce((n) => n + 1); // restart polling — jobs are pending again
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   if (!p || p.total === 0) return null;
 
@@ -70,11 +82,21 @@ export function OrderProcessingProgress({ orderId }: { orderId: string }) {
         <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${pct}%` }} />
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
         {p.running > 0 && <span>{p.running} running</span>}
         {p.pending > 0 && <span>{p.pending} queued</span>}
         {p.failed > 0 && <span className="text-amber-700">{p.failed} failed</span>}
         {p.processed_photos > 0 && <span>{p.processed_photos} enhanced photo{p.processed_photos === 1 ? '' : 's'}</span>}
+        {p.failed > 0 && p.active === 0 && (
+          <button
+            onClick={retry}
+            disabled={retrying}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 py-1 font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-60"
+          >
+            {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+            Retry {p.failed} failed
+          </button>
+        )}
       </div>
     </div>
   );
