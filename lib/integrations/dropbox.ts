@@ -50,7 +50,10 @@ async function getAccessToken(): Promise<string> {
     headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
   });
-  if (!res.ok) throw new Error(`token_exchange_${res.status}`);
+  if (!res.ok) {
+    const detail = await res.text().then((t) => t.slice(0, 200)).catch(() => '');
+    throw new Error(`token_exchange_${res.status}: ${detail}`);
+  }
   const json = (await res.json()) as { access_token?: string; expires_in?: number };
   if (!json.access_token) throw new Error('no_access_token');
   const ttlMs = Math.max(60, (json.expires_in ?? 14400) - 300) * 1000;
