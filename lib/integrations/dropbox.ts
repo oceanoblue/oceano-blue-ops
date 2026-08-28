@@ -32,7 +32,14 @@ export function showFolderPath(slug: string, root = process.env.DROPBOX_PODCAST_
   return `${r}/${s}`;
 }
 
+// Cache the short-lived access token in-process. Dropbox's /oauth2/token endpoint
+// is rate-limited, so exchanging the refresh token on every call (e.g. once per
+// file across a 200-file shoot) trips `token_exchange_400`. Reuse until it's near
+// expiry (~4 h tokens; refresh 5 min early).
+let cachedAccessToken: { token: string; expiresAt: number } | null = null;
+
 async function getAccessToken(): Promise<string> {
+  if (cachedAccessToken && Date.now() < cachedAccessToken.expiresAt) return cachedAccessToken.token;
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: process.env.DROPBOX_REFRESH_TOKEN!,
@@ -44,8 +51,10 @@ async function getAccessToken(): Promise<string> {
     body,
   });
   if (!res.ok) throw new Error(`token_exchange_${res.status}`);
-  const json = (await res.json()) as { access_token?: string };
+  const json = (await res.json()) as { access_token?: string; expires_in?: number };
   if (!json.access_token) throw new Error('no_access_token');
+  const ttlMs = Math.max(60, (json.expires_in ?? 14400) - 300) * 1000;
+  cachedAccessToken = { token: json.access_token, expiresAt: Date.now() + ttlMs };
   return json.access_token;
 }
 
