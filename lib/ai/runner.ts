@@ -446,16 +446,22 @@ export async function runAiJob(jobId: string): Promise<{
     // exact (the base now exists) and runs server-side via cron even if the
     // photographer has left the page. Idempotent: skip any base that already has
     // an enhance job. Singles take the /api/ai/auto-enhance path instead.
-    if (job.job_type === 'hdr_merge' && outputPhotoIds.length > 0) {
+    // Signature enhance follow-up: fires on merged HDR bases, and — for the cloud
+    // Dropbox flow (force_auto_enhance) — also on singles the engine just graded
+    // from RAW, so every delivered frame gets the Nano Banana pass. Guarded to
+    // engine-produced outputs, so the generative follow-up never re-triggers it.
+    const forceAuto = (job.params as any)?.force_auto_enhance === true;
+    const engineProduced = (job.provider ?? 'oceano-enhance') === 'oceano-enhance';
+    const eligibleForSignatureEnhance =
+      job.job_type === 'hdr_merge' ||
+      (job.job_type === 'enhance_single' && engineProduced && forceAuto);
+    if (eligibleForSignatureEnhance && outputPhotoIds.length > 0) {
       try {
         const { data: bs } = await supabase
           .from('business_settings')
           .select('auto_enhance_on_upload, auto_scene_fixes')
           .eq('id', true)
           .maybeSingle();
-        // Per-job override lets a specific flow (e.g. the cloud Dropbox pipeline)
-        // force the signature enhance even when the org setting is off.
-        const forceAuto = (job.params as any)?.force_auto_enhance === true;
         if ((bs as any)?.auto_enhance_on_upload !== false || forceAuto) {
           const sceneFixes = (bs as any)?.auto_scene_fixes !== false; // default on
           const enhanceProvider = getProvider('auto', 'enhance_single');

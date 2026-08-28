@@ -287,6 +287,53 @@ export async function getTemporaryLink(path: string): Promise<string | null> {
   }
 }
 
+// ─── Archival (delivered orders) ─────────────────────────────────────────────
+
+/** The archive destination for a delivered order's intake folder. */
+export function archiveIntakePath(
+  intakePath: string,
+  root = process.env.DROPBOX_PHOTO_INTAKE_ROOT || '/Photo Intake'
+): { archiveRoot: string; dest: string } {
+  const r = ('/' + root).replace(/\/+/g, '/').replace(/\/$/, '');
+  const name = intakePath.split('/').filter(Boolean).pop() || 'order';
+  const archiveRoot = `${r}/_Archive`;
+  return { archiveRoot, dest: `${archiveRoot}/${name}` };
+}
+
+/** Create a folder (idempotent — an existing folder is fine). */
+export async function ensureFolder(path: string): Promise<'ok' | 'not_configured' | 'failed'> {
+  if (!isDropboxConfigured()) return 'not_configured';
+  try {
+    const token = await getAccessToken();
+    const res = await dbxUserCall(token, 'https://api.dropboxapi.com/2/files/create_folder_v2', { path, autorename: false });
+    if (res.ok || res.status === 409) return 'ok'; // 409 = already exists
+    return 'failed';
+  } catch {
+    return 'failed';
+  }
+}
+
+export type MoveResult = { status: 'moved' } | { status: 'not_found' } | { status: 'not_configured' } | { status: 'failed'; error: string };
+
+/** Move a Dropbox path (folder or file). */
+export async function movePath(fromPath: string, toPath: string): Promise<MoveResult> {
+  if (!isDropboxConfigured()) return { status: 'not_configured' };
+  try {
+    const token = await getAccessToken();
+    const res = await dbxUserCall(token, 'https://api.dropboxapi.com/2/files/move_v2', {
+      from_path: fromPath,
+      to_path: toPath,
+      autorename: true,
+    });
+    if (res.ok) return { status: 'moved' };
+    const detail = await dropboxErrorDetail(res);
+    if (res.status === 409 && detail.includes('not_found')) return { status: 'not_found' };
+    return { status: 'failed', error: `dropbox_move_${res.status}: ${detail}` };
+  } catch (e: any) {
+    return { status: 'failed', error: e?.message ?? 'dropbox_error' };
+  }
+}
+
 /** Compact human-readable reason from a Dropbox error response. */
 async function dropboxErrorDetail(res: Response): Promise<string> {
   try {
