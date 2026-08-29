@@ -117,8 +117,16 @@ export const oceanoEnhance: AiProvider = {
               rawPromptUsed: '(deterministic edit engine: grade)',
             };
           } catch (e) {
-            // Engine unreachable/erroring → don't fail the job; use the legacy
-            // pipeline. The model tag below ('oceano-enhance/...') reveals this.
+            // RAW inputs can ONLY be decoded by the engine (libraw). Sharp can't,
+            // so falling back would throw a cryptic "unsupported image format"
+            // that hides the real engine failure (e.g. a 401 secret mismatch).
+            // Surface it for RAW; keep the legacy fallback for JPEG/PNG.
+            const isRaw =
+              src.mimeType === 'image/x-raw' ||
+              /\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(src.filename || '');
+            if (isRaw) {
+              throw new Error(`edit_engine_grade_failed (RAW needs the engine): ${e instanceof Error ? e.message : String(e)}`);
+            }
             console.error('[oceano-enhance] edit engine grade failed, falling back:', e);
           }
         }
