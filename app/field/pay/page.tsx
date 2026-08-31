@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { PortalHero } from '@/components/portal/PortalHero';
 import { PayRequestForm, type EligibleShoot, type PayRequestRow } from '@/components/field/PayRequestForm';
 import { PayoutMethodCard } from '@/components/field/PayoutMethodCard';
+import { FieldNav } from '@/components/field/FieldNav';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,9 +63,9 @@ export default async function FieldPayPage() {
         eyebrow="Weekly pay"
         title="Get paid"
         subtitle="Review the shoots you've completed, then submit your weekly pay request. The office settles it from here."
-        backHref="/field/shoots"
-        backLabel="My shoots"
-      />
+      >
+        <FieldNav />
+      </PortalHero>
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
         <PayoutMethodCard method={me.payout_method} details={me.payout_details} />
         <PayRequestForm

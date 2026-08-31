@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, X, Loader2, CheckCircle2, XCircle } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 
 type Response = 'accepted' | 'declined' | null;
 
@@ -32,21 +31,15 @@ export function RespondControl({
     setBusy(kind);
     setError(null);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.rpc('respond_to_assignment', {
-        p_order_id: orderId,
-        p_response: kind,
-        p_note: noteText?.trim() || undefined,
+      // Goes through the server route (not the RPC directly) so the office gets
+      // an email the moment a shoot is accepted or declined.
+      const r = await fetch(`/api/field/shoots/${orderId}/respond`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ response: kind, note: noteText?.trim() || undefined }),
       });
-      if (error) throw error;
-      const res = data as { ok?: boolean; reason?: string } | null;
-      if (res && res.ok === false) {
-        throw new Error(
-          res.reason === 'not_your_assignment'
-            ? "This shoot isn't assigned to you."
-            : res.reason || 'Could not save your response.'
-        );
-      }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `Failed (${r.status})`);
       setDeclining(false);
       setReason('');
       router.refresh();

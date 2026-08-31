@@ -67,6 +67,43 @@ export function contractorAssignmentEmail(p: {
   };
 }
 
+export function contractorResponseEmail(p: {
+  contractorName: string;
+  response: 'accepted' | 'declined';
+  address: string;
+  cityStateZip?: string | null;
+  whenText?: string | null;
+  note?: string | null;
+  orderUrl: string;
+}): { subject: string; html: string } {
+  const accepted = p.response === 'accepted';
+  const verb = accepted ? 'accepted' : 'declined';
+  const accent = accepted ? '#059669' : '#e11d48'; // emerald / rose
+  const pill = accepted
+    ? 'background:#ecfdf5;color:#047857;'
+    : 'background:#fff1f2;color:#be123c;';
+  const meta = [p.cityStateZip, p.whenText].filter(Boolean).join(' · ');
+
+  const body = `
+    <p style="font-size:15px;line-height:1.5;color:#324354;margin:0 0 14px;">
+      <strong style="color:#0c1620;">${escapeHtml(p.contractorName || 'A photographer')}</strong>
+      has <span style="display:inline-block;font-weight:700;padding:1px 8px;border-radius:999px;${pill}">${escapeHtml(verb)}</span>
+      a shoot assignment.
+    </p>
+    <div style="border:1px solid #e6eaee;border-left:4px solid ${accent};border-radius:12px;padding:16px 18px;margin-bottom:18px;">
+      <div style="font-size:17px;font-weight:600;color:#0c1620;">${escapeHtml(p.address)}</div>
+      ${meta ? `<div style="font-size:13px;color:#708698;margin-top:3px;">${escapeHtml(meta)}</div>` : ''}
+      ${p.note ? `<div style="font-size:13px;color:#324354;margin-top:10px;padding-top:10px;border-top:1px solid #eef1f4;"><span style="color:#708698;">Note:</span> ${escapeHtml(p.note)}</div>` : ''}
+    </div>
+    ${!accepted ? `<p style="font-size:14px;color:#324354;margin:0 0 16px;">You'll want to reassign this shoot to another photographer.</p>` : ''}
+    <div style="margin-bottom:4px;">${button(p.orderUrl, 'Open the order')}</div>`;
+
+  return {
+    subject: `Shoot ${verb} — ${p.address}`,
+    html: shell(body, `${p.contractorName} ${verb} the shoot at ${p.address}`),
+  };
+}
+
 export function galleryReadyEmail(p: {
   recipientName?: string | null;
   address: string;

@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Camera, Plus, MapPin, DollarSign } from 'lucide-react';
+import { Camera, Plus, MapPin } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { fmtRelative } from '@/lib/utils/format';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PortalHero } from '@/components/portal/PortalHero';
+import { FieldNav } from '@/components/field/FieldNav';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,15 +66,7 @@ export default async function FieldShootsPage() {
         >
           <Plus className="h-4 w-4" /> Log a shoot
         </Link>
-        <Link
-          href="/field/pay"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3.5 py-2 text-sm font-semibold text-white ring-1 ring-white/20 transition hover:bg-white/20"
-        >
-          <DollarSign className="h-4 w-4" /> Get paid
-        </Link>
-        <form action="/api/field/signout" method="POST">
-          <button className="text-sm text-ink-300 transition hover:text-white">Sign out</button>
-        </form>
+        <FieldNav />
       </PortalHero>
 
       <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">

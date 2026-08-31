@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, FolderOpen, ExternalLink, CheckCircle2, Copy, Check } from 'lucide-react';
+import { Loader2, FolderOpen, ExternalLink, CheckCircle2, Copy, Check, Undo2 } from 'lucide-react';
 
 /** Contractor upload step: get the Dropbox folder link for this shoot, upload
  *  the RAWs there, then mark it uploaded so the office picks it up. */
@@ -59,6 +59,21 @@ export function ShootUpload({
     }
   }
 
+  async function unmarkUploaded() {
+    setBusy('unmark');
+    setError(null);
+    try {
+      const r = await fetch(`/api/field/shoots/${orderId}/unmark-uploaded`, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `Failed (${r.status})`);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function copy() {
     if (!url) return;
     await navigator.clipboard.writeText(url);
@@ -67,10 +82,30 @@ export function ShootUpload({
   }
 
   if (uploaded) {
+    // Undo is only offered while the shoot is still exactly 'uploaded' — once the
+    // office moves it into processing/editing/etc, the backend refuses the revert.
+    const justUploaded = status === 'uploaded';
     return (
-      <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200">
-        <CheckCircle2 className="h-5 w-5" />
-        RAWs uploaded — the office has it from here.
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200">
+          <CheckCircle2 className="h-5 w-5" />
+          RAWs uploaded — the office has it from here.
+        </div>
+        {justUploaded && (
+          <button
+            onClick={unmarkUploaded}
+            disabled={busy !== null}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-slate-800 disabled:opacity-50"
+          >
+            {busy === 'unmark' ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Undo2 className="h-3.5 w-3.5" />
+            )}
+            Tapped this by mistake? Undo — I still need to upload
+          </button>
+        )}
+        {error && <p className="text-sm text-rose-600">{error}</p>}
       </div>
     );
   }

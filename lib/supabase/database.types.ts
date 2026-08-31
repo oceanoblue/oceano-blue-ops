@@ -4435,6 +4435,7 @@ export type Database = {
           created_at: string | null
           dropbox_intake_path: string | null
           dropbox_intake_url: string | null
+          has_360: boolean | null
           id: string | null
           internal_notes: string | null
           listing: Json | null
@@ -4443,6 +4444,7 @@ export type Database = {
           pay_amount_cents: number | null
           pay_request_id: string | null
           pay_status: string | null
+          pay_tier: string | null
           scheduled_at: string | null
           source: string | null
           status: Database["public"]["Enums"]["order_status"] | null
@@ -4727,6 +4729,10 @@ export type Database = {
       }
       submit_reel_order: { Args: { p_order_id: string }; Returns: undefined }
       sync_busy: { Args: { p: Json }; Returns: Json }
+      unmark_field_shoot_uploaded: {
+        Args: { p_order_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       ai_job_type:
