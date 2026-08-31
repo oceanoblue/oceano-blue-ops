@@ -22,6 +22,10 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  // Staff only: this route lives under the public /api/worker prefix (worker
+  // Bearer-key routes), so the middleware waves it through — gate it here.
+  const { data: isStaff } = await supabase.rpc('is_team_member');
+  if (!isStaff) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const parsed = Body.safeParse(await request.json());
   if (!parsed.success) {

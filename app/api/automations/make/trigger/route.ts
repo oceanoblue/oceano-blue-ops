@@ -26,6 +26,10 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  // Staff only: lives under the public /api/automations prefix (Make callback
+  // uses a shared secret), so the middleware waves it through — gate it here.
+  const { data: isStaff } = await supabase.rpc('is_team_member');
+  if (!isStaff) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const webhook = process.env.MAKE_PODCAST_WEBHOOK_URL;
   if (!webhook) return NextResponse.json({ error: 'make_webhook_not_configured' }, { status: 400 });

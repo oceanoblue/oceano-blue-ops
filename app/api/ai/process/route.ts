@@ -77,6 +77,8 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  const { data: isStaff } = await supabase.rpc('is_team_member');
+  if (!isStaff) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   // Fail fast with a clear message if the chosen engine has no API key, rather
   // than enqueuing jobs that error mid-run. Deterministic providers are always
