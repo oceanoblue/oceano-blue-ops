@@ -23,17 +23,19 @@ export default async function FieldPayPage() {
     .maybeSingle();
   if (!me) redirect('/field/shoots');
 
-  // All RLS-scoped to the signed-in contractor.
+  // All scoped to the signed-in contractor via the field_orders view (0070) —
+  // pay_amount_cents is the contractor's OWN pay; the client price is not on
+  // the view at all. `listing` is a nested object.
   const [{ data: eligible }, { count: awaitingUpload }, { data: requests }] = await Promise.all([
     supabase
-      .from('orders')
-      .select('id, status, created_at, scheduled_at, pay_amount_cents, listings(address_line1, city, state)')
+      .from('field_orders')
+      .select('id, status, created_at, scheduled_at, pay_amount_cents, listing')
       .eq('pay_status', 'unpaid')
       .is('pay_request_id', null)
       .in('status', PAYABLE)
       .order('created_at', { ascending: true }),
     supabase
-      .from('orders')
+      .from('field_orders')
       .select('id', { count: 'exact', head: true })
       .eq('pay_status', 'unpaid')
       .is('pay_request_id', null)
@@ -47,8 +49,8 @@ export default async function FieldPayPage() {
 
   const shoots: EligibleShoot[] = (eligible ?? []).map((o: any) => ({
     id: o.id,
-    address: o.listings?.address_line1 ?? 'Address pending',
-    cityState: [o.listings?.city, o.listings?.state].filter(Boolean).join(', '),
+    address: o.listing?.address_line1 ?? 'Address pending',
+    cityState: [o.listing?.city, o.listing?.state].filter(Boolean).join(', '),
     shotAt: o.scheduled_at ?? o.created_at,
     status: o.status,
     payCents: o.pay_amount_cents ?? 0,

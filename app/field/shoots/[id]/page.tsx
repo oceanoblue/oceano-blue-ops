@@ -16,15 +16,16 @@ export default async function FieldShootDetailPage({ params }: { params: { id: s
   } = await supabase.auth.getUser();
   if (!user) redirect('/field');
 
-  // RLS returns this only if it's the caller's own shoot.
+  // Contractor-safe view (0070): self-scoped to the caller's own shoots and
+  // stripped of every pricing/billing column. `listing` is a nested object.
   const { data: shoot } = await (supabase as any)
-    .from('orders')
-    .select('id, status, source, created_at, scheduled_at, dropbox_intake_url, internal_notes, contractor_response, contractor_responded_at, contractor_response_note, listings(address_line1, address_line2, city, state, zip, sqft, bedrooms, bathrooms, property_type)')
+    .from('field_orders')
+    .select('id, status, source, created_at, scheduled_at, dropbox_intake_url, internal_notes, contractor_response, contractor_responded_at, contractor_response_note, listing')
     .eq('id', params.id)
     .maybeSingle();
   if (!shoot) notFound();
 
-  const l = (shoot.listings ?? {}) as any;
+  const l = (shoot.listing ?? {}) as any;
 
   return (
     <div className="min-h-screen bg-slate-50">

@@ -42,10 +42,12 @@ export default async function FieldShootsPage() {
     );
   }
 
-  // Own shoots — RLS filters to contractor_id = current_contractor_id().
+  // Own shoots — read the contractor-safe view (0070), which self-scopes to
+  // current_contractor_id() and carries NO pricing/billing columns. `listing`
+  // is a nested object on the view, so field access below is unchanged.
   const { data: shoots } = await supabase
-    .from('orders')
-    .select('id, status, source, scheduled_at, created_at, dropbox_intake_url, listings(address_line1, city, state, sqft)')
+    .from('field_orders')
+    .select('id, status, source, scheduled_at, created_at, dropbox_intake_url, listing')
     .order('created_at', { ascending: false });
 
   const firstName = me.full_name?.split(' ')[0] ?? 'there';
@@ -91,7 +93,7 @@ export default async function FieldShootsPage() {
         ) : (
           <ul className="space-y-3">
             {(shoots ?? []).map((s: any) => {
-              const l = s.listings;
+              const l = s.listing;
               return (
                 <li key={s.id}>
                   <Link

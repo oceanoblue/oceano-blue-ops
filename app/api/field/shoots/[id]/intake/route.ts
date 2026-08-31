@@ -15,10 +15,11 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  // RLS returns this row only if it's the caller's own shoot.
+  // Contractor-safe view (0070) returns this row only if it's the caller's own
+  // shoot; it carries no pricing columns. `listing` is a nested object.
   const { data: order } = await supabase
-    .from('orders')
-    .select('id, order_number, dropbox_intake_url, dropbox_intake_path, listings(address_line1, city)')
+    .from('field_orders')
+    .select('id, order_number, dropbox_intake_url, dropbox_intake_path, listing')
     .eq('id', params.id)
     .maybeSingle();
   if (!order) return NextResponse.json({ error: 'not_found' }, { status: 404 });
@@ -31,12 +32,15 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     });
   }
 
-  const listing = order.listings as any;
+  const listing = order.listing as any;
+  // order_number is NOT NULL on the base table; the view just widens it to
+  // nullable. Non-null asserted so the Dropbox helper gets a concrete number.
+  const orderNumber = order.order_number!;
   const addr = [listing?.address_line1, listing?.city].filter(Boolean).join(' ');
   const result = await createPhotoIntakeRequest(
-    order.order_number,
-    addr || `order-${order.order_number}`,
-    `RAW photos — ${addr || `Order #${order.order_number}`} (Oceano Blue)`
+    orderNumber,
+    addr || `order-${orderNumber}`,
+    `RAW photos — ${addr || `Order #${orderNumber}`} (Oceano Blue)`
   );
 
   if (result.status === 'not_configured') {

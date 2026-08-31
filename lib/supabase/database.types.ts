@@ -57,6 +57,13 @@ export type Database = {
             foreignKeyName: "activity_log_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -186,6 +193,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_jobs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "field_orders"
             referencedColumns: ["id"]
           },
           {
@@ -716,6 +730,13 @@ export type Database = {
             foreignKeyName: "assignment_events_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -782,6 +803,7 @@ export type Database = {
           max_notice_days: number
           min_notice_hours: number
           pay_small_max_sqft: number
+          portfolio_urls: string[]
           raw_retention_days: number
           updated_at: string
         }
@@ -796,6 +818,7 @@ export type Database = {
           max_notice_days?: number
           min_notice_hours?: number
           pay_small_max_sqft?: number
+          portfolio_urls?: string[]
           raw_retention_days?: number
           updated_at?: string
         }
@@ -810,6 +833,7 @@ export type Database = {
           max_notice_days?: number
           min_notice_hours?: number
           pay_small_max_sqft?: number
+          portfolio_urls?: string[]
           raw_retention_days?: number
           updated_at?: string
         }
@@ -891,6 +915,86 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_team_members: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          notify_on_delivery: boolean
+          role: string
+          team_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          notify_on_delivery?: boolean
+          role?: string
+          team_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          notify_on_delivery?: boolean
+          role?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_team_members_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "client_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_teams: {
+        Row: {
+          brokerage: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          brokerage?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          brokerage?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_teams_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -1061,6 +1165,13 @@ export type Database = {
             foreignKeyName: "delivery_links_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_links_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -1198,6 +1309,13 @@ export type Database = {
           worker_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "edit_jobs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "edit_jobs_order_id_fkey"
             columns: ["order_id"]
@@ -1410,6 +1528,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_edit_batches_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "field_orders"
             referencedColumns: ["id"]
           },
           {
@@ -1726,6 +1851,13 @@ export type Database = {
             foreignKeyName: "listing_deliverables_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_deliverables_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -2001,6 +2133,13 @@ export type Database = {
             foreignKeyName: "order_footage_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_footage_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -2048,6 +2187,13 @@ export type Database = {
           unit_price_cents?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_items_order_id_fkey"
             columns: ["order_id"]
@@ -2107,6 +2253,13 @@ export type Database = {
             foreignKeyName: "order_services_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_services_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -2134,6 +2287,7 @@ export type Database = {
           download_paid_at: string | null
           download_paid_cents: number | null
           download_stripe_session_id: string | null
+          dropbox_archived_at: string | null
           dropbox_intake_path: string | null
           dropbox_intake_url: string | null
           duration_minutes: number | null
@@ -2174,6 +2328,7 @@ export type Database = {
           download_paid_at?: string | null
           download_paid_cents?: number | null
           download_stripe_session_id?: string | null
+          dropbox_archived_at?: string | null
           dropbox_intake_path?: string | null
           dropbox_intake_url?: string | null
           duration_minutes?: number | null
@@ -2214,6 +2369,7 @@ export type Database = {
           download_paid_at?: string | null
           download_paid_cents?: number | null
           download_stripe_session_id?: string | null
+          dropbox_archived_at?: string | null
           dropbox_intake_path?: string | null
           dropbox_intake_url?: string | null
           duration_minutes?: number | null
@@ -2391,6 +2547,13 @@ export type Database = {
             foreignKeyName: "photo_qc_reports_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_qc_reports_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -2414,6 +2577,7 @@ export type Database = {
           bucket: string
           byte_size: number | null
           created_at: string
+          dropbox_path: string | null
           exif: Json | null
           filename: string
           height: number | null
@@ -2445,6 +2609,7 @@ export type Database = {
           bucket?: string
           byte_size?: number | null
           created_at?: string
+          dropbox_path?: string | null
           exif?: Json | null
           filename: string
           height?: number | null
@@ -2476,6 +2641,7 @@ export type Database = {
           bucket?: string
           byte_size?: number | null
           created_at?: string
+          dropbox_path?: string | null
           exif?: Json | null
           filename?: string
           height?: number | null
@@ -2503,6 +2669,13 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photos_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "field_orders"
             referencedColumns: ["id"]
           },
           {
@@ -3159,6 +3332,80 @@ export type Database = {
           },
         ]
       }
+      quotes: {
+        Row: {
+          address_line1: string
+          city: string | null
+          client_email: string | null
+          client_name: string | null
+          client_type: string
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          line_items: Json
+          listing_date: string | null
+          notes: string | null
+          sqft: number | null
+          state: string | null
+          status: string
+          subtotal_cents: number
+          token: string
+          updated_at: string
+          zip: string | null
+        }
+        Insert: {
+          address_line1: string
+          city?: string | null
+          client_email?: string | null
+          client_name?: string | null
+          client_type?: string
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          line_items?: Json
+          listing_date?: string | null
+          notes?: string | null
+          sqft?: number | null
+          state?: string | null
+          status?: string
+          subtotal_cents?: number
+          token: string
+          updated_at?: string
+          zip?: string | null
+        }
+        Update: {
+          address_line1?: string
+          city?: string | null
+          client_email?: string | null
+          client_name?: string | null
+          client_type?: string
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          line_items?: Json
+          listing_date?: string | null
+          notes?: string | null
+          sqft?: number | null
+          state?: string | null
+          status?: string
+          subtotal_cents?: number
+          token?: string
+          updated_at?: string
+          zip?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rate_limits: {
         Row: {
           count: number
@@ -3236,6 +3483,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "reel_briefs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reel_briefs_order_id_fkey"
             columns: ["order_id"]
@@ -3797,6 +4051,13 @@ export type Database = {
             foreignKeyName: "training_pairs_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "field_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_pairs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -4165,6 +4426,52 @@ export type Database = {
       }
     }
     Views: {
+      field_orders: {
+        Row: {
+          contractor_id: string | null
+          contractor_responded_at: string | null
+          contractor_response: string | null
+          contractor_response_note: string | null
+          created_at: string | null
+          dropbox_intake_path: string | null
+          dropbox_intake_url: string | null
+          id: string | null
+          internal_notes: string | null
+          listing: Json | null
+          listing_id: string | null
+          order_number: number | null
+          pay_amount_cents: number | null
+          pay_request_id: string | null
+          pay_status: string | null
+          scheduled_at: string | null
+          source: string | null
+          status: Database["public"]["Enums"]["order_status"] | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_pay_request_id_fkey"
+            columns: ["pay_request_id"]
+            isOneToOne: false
+            referencedRelation: "pay_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pipeline_counts: {
         Row: {
           count: number | null
@@ -4214,6 +4521,10 @@ export type Database = {
       }
     }
     Functions: {
+      add_order_items_priced: {
+        Args: { p_items: Json; p_order_id: string; p_sqft: number }
+        Returns: number
+      }
       add_reel_footage: {
         Args: {
           p_byte_size?: number
@@ -4302,6 +4613,7 @@ export type Database = {
       }
       create_reel_order: { Args: { p_brief?: Json }; Returns: string }
       current_client_id: { Args: never; Returns: string }
+      current_client_ids: { Args: never; Returns: string[] }
       current_contractor_id: { Args: never; Returns: string }
       due_sends: {
         Args: never
