@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { createPhotoIntakeRequest } from '@/lib/integrations/dropbox';
 import { sendEmail } from '@/lib/email/resend';
+import { sendSms } from '@/lib/integrations/quo';
 import { contractorAssignmentEmail } from '@/lib/email/templates';
 
 /**
@@ -37,7 +38,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const { data: contractor } = await admin
     .from('contractors')
-    .select('email, full_name')
+    .select('email, full_name, phone')
     .eq('id', order.contractor_id)
     .maybeSingle();
   if (!contractor) return NextResponse.json({ error: 'contractor_not_found' }, { status: 404 });
@@ -86,5 +87,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: sent.error }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true, to: contractor.email });
+  // Also text them (Quo/OpenPhone) if configured. Non-fatal — the email already
+  // went out, so an SMS hiccup never fails the request.
+  const sms = await sendSms({
+    to: contractor.phone,
+    text: `Oceano Blue: new shoot assigned — ${addr}. Upload the RAWs here: ${uploadUrl}`,
+  });
+  if (sms.status === 'failed') console.error('[notify-contractor] sms failed:', sms.error);
+
+  return NextResponse.json({ ok: true, to: contractor.email, sms: sms.status });
 }

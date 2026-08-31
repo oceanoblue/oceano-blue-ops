@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { sendEmail } from '@/lib/email/resend';
+import { sendSms } from '@/lib/integrations/quo';
 import { contractorResponseEmail } from '@/lib/email/templates';
 import { fmtDateTime } from '@/lib/utils/format';
 
@@ -77,20 +78,21 @@ async function notifyAdmins(
     order.contractor_id
       ? admin.from('contractors').select('full_name').eq('id', order.contractor_id).maybeSingle()
       : Promise.resolve({ data: null }),
-    admin.from('team_members').select('email, full_name').eq('role', 'admin').eq('is_active', true),
+    admin.from('team_members').select('email, full_name, phone').eq('role', 'admin').eq('is_active', true),
   ]);
 
-  const recipients: string[] = (admins ?? [])
-    .map((a: any) => a.email)
-    .filter((e: string | null): e is string => Boolean(e));
-  if (recipients.length === 0) return;
+  const adminRows = (admins ?? []) as Array<{ email: string | null; phone: string | null }>;
+  const emailTo = adminRows.map((a) => a.email).filter((e): e is string => Boolean(e));
+  const smsTo = adminRows.map((a) => a.phone).filter((p): p is string => Boolean(p));
+  if (emailTo.length === 0 && smsTo.length === 0) return;
 
   const listing = (order.listings ?? {}) as any;
   const address = listing.address_line1 || `Order #${order.order_number}`;
   const base = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+  const who = contractor?.full_name ?? 'A photographer';
 
   const { subject, html } = contractorResponseEmail({
-    contractorName: contractor?.full_name ?? 'A photographer',
+    contractorName: who,
     response,
     address,
     cityStateZip: [listing.city, listing.state, listing.zip].filter(Boolean).join(', ') || null,
@@ -99,5 +101,10 @@ async function notifyAdmins(
     orderUrl: `${base}/dashboard/orders/${orderId}`,
   });
 
-  await Promise.all(recipients.map((to) => sendEmail({ to, subject, html })));
+  const smsText = `Oceano Blue: ${who} ${response} the shoot at ${address}${note ? ` — "${note}"` : ''}`;
+
+  await Promise.all([
+    ...emailTo.map((to) => sendEmail({ to, subject, html })),
+    ...smsTo.map((to) => sendSms({ to, text: smsText })),
+  ]);
 }
