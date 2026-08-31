@@ -4,15 +4,10 @@ import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { NewTeamMemberForm } from '@/components/team/NewTeamMemberForm';
 import { TeamMemberPhone } from '@/components/team/TeamMemberPhone';
+import { TeamMemberRole } from '@/components/team/TeamMemberRole';
+import { TeamMemberActions } from '@/components/team/TeamMemberActions';
 
 export const dynamic = 'force-dynamic';
-
-const ROLE_LABEL: Record<string, string> = {
-  admin: 'Admin',
-  coordinator: 'Coordinator',
-  photographer: 'Photographer',
-  editor: 'Editor',
-};
 
 export default async function TeamPage() {
   const supabase = createClient();
@@ -58,12 +53,13 @@ export default async function TeamPage() {
                 <th className="table-head px-4 py-3">Phone</th>
                 <th className="table-head px-4 py-3">Role</th>
                 <th className="table-head px-4 py-3">Schedulable</th>
+                {isAdmin && <th className="table-head px-4 py-3">Actions</th>}
               </tr>
             </thead>
             <tbody>
               {(members ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">No team members yet.</td>
+                  <td colSpan={isAdmin ? 6 : 5} className="px-4 py-8 text-center text-slate-400">No team members yet.</td>
                 </tr>
               ) : (
                 (members ?? []).map((m: any) => {
@@ -79,7 +75,9 @@ export default async function TeamPage() {
                       <td className="px-4 py-3">
                         <TeamMemberPhone memberId={m.id} initialPhone={m.phone ?? null} editable={isAdmin} />
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{ROLE_LABEL[m.role] ?? m.role}</td>
+                      <td className="px-4 py-3">
+                        <TeamMemberRole memberId={m.id} role={m.role} editable={isAdmin} />
+                      </td>
                       <td className="px-4 py-3">
                         {canSchedule ? (
                           <span className="text-emerald-700">Yes</span>
@@ -91,6 +89,17 @@ export default async function TeamPage() {
                           <span className="text-slate-400">—</span>
                         )}
                       </td>
+                      {isAdmin && (
+                        <td className="px-4 py-3">
+                          <TeamMemberActions
+                            memberId={m.id}
+                            role={m.role}
+                            isActive={m.is_active}
+                            isSelf={m.id === user.id}
+                            editable={isAdmin}
+                          />
+                        </td>
+                      )}
                     </tr>
                   );
                 })
