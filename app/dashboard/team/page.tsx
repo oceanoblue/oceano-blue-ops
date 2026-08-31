@@ -3,6 +3,7 @@ import { Users2, AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { NewTeamMemberForm } from '@/components/team/NewTeamMemberForm';
+import { TeamMemberPhone } from '@/components/team/TeamMemberPhone';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,7 @@ export default async function TeamPage() {
   const isAdmin = (me as any).role === 'admin';
 
   const [{ data: members }, { data: avail }] = await Promise.all([
-    supabase.from('team_members').select('id, full_name, email, role, is_active').order('full_name'),
+    supabase.from('team_members').select('id, full_name, email, role, phone, is_active').order('full_name'),
     supabase.from('team_availability').select('team_member_id').eq('is_active', true),
   ]);
 
@@ -54,6 +55,7 @@ export default async function TeamPage() {
               <tr className="border-b border-slate-100 text-left">
                 <th className="table-head px-4 py-3">Name</th>
                 <th className="table-head px-4 py-3">Email</th>
+                <th className="table-head px-4 py-3">Phone</th>
                 <th className="table-head px-4 py-3">Role</th>
                 <th className="table-head px-4 py-3">Schedulable</th>
               </tr>
@@ -61,7 +63,7 @@ export default async function TeamPage() {
             <tbody>
               {(members ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400">No team members yet.</td>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">No team members yet.</td>
                 </tr>
               ) : (
                 (members ?? []).map((m: any) => {
@@ -74,6 +76,9 @@ export default async function TeamPage() {
                         {!m.is_active && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
                       </td>
                       <td className="px-4 py-3 text-slate-600">{m.email}</td>
+                      <td className="px-4 py-3">
+                        <TeamMemberPhone memberId={m.id} initialPhone={m.phone ?? null} editable={isAdmin} />
+                      </td>
                       <td className="px-4 py-3 text-slate-600">{ROLE_LABEL[m.role] ?? m.role}</td>
                       <td className="px-4 py-3">
                         {canSchedule ? (
