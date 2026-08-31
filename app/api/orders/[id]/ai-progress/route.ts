@@ -9,6 +9,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
+  const { data: isTeam } = await supabase.rpc('is_team_member');
+  if (!isTeam) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+
   const admin = createAdminClient() as any;
   const { data: jobs } = await admin.from('ai_jobs').select('status').eq('order_id', params.id);
 

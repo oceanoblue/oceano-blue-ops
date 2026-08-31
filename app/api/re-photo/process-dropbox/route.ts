@@ -27,6 +27,9 @@ export async function POST(request: Request) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const { data: isTeam } = await supabase.rpc('is_team_member');
+  if (!isTeam) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   if (!isDropboxConfigured()) return NextResponse.json({ error: 'dropbox_not_configured', message: 'Dropbox is not configured on the server.' }, { status: 400 });
 
   const parsed = Body.safeParse(await request.json());

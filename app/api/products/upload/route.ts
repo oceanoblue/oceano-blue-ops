@@ -15,6 +15,9 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
+  const { data: isTeam } = await supabase.rpc('is_team_member');
+  if (!isTeam) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+
   const form = await request.formData();
   const files = form.getAll('files').filter((f): f is File => f instanceof File);
   if (!files.length) return NextResponse.json({ error: 'no files' }, { status: 400 });

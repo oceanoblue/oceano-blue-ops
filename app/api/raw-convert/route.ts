@@ -47,6 +47,9 @@ export async function POST(request: Request) {
     );
   }
 
+  const { data: isTeam } = await supabase.rpc('is_team_member');
+  if (!isTeam) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+
   const parsed0 = Body.safeParse(await request.json());
   if (parsed0.success) {
     // Already converted (possibly by a previous attempt that the gateway cut
