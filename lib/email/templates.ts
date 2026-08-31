@@ -104,6 +104,39 @@ export function contractorResponseEmail(p: {
   };
 }
 
+export function fieldShootLoggedEmail(p: {
+  contractorName: string;
+  address: string;
+  cityStateZip?: string | null;
+  sqft?: number | null;
+  services?: string | null;
+  orderUrl: string;
+}): { subject: string; html: string } {
+  const meta = [
+    p.cityStateZip,
+    p.sqft ? `${p.sqft.toLocaleString()} sqft` : null,
+    p.services ? p.services.replace(/^Field services:\s*/, '') : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const body = `
+    <p style="font-size:15px;line-height:1.5;color:#324354;margin:0 0 14px;">
+      <strong style="color:#0c1620;">${escapeHtml(p.contractorName || 'A photographer')}</strong>
+      just logged a new field shoot.
+    </p>
+    <div style="border:1px solid #e6eaee;border-left:4px solid #0c8de9;border-radius:12px;padding:16px 18px;margin-bottom:18px;">
+      <div style="font-size:17px;font-weight:600;color:#0c1620;">${escapeHtml(p.address)}</div>
+      ${meta ? `<div style="font-size:13px;color:#708698;margin-top:3px;">${escapeHtml(meta)}</div>` : ''}
+    </div>
+    <div style="margin-bottom:4px;">${button(p.orderUrl, 'Open the order')}</div>`;
+
+  return {
+    subject: `New field shoot logged — ${p.address}`,
+    html: shell(body, `${p.contractorName} logged a new shoot at ${p.address}`),
+  };
+}
+
 export function galleryReadyEmail(p: {
   recipientName?: string | null;
   address: string;
