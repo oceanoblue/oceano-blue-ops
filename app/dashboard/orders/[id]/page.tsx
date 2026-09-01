@@ -22,6 +22,7 @@ import { RawIntakeControl } from '@/components/orders/RawIntakeControl';
 import { ProcessFromDropboxControl } from '@/components/orders/ProcessFromDropboxControl';
 import { OrderProcessingProgress } from '@/components/orders/OrderProcessingProgress';
 import { AssignShooterControl } from '@/components/orders/AssignShooterControl';
+import { RescheduleControl } from '@/components/orders/RescheduleControl';
 import { ContractorResponseNotice } from '@/components/orders/ContractorResponseNotice';
 import { ArchiveOrderControl } from '@/components/orders/ArchiveOrderControl';
 import { DeliverablesManager, type DeliverableRow } from '@/components/orders/DeliverablesManager';
@@ -379,6 +380,9 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               <Row label="Scheduled">{fmtDateTimeTz(order.scheduled_at, (order as any).timezone)}</Row>
               <Row label="Duration">{order.duration_minutes} min</Row>
             </dl>
+            <div className="mt-3">
+              <RescheduleControl orderId={order.id} scheduledAt={order.scheduled_at} />
+            </div>
             <div className="mt-4 space-y-3">
               <AssignShooterControl
                 orderId={order.id}

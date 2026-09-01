@@ -125,6 +125,8 @@ export async function syncShootCalendar(orderId: string): Promise<void> {
     const endIso = end.toISOString();
 
     // Master — every shoot, prefixed with the shooter's first name for at-a-glance.
+    // FREE (transparent): it's a visible reference layer, so it never marks anyone
+    // "busy". Busy comes only from the assignee's own personal calendar below.
     desired.push({
       calendarId: MASTER_CALENDAR_ID,
       role: 'master',
@@ -135,7 +137,7 @@ export async function syncShootCalendar(orderId: string): Promise<void> {
         startIso,
         endIso,
         timezone: tz,
-        transparency: 'opaque',
+        transparency: 'transparent',
       },
     });
 
