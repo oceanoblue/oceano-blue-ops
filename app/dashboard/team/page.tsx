@@ -34,7 +34,7 @@ export default async function TeamPage() {
         eyebrow="People"
         icon={Users2}
         title="Team"
-        subtitle="Staff and photographers who log in, shoot, and edit. Contractors are managed separately under Photographers."
+        subtitle="Staff who log in, shoot, and edit. 1099 contractors are managed separately under Contractors."
       >
         {isAdmin && <NewTeamMemberForm />}
       </PageHeader>

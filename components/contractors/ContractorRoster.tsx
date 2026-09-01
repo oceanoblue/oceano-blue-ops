@@ -114,7 +114,7 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
   }
 
   async function deleteContractor(c: ContractorRow) {
-    if (!confirm(`Delete ${c.full_name}? This only works for photographers with no logged shoots.`)) return;
+    if (!confirm(`Delete ${c.full_name}? This only works for contractors with no logged shoots.`)) return;
     setBusy(`delete-${c.id}`);
     setError(null);
     try {
@@ -137,10 +137,10 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">
-          {rows.length} photographer{rows.length === 1 ? '' : 's'}
+          {rows.length} contractor{rows.length === 1 ? '' : 's'}
         </p>
         <button onClick={() => setAdding((v) => !v)} className="btn-primary inline-flex items-center gap-1.5">
-          <UserPlus className="h-4 w-4" /> Add photographer
+          <UserPlus className="h-4 w-4" /> Add contractor
         </button>
       </div>
 
@@ -183,7 +183,7 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left">
-                <th className="table-head px-4 py-3">Photographer</th>
+                <th className="table-head px-4 py-3">Contractor</th>
                 <th className="table-head px-4 py-3">Rates (S / L / 360)</th>
                 <th className="table-head px-4 py-3 text-right">This month</th>
                 <th className="table-head px-4 py-3 text-right">Total</th>
@@ -195,7 +195,7 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                    No photographers yet. Add one to send them the field portal.
+                    No contractors yet. Add one to send them the field portal.
                   </td>
                 </tr>
               ) : (

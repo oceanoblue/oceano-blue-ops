@@ -75,7 +75,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { href: '/dashboard/listings', label: 'Listings', icon: Home },
       { href: '/dashboard/clients', label: 'Clients', icon: Users },
       { href: '/dashboard/teams', label: 'Teams', icon: Users2 },
-      { href: '/dashboard/contractors', label: 'Photographers', icon: Camera },
+      { href: '/dashboard/contractors', label: 'Contractors', icon: Camera },
       { href: '/dashboard/team', label: 'Team', icon: Users2 },
       { href: '/dashboard/assets', label: 'Assets', icon: Boxes },
       { href: '/dashboard/products', label: 'Products', icon: Package },

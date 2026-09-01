@@ -94,8 +94,8 @@ export default async function ContractorsPage() {
       <PageHeader
         eyebrow="Library"
         icon={Camera}
-        title="Photographers"
-        subtitle="Your contractor photographers — properties shot and pay owed. They log shoots and upload RAWs from the field portal."
+        title="Contractors"
+        subtitle="Your 1099 contractor photographers — properties shot and pay owed. They log shoots and upload RAWs from the field portal."
       />
       <PayRequestsPanel requests={requests} />
       <ContractorRoster rows={rows} />
