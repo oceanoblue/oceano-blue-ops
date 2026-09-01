@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 
+// The catalog must always reflect the live DB (prices/audiences change often).
+// force-dynamic alone doesn't stop the Supabase client's fetch from being served
+// out of Next's persistent Data Cache, so force every fetch here to no-store.
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
 
 /**
  * Public endpoint — returns the full product catalog with pricing
@@ -13,7 +18,7 @@ export async function GET(request: Request) {
   // Which booking link is asking — 'real_estate' (default, = /book) or
   // 'architectural' (= /book/architectural). Products are tagged per audience.
   const audience = url.searchParams.get('audience') === 'architectural' ? 'architectural' : 'real_estate';
-  const supabase = createAdminClient();
+  const supabase = createAdminClient({ noStore: true });
 
   const { data: products, error } = await supabase
     .from('products')

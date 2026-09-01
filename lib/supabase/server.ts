@@ -36,7 +36,7 @@ export function createClient(): SupabaseClient<Database> {
  * Admin client for server-only operations that need to bypass RLS
  * (AI job processing, system tasks). NEVER expose this to the browser.
  */
-export function createAdminClient(): SupabaseClient<Database> {
+export function createAdminClient(opts?: { noStore?: boolean }): SupabaseClient<Database> {
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -47,6 +47,12 @@ export function createAdminClient(): SupabaseClient<Database> {
         },
         setAll() {},
       },
+      // Some GET routes (e.g. the public product catalog) must always read the
+      // live DB — Next's Data Cache will otherwise serve a stale Supabase fetch
+      // across deploys. noStore forces the underlying fetch to bypass it.
+      ...(opts?.noStore
+        ? { global: { fetch: (input: any, init?: any) => fetch(input, { ...init, cache: 'no-store' }) } }
+        : {}),
     }
   ) as unknown as SupabaseClient<Database>;
 }
