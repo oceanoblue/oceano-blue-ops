@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { createPhotoIntakeRequest } from '@/lib/integrations/dropbox';
+import { syncShootCalendar } from '@/lib/google-calendar/sync-shoot';
 
 /**
  * One-shot "New Shoot" — the fast manual path for shoots not booked through
@@ -240,6 +241,13 @@ export async function POST(request: Request) {
     } else {
       intakeWarning = result.error || 'dropbox_link_failed';
     }
+  }
+
+  // Sync onto the office calendars (master + assignee). Fail-soft.
+  try {
+    await syncShootCalendar(order.id);
+  } catch (e) {
+    console.error('[shoots] calendar sync failed:', e);
   }
 
   return NextResponse.json({

@@ -25,6 +25,9 @@ export function OrderStatusControl({
     start(async () => {
       const supabase = createClient();
       await supabase.from('orders').update({ status: next }).eq('id', orderId);
+      // Status change may add/remove the shoot on the calendars (e.g. cancel
+      // clears it). Fire-and-forget.
+      fetch(`/api/orders/${orderId}/sync-calendar`, { method: 'POST' }).catch(() => {});
       router.refresh();
     });
   }

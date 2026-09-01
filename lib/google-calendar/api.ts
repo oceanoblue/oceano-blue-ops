@@ -113,22 +113,19 @@ export interface CalendarEvent {
   htmlLink: string;
 }
 
-/** Insert a new event onto the user's primary calendar. */
-export async function insertEvent(
-  teamMemberId: string,
-  payload: {
-    summary: string;
-    description?: string;
-    location?: string;
-    startIso: string;
-    endIso: string;
-    timezone: string;
-    attendeeEmails?: string[];
-  }
-): Promise<CalendarEvent | null> {
-  const token = await getAccessToken(teamMemberId);
-  if (!token) return null;
+export interface EventPayload {
+  summary: string;
+  description?: string;
+  location?: string;
+  startIso: string;
+  endIso: string;
+  timezone: string;
+  attendeeEmails?: string[];
+  /** 'transparent' = shows as FREE (visible but doesn't block); 'opaque' = busy. */
+  transparency?: 'opaque' | 'transparent';
+}
 
+function toBody(payload: EventPayload): any {
   const body: any = {
     summary: payload.summary,
     description: payload.description,
@@ -137,27 +134,65 @@ export async function insertEvent(
     end: { dateTime: payload.endIso, timeZone: payload.timezone },
     reminders: { useDefault: true },
   };
+  if (payload.transparency) body.transparency = payload.transparency;
   if (payload.attendeeEmails?.length) {
     body.attendees = payload.attendeeEmails.map((email) => ({ email }));
   }
+  return body;
+}
 
-  const r = await fetch(
-    'https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=none',
-    {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }
-  );
+const calUrl = (calendarId: string, suffix = '') =>
+  `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events${suffix}`;
+
+/**
+ * Insert an event onto `calendarId`, authenticating as `actorTeamMemberId`.
+ * `calendarId` can be 'primary' or any calendar shared with the actor's account
+ * (e.g. the master info@ calendar, or a photographer's shared calendar).
+ */
+export async function insertEvent(
+  actorTeamMemberId: string,
+  calendarId: string,
+  payload: EventPayload
+): Promise<CalendarEvent | null> {
+  const token = await getAccessToken(actorTeamMemberId);
+  if (!token) return null;
+  const r = await fetch(calUrl(calendarId, '?sendUpdates=none'), {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(toBody(payload)),
+  });
   if (!r.ok) return null;
   const data: any = await r.json();
   return { id: data.id, htmlLink: data.htmlLink };
 }
 
-export async function deleteEvent(teamMemberId: string, eventId: string): Promise<void> {
-  const token = await getAccessToken(teamMemberId);
+/** Patch an existing event on `calendarId` (retitle / move / free-busy change). */
+export async function updateEvent(
+  actorTeamMemberId: string,
+  calendarId: string,
+  eventId: string,
+  payload: EventPayload
+): Promise<CalendarEvent | null> {
+  const token = await getAccessToken(actorTeamMemberId);
+  if (!token) return null;
+  const r = await fetch(calUrl(calendarId, `/${encodeURIComponent(eventId)}?sendUpdates=none`), {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(toBody(payload)),
+  });
+  if (!r.ok) return null;
+  const data: any = await r.json();
+  return { id: data.id, htmlLink: data.htmlLink };
+}
+
+export async function deleteEvent(
+  actorTeamMemberId: string,
+  calendarId: string,
+  eventId: string
+): Promise<void> {
+  const token = await getAccessToken(actorTeamMemberId);
   if (!token) return;
-  await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
+  await fetch(calUrl(calendarId, `/${encodeURIComponent(eventId)}`), {
     method: 'DELETE',
     headers: { authorization: `Bearer ${token}` },
   });

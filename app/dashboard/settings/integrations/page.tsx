@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { SettingsNav } from '@/components/layout/SettingsNav';
+import { CalendarBackfillButton } from '@/components/settings/CalendarBackfillButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,9 +72,15 @@ export default async function IntegrationsPage({
           )}
         </div>
         <p className="mt-4 text-xs text-slate-500">
-          When connected, new bookings push to your calendar and existing calendar
-          events automatically block availability for the booking wizard.
+          Every shoot is pushed to the master <strong>info@oceanoblue.net</strong> calendar, plus a
+          busy hold on the assigned photographer&rsquo;s own calendar. Existing calendar events also
+          block availability in the booking wizard.
         </p>
+        {gcal && (
+          <div className="mt-5 border-t border-slate-100 pt-5">
+            <CalendarBackfillButton />
+          </div>
+        )}
       </section>
     </div>
   );

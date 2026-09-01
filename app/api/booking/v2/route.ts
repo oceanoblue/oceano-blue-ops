@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
-import { insertEvent } from '@/lib/google-calendar/api';
+import { syncShootCalendar } from '@/lib/google-calendar/sync-shoot';
 import { enforceRateLimit } from '@/lib/security/rate-limit';
 import { sendEmail } from '@/lib/email/resend';
 import { sendSms } from '@/lib/integrations/quo';
@@ -106,35 +106,14 @@ export async function POST(request: Request) {
     await supabase.from('orders').update({ project_type: b.project_type as any }).eq('id', data);
   }
 
-  // Push to the photographer's Google Calendar (best-effort). The photographer
-  // is already stamped on the order by the RPC above.
-  if (b.photographer_id) {
-    try {
-      const start = new Date(b.scheduled_at);
-      const end = new Date(start.getTime() + b.duration_minutes * 60_000);
-      const ev = await insertEvent(b.photographer_id, {
-        summary: `Shoot · ${b.address_line1}`,
-        description: [
-          `Client: ${b.client_name} <${b.client_email}>`,
-          b.client_phone ? `Phone: ${b.client_phone}` : null,
-          b.access_method ? `Access: ${b.access_method}` : null,
-          b.highlights ? `Highlights: ${b.highlights}` : null,
-          `\nBooked via Oceano Blue Ops.`,
-        ]
-          .filter(Boolean)
-          .join('\n'),
-        location: `${b.address_line1}, ${b.city}, ${b.state} ${b.zip}`,
-        startIso: start.toISOString(),
-        endIso: end.toISOString(),
-        timezone: b.timezone,
-      });
-      if (ev?.id) {
-        await supabase.from('orders').update({ gcal_event_id: ev.id }).eq('id', data);
-      }
-    } catch {
-      // Calendar push is a nice-to-have; don't fail the booking.
-    }
+  // Sync the shoot onto the office calendars (master info@ + the assigned
+  // photographer's own calendar). Fail-soft — never fails a committed booking.
+  try {
+    await syncShootCalendar(data as string);
+  } catch (e) {
+    console.error('[booking] calendar sync failed:', e);
   }
+
   // Confirm to the client + alert the office (email + text). Fail-soft — a
   // notification hiccup must never fail a booking that already committed.
   try {
