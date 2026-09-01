@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
 import { insertEvent } from '@/lib/google-calendar/api';
 import { enforceRateLimit } from '@/lib/security/rate-limit';
+import { sendEmail } from '@/lib/email/resend';
+import { sendSms } from '@/lib/integrations/quo';
+import { bookingConfirmationEmail, bookingReceivedEmail } from '@/lib/email/templates';
+import { fmtDateTimeTz } from '@/lib/utils/format';
 
 const Body = z.object({
   client_email: z.string().email(),
@@ -119,5 +123,59 @@ export async function POST(request: Request) {
       // Calendar push is a nice-to-have; don't fail the booking.
     }
   }
+  // Confirm to the client + alert the office (email + text). Fail-soft — a
+  // notification hiccup must never fail a booking that already committed.
+  try {
+    await notifyBooking(data as string, b, request, supabase);
+  } catch (e) {
+    console.error('[booking] notify failed:', e);
+  }
+
   return NextResponse.json({ order_id: data });
+}
+
+async function notifyBooking(
+  orderId: string,
+  b: z.infer<typeof Body>,
+  request: Request,
+  admin: ReturnType<typeof createAdminClient>
+) {
+  const base = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+  const cityStateZip = [b.city, b.state, b.zip].filter(Boolean).join(', ') || null;
+  const whenText = fmtDateTimeTz(b.scheduled_at, b.timezone);
+
+  // 1) Client booking confirmation.
+  const clientMail = bookingConfirmationEmail({
+    clientName: b.client_name,
+    address: b.address_line1,
+    cityStateZip,
+    whenText,
+  });
+  await sendEmail({ to: b.client_email, subject: clientMail.subject, html: clientMail.html });
+
+  // 2) Office alert to every active admin — email + text.
+  const { data: admins } = await (admin as any)
+    .from('team_members')
+    .select('email, phone')
+    .eq('role', 'admin')
+    .eq('is_active', true);
+  const rows = (admins ?? []) as Array<{ email: string | null; phone: string | null }>;
+  const emailTo = rows.map((a) => a.email).filter((e): e is string => Boolean(e));
+  const smsTo = rows.map((a) => a.phone).filter((p): p is string => Boolean(p));
+
+  const officeMail = bookingReceivedEmail({
+    clientName: b.client_name,
+    clientEmail: b.client_email,
+    clientPhone: b.client_phone || null,
+    address: b.address_line1,
+    cityStateZip,
+    whenText,
+    orderUrl: `${base}/dashboard/orders/${orderId}`,
+  });
+  const smsText = `Oceano Blue: New booking — ${b.client_name}, ${b.address_line1}${cityStateZip ? ', ' + cityStateZip : ''} · ${whenText}`;
+
+  await Promise.all([
+    ...emailTo.map((to) => sendEmail({ to, subject: officeMail.subject, html: officeMail.html })),
+    ...smsTo.map((to) => sendSms({ to, text: smsText })),
+  ]);
 }

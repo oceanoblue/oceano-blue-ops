@@ -137,6 +137,63 @@ export function fieldShootLoggedEmail(p: {
   };
 }
 
+export function bookingConfirmationEmail(p: {
+  clientName: string;
+  address: string;
+  cityStateZip?: string | null;
+  whenText: string;
+}): { subject: string; html: string } {
+  const first = (p.clientName || '').split(' ')[0] || 'there';
+  const body = `
+    <p style="font-size:16px;margin:0 0 4px;">Hi ${escapeHtml(first)},</p>
+    <p style="font-size:15px;line-height:1.5;color:#324354;margin:0 0 18px;">
+      Your shoot is booked — we've got you on the schedule. Here are the details:
+    </p>
+    <div style="border:1px solid #e6eaee;border-left:4px solid #0c8de9;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
+      <div style="font-size:17px;font-weight:600;color:#0c1620;">${escapeHtml(p.address)}</div>
+      ${p.cityStateZip ? `<div style="font-size:13px;color:#708698;margin-top:3px;">${escapeHtml(p.cityStateZip)}</div>` : ''}
+      <div style="font-size:14px;color:#324354;margin-top:10px;padding-top:10px;border-top:1px solid #eef1f4;">
+        📅 ${escapeHtml(p.whenText)}
+      </div>
+    </div>
+    <p style="font-size:13px;color:#708698;margin:0;">
+      We'll be in touch if anything changes. Questions? Just reply to this email.
+    </p>`;
+  return {
+    subject: `Shoot booked — ${p.address}`,
+    html: shell(body, `Your shoot at ${p.address} is booked for ${p.whenText}`),
+  };
+}
+
+export function bookingReceivedEmail(p: {
+  clientName: string;
+  clientEmail: string;
+  clientPhone?: string | null;
+  address: string;
+  cityStateZip?: string | null;
+  whenText: string;
+  orderUrl: string;
+}): { subject: string; html: string } {
+  const contact = [p.clientEmail, p.clientPhone].filter(Boolean).join(' · ');
+  const body = `
+    <p style="font-size:15px;line-height:1.5;color:#324354;margin:0 0 14px;">
+      New booking came in via the site.
+    </p>
+    <div style="border:1px solid #e6eaee;border-left:4px solid #059669;border-radius:12px;padding:16px 18px;margin-bottom:18px;">
+      <div style="font-size:17px;font-weight:600;color:#0c1620;">${escapeHtml(p.address)}</div>
+      ${p.cityStateZip ? `<div style="font-size:13px;color:#708698;margin-top:3px;">${escapeHtml(p.cityStateZip)}</div>` : ''}
+      <div style="font-size:14px;color:#324354;margin-top:10px;padding-top:10px;border-top:1px solid #eef1f4;">
+        📅 ${escapeHtml(p.whenText)}<br/>
+        👤 ${escapeHtml(p.clientName)}${contact ? ` — <span style="color:#708698;">${escapeHtml(contact)}</span>` : ''}
+      </div>
+    </div>
+    <div style="margin-bottom:4px;">${button(p.orderUrl, 'Open the order')}</div>`;
+  return {
+    subject: `New booking — ${p.address} (${p.whenText})`,
+    html: shell(body, `${p.clientName} booked ${p.address} for ${p.whenText}`),
+  };
+}
+
 export function galleryReadyEmail(p: {
   recipientName?: string | null;
   address: string;
