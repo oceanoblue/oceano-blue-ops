@@ -20,6 +20,9 @@ const COLUMNS: Column<any>[] = [
     cell: (o) => (
       <>
         <span className="font-medium text-ocean-800">#{o.order_number}</span>
+        {o.project_type === 'architectural' && (
+          <span className="ml-2 pill bg-violet-100 text-violet-700">ARCH</span>
+        )}
         {o.order_kind === 'reel_edit' && (
           <span className="ml-2 pill bg-ocean-100 text-ocean-700">REEL</span>
         )}
@@ -100,7 +103,7 @@ export default async function OrdersPage({
   let query = supabase
     .from('orders')
     .select(
-      'id, order_number, status, scheduled_at, rush, order_kind, listing_id, client_id, total_cents, download_paid_at, listings(address_line1, city, state, zip), clients(full_name, brokerage)'
+      'id, order_number, status, scheduled_at, rush, order_kind, project_type, listing_id, client_id, total_cents, download_paid_at, listings(address_line1, city, state, zip), clients(full_name, brokerage)'
     )
     // Pull a generous window ordered by date, then sort the page by the chosen
     // column in-memory (works uniformly for joined columns like Address/Client).

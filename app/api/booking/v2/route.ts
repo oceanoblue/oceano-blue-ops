@@ -175,6 +175,15 @@ async function notifyBooking(
   const emailTo = rows.map((a) => a.email).filter((e): e is string => Boolean(e));
   const smsTo = rows.map((a) => a.phone).filter((p): p is string => Boolean(p));
 
+  const kindLabel =
+    b.project_type === 'architectural'
+      ? 'Architectural'
+      : b.project_type === 'interior_design'
+        ? 'Interior Design'
+        : b.project_type === 'luxury_real_estate'
+          ? 'Luxury'
+          : undefined;
+
   const officeMail = bookingReceivedEmail({
     clientName: b.client_name,
     clientEmail: b.client_email,
@@ -183,8 +192,9 @@ async function notifyBooking(
     cityStateZip,
     whenText,
     orderUrl: `${base}/dashboard/orders/${orderId}`,
+    kindLabel,
   });
-  const smsText = `Oceano Blue: New booking — ${b.client_name}, ${b.address_line1}${cityStateZip ? ', ' + cityStateZip : ''} · ${whenText}`;
+  const smsText = `Oceano Blue: New ${kindLabel ? kindLabel + ' ' : ''}booking — ${b.client_name}, ${b.address_line1}${cityStateZip ? ', ' + cityStateZip : ''} · ${whenText}`;
 
   await Promise.all([
     ...emailTo.map((to) => sendEmail({ to, subject: officeMail.subject, html: officeMail.html })),

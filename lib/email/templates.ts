@@ -173,11 +173,18 @@ export function bookingReceivedEmail(p: {
   cityStateZip?: string | null;
   whenText: string;
   orderUrl: string;
+  kindLabel?: string; // e.g. "Architectural" — distinguishes the shoot type
 }): { subject: string; html: string } {
   const contact = [p.clientEmail, p.clientPhone].filter(Boolean).join(' · ');
+  const isArch = /architect/i.test(p.kindLabel ?? '');
+  const badge = p.kindLabel
+    ? `<span style="display:inline-block;font-weight:700;font-size:12px;padding:2px 9px;border-radius:999px;${
+        isArch ? 'background:#f3e8ff;color:#7e22ce;' : 'background:#e0f2fe;color:#0369a1;'
+      }">${escapeHtml(p.kindLabel)}</span> `
+    : '';
   const body = `
     <p style="font-size:15px;line-height:1.5;color:#324354;margin:0 0 14px;">
-      New booking came in via the site.
+      ${badge}New booking came in via the site.
     </p>
     <div style="border:1px solid #e6eaee;border-left:4px solid #059669;border-radius:12px;padding:16px 18px;margin-bottom:18px;">
       <div style="font-size:17px;font-weight:600;color:#0c1620;">${escapeHtml(p.address)}</div>
@@ -189,7 +196,7 @@ export function bookingReceivedEmail(p: {
     </div>
     <div style="margin-bottom:4px;">${button(p.orderUrl, 'Open the order')}</div>`;
   return {
-    subject: `New booking — ${p.address} (${p.whenText})`,
+    subject: `New ${p.kindLabel ? p.kindLabel + ' ' : ''}booking — ${p.address} (${p.whenText})`,
     html: shell(body, `${p.clientName} booked ${p.address} for ${p.whenText}`),
   };
 }
