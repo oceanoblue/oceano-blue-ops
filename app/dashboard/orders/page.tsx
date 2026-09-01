@@ -59,19 +59,53 @@ const COLUMNS: Column<any>[] = [
   { key: 'status', header: 'Status', cell: (o) => <StatusBadge status={o.status} /> },
 ];
 
+// How each sortable column is compared. Returns null for "no value" so those
+// rows always sort to the bottom regardless of direction.
+const SORT_ACCESSORS: Record<string, (o: any) => number | string | null> = {
+  order: (o) => o.order_number ?? null,
+  address: (o) => o.listings?.address_line1?.toLowerCase() ?? null,
+  client: (o) => o.clients?.full_name?.toLowerCase() ?? null,
+  scheduled: (o) => (o.scheduled_at ? new Date(o.scheduled_at).getTime() : null),
+  total: (o) => (o.total_cents && o.total_cents > 0 ? o.total_cents : null),
+  status: (o) => o.status ?? null,
+};
+
+function sortRows(rows: any[], key: string, asc: boolean) {
+  const val = SORT_ACCESSORS[key] ?? SORT_ACCESSORS.scheduled;
+  const dir = asc ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const va = val(a);
+    const vb = val(b);
+    const an = va == null;
+    const bn = vb == null;
+    if (an && bn) return 0;
+    if (an) return 1; // nulls last, always
+    if (bn) return -1;
+    if (va < vb) return -1 * dir;
+    if (va > vb) return 1 * dir;
+    return 0;
+  });
+}
+
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: { status?: string; q?: string; kind?: string; archived?: string };
+  searchParams: { status?: string; q?: string; kind?: string; archived?: string; sort?: string; dir?: string };
 }) {
+  const sortKey =
+    searchParams.sort && searchParams.sort in SORT_ACCESSORS ? searchParams.sort : 'scheduled';
+  const asc = searchParams.dir === 'asc'; // default: descending (newest first)
+
   const supabase = createClient();
   let query = supabase
     .from('orders')
     .select(
       'id, order_number, status, scheduled_at, rush, order_kind, listing_id, client_id, total_cents, download_paid_at, listings(address_line1, city, state, zip), clients(full_name, brokerage)'
     )
-    .order('updated_at', { ascending: false })
-    .limit(50);
+    // Pull a generous window ordered by date, then sort the page by the chosen
+    // column in-memory (works uniformly for joined columns like Address/Client).
+    .order('scheduled_at', { ascending: false, nullsFirst: false })
+    .limit(300);
 
   if (searchParams.status) query = query.eq('status', searchParams.status as any);
   if (searchParams.kind === 'reel') query = query.eq('order_kind', 'reel_edit');
@@ -79,7 +113,21 @@ export default async function OrdersPage({
   if (searchParams.archived === '1') query = query.not('archived_at', 'is', null);
   else query = query.is('archived_at', null);
 
-  const { data: orders, error } = await query;
+  const { data: ordersRaw, error } = await query;
+  const orders = sortRows(ordersRaw ?? [], sortKey, asc);
+
+  // Build a sort URL that keeps the active filters and toggles direction when
+  // the same column is clicked again.
+  const sortHref = (key: string) => {
+    const p = new URLSearchParams();
+    if (searchParams.status) p.set('status', searchParams.status);
+    if (searchParams.kind) p.set('kind', searchParams.kind);
+    if (searchParams.archived) p.set('archived', searchParams.archived);
+    const nextAsc = !(sortKey === key && asc); // asc → desc on the active column, else asc
+    p.set('sort', key);
+    p.set('dir', nextAsc ? 'asc' : 'desc');
+    return `/dashboard/orders?${p.toString()}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -102,8 +150,10 @@ export default async function OrdersPage({
       </div>
 
       <DataTable
-        columns={COLUMNS}
-        rows={orders ?? []}
+        columns={COLUMNS.map((c) => ({ ...c, sortable: true }))}
+        rows={orders}
+        sort={{ key: sortKey, dir: asc ? 'asc' : 'desc' }}
+        sortHref={sortHref}
         rowKey={(o) => o.id}
         rowHref={(o) => `/dashboard/orders/${o.id}`}
         empty={
