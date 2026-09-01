@@ -10,12 +10,16 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const sqft = Math.max(0, parseInt(url.searchParams.get('sqft') || '2000', 10));
+  // Which booking link is asking — 'real_estate' (default, = /book) or
+  // 'architectural' (= /book/architectural). Products are tagged per audience.
+  const audience = url.searchParams.get('audience') === 'architectural' ? 'architectural' : 'real_estate';
   const supabase = createAdminClient();
 
   const { data: products, error } = await supabase
     .from('products')
     .select('id, slug, name, kind, short_description, long_description, cover_image_url, gallery_image_urls, is_addon, base_price_cents, duration_minutes, sort_order')
     .eq('is_active', true)
+    .contains('audiences', [audience])
     .order('sort_order', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -20,6 +20,7 @@ interface ProductRow {
   base_price_cents: number;
   duration_minutes: number;
   sort_order: number;
+  audiences: string[];
 }
 
 const TABS = [

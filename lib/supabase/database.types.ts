@@ -3030,6 +3030,7 @@ export type Database = {
       }
       products: {
         Row: {
+          audiences: string[]
           base_price_cents: number
           cover_image_url: string | null
           created_at: string
@@ -3048,6 +3049,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          audiences?: string[]
           base_price_cents?: number
           cover_image_url?: string | null
           created_at?: string
@@ -3066,6 +3068,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          audiences?: string[]
           base_price_cents?: number
           cover_image_url?: string | null
           created_at?: string
@@ -4616,6 +4619,7 @@ export type Database = {
       create_reel_order: { Args: { p_brief?: Json }; Returns: string }
       current_client_id: { Args: never; Returns: string }
       current_client_ids: { Args: never; Returns: string[] }
+      current_client_team_ids: { Args: never; Returns: string[] }
       current_contractor_id: { Args: never; Returns: string }
       due_sends: {
         Args: never

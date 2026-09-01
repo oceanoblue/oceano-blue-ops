@@ -31,6 +31,11 @@ const Body = z.object({
   access_method: z.string().optional().default(''),
   highlights: z.string().optional().default(''),
 
+  // Production profile (from which booking link). Defaults to MLS real estate.
+  project_type: z
+    .enum(['mls_real_estate', 'luxury_real_estate', 'architectural', 'interior_design'])
+    .optional(),
+
   items: z
     .array(
       z.object({
@@ -92,6 +97,13 @@ export async function POST(request: Request) {
       );
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Stamp the production profile (architectural / etc.) chosen by the booking
+  // link. The RPC defaults new orders to mls_real_estate, so only override when
+  // it's something else.
+  if (b.project_type && b.project_type !== 'mls_real_estate') {
+    await supabase.from('orders').update({ project_type: b.project_type as any }).eq('id', data);
   }
 
   // Push to the photographer's Google Calendar (best-effort). The photographer

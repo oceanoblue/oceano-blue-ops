@@ -19,7 +19,13 @@ interface ProductRow {
   base_price_cents: number;
   duration_minutes: number;
   sort_order: number;
+  audiences: string[];
 }
+
+const AUDIENCES: { value: string; label: string }[] = [
+  { value: 'real_estate', label: 'Real Estate (/book)' },
+  { value: 'architectural', label: 'Architectural (/book/architectural)' },
+];
 
 interface PricingTier {
   id?: string;
@@ -51,6 +57,7 @@ const emptyProduct: ProductRow = {
   base_price_cents: 0,
   duration_minutes: 0,
   sort_order: 100,
+  audiences: ['real_estate'],
 };
 
 export function ProductEditDrawer({
@@ -64,9 +71,19 @@ export function ProductEditDrawer({
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }) {
-  const [draft, setDraft] = useState<ProductRow>(() =>
-    product ?? { ...emptyProduct, is_addon: createKind === 'addon', kind: createKind === 'addon' ? 'addon' : 'photo' }
-  );
+  const [draft, setDraft] = useState<ProductRow>(() => {
+    const base =
+      product ?? { ...emptyProduct, is_addon: createKind === 'addon', kind: createKind === 'addon' ? 'addon' : 'photo' };
+    return { ...base, audiences: base.audiences?.length ? base.audiences : ['real_estate'] };
+  });
+
+  function toggleAudience(value: string) {
+    setDraft((d) => {
+      const has = d.audiences.includes(value);
+      const next = has ? d.audiences.filter((a) => a !== value) : [...d.audiences, value];
+      return { ...d, audiences: next.length ? next : ['real_estate'] }; // never empty
+    });
+  }
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -300,6 +317,34 @@ export function ProductEditDrawer({
               onChange={(e) => setDraft({ ...draft, long_description: e.target.value })}
               placeholder="Full description shown in the detail drawer"
             />
+          </section>
+
+          <section>
+            <label className="label">Booking links</label>
+            <p className="mb-2 text-xs text-slate-500">
+              Which public booking page(s) this package shows on. Real-estate clients and
+              architectural/construction clients get different links.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {AUDIENCES.map((a) => {
+                const on = draft.audiences.includes(a.value);
+                return (
+                  <button
+                    key={a.value}
+                    type="button"
+                    onClick={() => toggleAudience(a.value)}
+                    className={cn(
+                      'rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
+                      on
+                        ? 'border-ocean-600 bg-ocean-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    )}
+                  >
+                    {a.label}
+                  </button>
+                );
+              })}
+            </div>
           </section>
 
           {/* Pricing tiers */}

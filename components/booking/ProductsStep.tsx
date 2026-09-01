@@ -12,6 +12,7 @@ export function ProductsStep({
   onChange,
   onComplete,
   onLoaded,
+  audience = 'real_estate',
 }: {
   sqft: number;
   items: SelectedItem[];
@@ -19,6 +20,7 @@ export function ProductsStep({
   onChange: (items: SelectedItem[]) => void;
   onComplete: () => void;
   onLoaded?: (products: Product[]) => void;
+  audience?: 'real_estate' | 'architectural';
 }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,7 +28,7 @@ export function ProductsStep({
   const [showAddons, setShowAddons] = useState<Product | null>(null);
 
   useEffect(() => {
-    fetch(`/api/products?sqft=${sqft}`)
+    fetch(`/api/products?sqft=${sqft}&audience=${audience}`)
       .then((r) => r.json())
       .then((d) => {
         setProducts(d.products ?? []);
@@ -34,7 +36,7 @@ export function ProductsStep({
         onLoaded?.(d.products ?? []);
       })
       .catch(() => setLoading(false));
-  }, [sqft, onLoaded]);
+  }, [sqft, audience, onLoaded]);
 
   const baseProducts = products.filter((p) => !p.is_addon);
   const itemIds = new Set(items.map((i) => i.product_id));
