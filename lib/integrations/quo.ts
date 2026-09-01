@@ -64,10 +64,18 @@ export function toE164US(raw: string | null | undefined): string | null {
 export async function sendSms(params: { to: string | null | undefined; text: string }): Promise<SmsResult> {
   const key = apiKey();
   const from = fromNumber();
-  if (!key || !from) return { status: 'not_configured' };
+  if (!key || !from) {
+    console.warn(
+      `[quo] SMS not configured — key:${key ? 'set' : 'MISSING'} from:${from ? 'set' : 'MISSING'} (need QUO_API_KEY/OPENPHONE_API_KEY + QUO_SMS_FROM)`
+    );
+    return { status: 'not_configured' };
+  }
 
   const dest = toE164US(params.to);
-  if (!dest) return { status: 'skipped', reason: 'no_valid_phone' };
+  if (!dest) {
+    console.warn(`[quo] SMS skipped — couldn't normalize phone: "${params.to}"`);
+    return { status: 'skipped', reason: 'no_valid_phone' };
+  }
 
   try {
     const body: Record<string, unknown> = { content: params.text, from, to: [dest] };
@@ -80,11 +88,14 @@ export async function sendSms(params: { to: string | null | undefined; text: str
     });
     if (!res.ok) {
       const b = await res.text().catch(() => '');
+      console.error(`[quo] SMS send failed — status ${res.status}, from=${from} to=${dest}, body: ${b.slice(0, 300)}`);
       return { status: 'failed', error: `quo_${res.status}: ${b.slice(0, 200)}` };
     }
     const j = (await res.json().catch(() => ({}))) as { id?: string; data?: { id?: string } };
+    console.log(`[quo] SMS sent to ${dest} (id: ${j?.data?.id ?? j?.id ?? 'n/a'})`);
     return { status: 'sent', id: j?.data?.id ?? j?.id ?? '' };
   } catch (e: any) {
+    console.error(`[quo] SMS error to ${dest}: ${e?.message ?? e}`);
     return { status: 'failed', error: e?.message ?? 'sms_error' };
   }
 }
