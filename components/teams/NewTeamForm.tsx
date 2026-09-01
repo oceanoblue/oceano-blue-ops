@@ -37,7 +37,7 @@ export function NewTeamForm() {
   if (!open) {
     return (
       <button className="btn-primary" onClick={() => setOpen(true)}>
-        <Users2 className="h-4 w-4" /> New team
+        <Users2 className="h-4 w-4" /> New client team
       </button>
     );
   }
@@ -45,7 +45,7 @@ export function NewTeamForm() {
   return (
     <form onSubmit={submit} className="card absolute right-0 top-12 z-20 w-[22rem] space-y-3 p-4 shadow-lift">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-ocean-900">New team</h3>
+        <h3 className="text-sm font-semibold text-ocean-900">New client team</h3>
         <button type="button" onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-700">
           <X className="h-4 w-4" />
         </button>

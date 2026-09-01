@@ -23,7 +23,7 @@ export default async function TeamsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="People" title="Teams" subtitle="Group an agent with their coordinator and co-agents so everyone shares the galleries.">
+      <PageHeader eyebrow="People" title="Client Teams" subtitle="Group an agent with their coordinator and co-agents so everyone shares the galleries.">
         <div className="relative">
           <NewTeamForm />
         </div>
