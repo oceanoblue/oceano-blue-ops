@@ -70,6 +70,7 @@ export function NewShootForm({
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [needsOverride, setNeedsOverride] = useState(false);
 
   const assigneeIsContractor = assignee.startsWith('contractor:');
 
@@ -79,8 +80,12 @@ export function NewShootForm({
 
   const numOrNull = (s: string) => (s.trim() === '' ? null : Number(s));
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
+    doSubmit(false);
+  }
+
+  async function doSubmit(allowOverlap: boolean) {
     setBusy(true);
     setErr(null);
 
@@ -106,6 +111,7 @@ export function NewShootForm({
       package_name: pkg,
       instructions: instructions.trim(),
       create_intake_link: true,
+      allow_overlap: allowOverlap,
       items: Object.entries(items)
         .filter(([, q]) => q > 0)
         .map(([product_id, quantity]) => ({ product_id, quantity })),
@@ -121,6 +127,12 @@ export function NewShootForm({
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
+        // Travel-buffer conflict → offer the staff override instead of a hard stop.
+        if (r.status === 409 && d.error === 'slot_unavailable' && !allowOverlap) {
+          setNeedsOverride(true);
+          setBusy(false);
+          return;
+        }
         throw new Error(
           d.message || (d.error === 'validation_failed' ? 'Please fill in the required fields.' : d.error) || `Failed (${r.status})`
         );
@@ -342,6 +354,30 @@ export function NewShootForm({
 
       {err && (
         <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md p-3">{err}</p>
+      )}
+
+      {needsOverride && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-sm text-amber-800">
+            ⚠️ This photographer already has a shoot inside the travel buffer of this time. Book it anyway?
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setNeedsOverride(false);
+                doSubmit(true);
+              }}
+              disabled={busy}
+              className="btn-primary inline-flex items-center gap-1.5 text-sm disabled:opacity-50"
+            >
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />} Book anyway
+            </button>
+            <button type="button" onClick={() => setNeedsOverride(false)} className="btn-ghost text-sm">
+              Pick another slot
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">

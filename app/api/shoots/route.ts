@@ -64,6 +64,8 @@ const Body = z.object({
 
   // Auto-provision the Dropbox upload link when a contractor is assigned.
   create_intake_link: z.boolean().optional().default(true),
+  // Staff override of the double-book travel buffer (set on the "book anyway" retry).
+  allow_overlap: z.boolean().optional().default(false),
 });
 
 export async function POST(request: Request) {
@@ -185,11 +187,12 @@ export async function POST(request: Request) {
     orderInsert.pay_amount_cents = c?.pay_rate_cents ?? 0;
   }
 
-  const { data: order, error: oErr } = await admin
-    .from('orders')
-    .insert(orderInsert)
-    .select('id, order_number')
-    .single();
+  // Insert via the RPC so a staff "book anyway" can override the travel buffer
+  // (public bookings can't). Returns { id, order_number }.
+  const { data: order, error: oErr } = await admin.rpc('create_office_order', {
+    p_order: orderInsert,
+    p_allow_overlap: b.allow_overlap ?? false,
+  });
   if (oErr || !order) {
     // Double-book guard raises SQLSTATE 23P01 (slot_unavailable) for a team
     // photographer whose time overlaps another shoot.
