@@ -17,7 +17,7 @@ import { DeleteOrderControl } from '@/components/orders/DeleteOrderControl';
 import { CostSummary } from '@/components/orders/CostSummary';
 import { EditInstructionsEditor } from '@/components/orders/EditInstructionsEditor';
 import { SendToEditEngine } from '@/components/orders/SendToEditEngine';
-import { FotelloWorkspace } from '@/components/orders/FotelloWorkspace';
+import { EditingWorkspace } from '@/components/orders/EditingWorkspace';
 import { RawIntakeControl } from '@/components/orders/RawIntakeControl';
 import { ProcessFromDropboxControl } from '@/components/orders/ProcessFromDropboxControl';
 import { OrderProcessingProgress } from '@/components/orders/OrderProcessingProgress';
@@ -41,6 +41,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       listings(*),
       clients(*),
       order_services(*),
+      order_items(*),
       reel_briefs(*),
       order_footage(*),
       ai_jobs(id, job_type, status, provider, model, cost_cents, duration_ms, created_at, completed_at, error_message)
@@ -322,12 +323,12 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               </section>
 
               <section className="card p-6">
-                <h2 className="font-semibold mb-1">Editing — Fotello</h2>
+                <h2 className="font-semibold mb-1">Editing</h2>
                 <p className="mb-4 text-xs text-slate-500">
-                  Download the originals, edit in Fotello&rsquo;s own window, then drop the
+                  Download the originals, edit them in your editor of choice, then drop the
                   finished photos back here for review and delivery.
                 </p>
-                <FotelloWorkspace
+                <EditingWorkspace
                   orderId={order.id}
                   originalsCount={originalsCount}
                   finalsCount={finalsCount}
@@ -406,18 +407,31 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
           <section className="card p-6">
             <h2 className="font-semibold mb-4">Services</h2>
-            {(order.order_services ?? []).length === 0 ? (
-              <p className="text-sm text-slate-500">No line items.</p>
-            ) : (
-              <ul className="text-sm divide-y divide-slate-100">
-                {order.order_services.map((s: any) => (
-                  <li key={s.id} className="py-2 flex items-center justify-between">
-                    <span>{s.description || s.service_type}</span>
-                    <span className="text-slate-500">×{s.quantity}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {(() => {
+              // Priced line items live in order_items (what checkout/paywall charge);
+              // fall back to the legacy order_services only if none exist.
+              const items = (order.order_items?.length ? order.order_items : order.order_services) ?? [];
+              return items.length === 0 ? (
+                <p className="text-sm text-slate-500">No line items.</p>
+              ) : (
+                <ul className="text-sm divide-y divide-slate-100">
+                  {items.map((s: any) => (
+                    <li key={s.id} className="py-2 flex items-start justify-between gap-3">
+                      <span className="flex-1">
+                        {s.description || s.service_type}
+                        {s.quantity > 1 && (
+                          <span className="text-slate-400"> · {fmtCents(s.unit_price_cents)} each</span>
+                        )}
+                      </span>
+                      {s.quantity > 1 && <span className="text-slate-400">×{s.quantity}</span>}
+                      <span className="tabular-nums font-medium text-slate-700">
+                        {fmtCents(s.total_cents ?? (s.unit_price_cents ?? 0) * (s.quantity ?? 1))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              );
+            })()}
             <div className="mt-3 border-t pt-3 flex items-center justify-between text-sm">
               <span className="text-slate-500">Total</span>
               <span className="font-semibold">{fmtCents(order.total_cents)}</span>

@@ -838,7 +838,7 @@ export function PhotoManager({
         <p className="text-xs text-slate-500">
           {aiEditingEnabled
             ? 'JPEG / PNG / TIFF / WebP run through AI directly. ARW / CR2 / NEF auto-convert via the worker.'
-            : 'Originals are archived here. Finished photos go in the Fotello panel above so they land in Review & delivery.'}
+            : 'Originals are archived here. Finished photos go in the Editing panel above so they land in Review & delivery.'}
         </p>
       </div>
 

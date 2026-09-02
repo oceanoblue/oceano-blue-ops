@@ -3,25 +3,15 @@
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
-import {
-  Loader2,
-  Download,
-  ExternalLink,
-  UploadCloud,
-  CheckCircle2,
-} from 'lucide-react';
+import { Loader2, Download, UploadCloud, CheckCircle2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
-const FOTELLO_APP_URL = 'https://app.fotello.co';
-
-/** Interim Fotello workflow, kept deliberately simple:
+/** Provider-neutral external-editing workflow, kept deliberately simple:
  *  1. Download the shoot's originals as one zip.
- *  2. Open Fotello in its own app-sized window and edit there.
- *     (Fotello can't be embedded: its app sits behind bot protection and a
- *     login that third-party-cookie rules break inside an iframe.)
+ *  2. Edit them in whatever editor you use (any provider).
  *  3. Drop the finished files here — they register as processed photos and
  *     flow straight into Review & Edit and client delivery. */
-export function FotelloWorkspace({
+export function EditingWorkspace({
   orderId,
   originalsCount,
   finalsCount,
@@ -35,10 +25,6 @@ export function FotelloWorkspace({
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [importedNow, setImportedNow] = useState(0);
   const [error, setError] = useState<string | null>(null);
-
-  function openFotello() {
-    window.open(FOTELLO_APP_URL, 'fotello-workspace', 'width=1440,height=920,noopener');
-  }
 
   const onDrop = useCallback(
     async (accepted: File[]) => {
@@ -113,12 +99,9 @@ export function FotelloWorkspace({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={openFotello} className="btn-primary inline-flex items-center gap-1.5">
-          <ExternalLink className="h-4 w-4" /> Open Fotello
-        </button>
         <a
           href={`/api/photos/export-originals?order_id=${orderId}`}
-          className={`btn-secondary inline-flex items-center gap-1.5 ${originalsCount === 0 ? 'pointer-events-none opacity-50' : ''}`}
+          className={`btn-primary inline-flex items-center gap-1.5 ${originalsCount === 0 ? 'pointer-events-none opacity-50' : ''}`}
           title={originalsCount === 0 ? 'No originals uploaded yet' : ''}
         >
           <Download className="h-4 w-4" /> Download originals ({originalsCount})
@@ -140,8 +123,8 @@ export function FotelloWorkspace({
           </span>
         ) : (
           <span className="text-slate-600">
-            Drop the <strong>finished photos</strong> from Fotello here — they go straight to
-            Review &amp; delivery.
+            Drop the <strong>finished photos</strong> here — they go straight to Review &amp;
+            delivery.
           </span>
         )}
       </div>
