@@ -1,17 +1,18 @@
 import type { MetadataRoute } from 'next';
 
 /**
- * Web app manifest — makes the client portal installable ("Add to Home
- * Screen") so realtors get an Oceano Blue app icon that opens full-screen.
- * Entry point is /portal: signed-out it's the magic-link/code sign-in,
- * signed-in it's their listings, galleries, and the Book-a-shoot flow.
+ * Web app manifest — makes the app installable ("Add to Home Screen") so
+ * realtors AND photographers get an Oceano Blue icon that opens full-screen.
+ * Entry point is /portal: signed-out it's the magic-link/code sign-in; signed-in
+ * it routes by identity (lib/auth/home-for-user) — a client lands on their
+ * listings, a contractor photographer on their shoots, staff on the dashboard.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Oceano Blue',
     short_name: 'Oceano Blue',
     description:
-      'Book real estate photo & video shoots, track your orders, and download finished media.',
+      'Book real estate photo & video shoots, track your orders, and download finished media. Photographers: your shoots, uploads, and calendar.',
     id: '/portal',
     start_url: '/portal',
     scope: '/',
