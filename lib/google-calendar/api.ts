@@ -124,11 +124,18 @@ export interface EventPayload {
    * Guests to invite. Google delivers the event to each guest's own calendar
    * (any Gmail / Workspace address) with an emailed invitation — no calendar
    * sharing required. This is how a shoot reaches a photographer whose calendar
-   * we can't write to directly.
+   * we can't write to directly. `responseStatus` lets the organizer SET the
+   * guest's RSVP (we mirror the app's accept / decline onto the invite).
    */
-  attendeeEmails?: string[];
+  attendees?: Attendee[];
   /** 'transparent' = shows as FREE (visible but doesn't block); 'opaque' = busy. */
   transparency?: 'opaque' | 'transparent';
+}
+
+export type AttendeeStatus = 'needsAction' | 'accepted' | 'declined' | 'tentative';
+export interface Attendee {
+  email: string;
+  responseStatus?: AttendeeStatus;
 }
 
 /** Whether Google should email guests about this write. Defaults to 'none'. */
@@ -146,7 +153,10 @@ function toBody(payload: EventPayload): any {
   if (payload.transparency) body.transparency = payload.transparency;
   // Always send the attendee list (even empty) so a PATCH can REMOVE a guest
   // after a reassignment — omitting the key would leave the old guest invited.
-  body.attendees = (payload.attendeeEmails ?? []).map((email) => ({ email }));
+  body.attendees = (payload.attendees ?? []).map((a) => ({
+    email: a.email,
+    ...(a.responseStatus ? { responseStatus: a.responseStatus } : {}),
+  }));
   return body;
 }
 
@@ -169,7 +179,8 @@ export interface ExistingEvent {
   startIso: string;
   endIso: string;
   transparency: 'opaque' | 'transparent';
-  attendeeEmails: string[];
+  /** Guests, lower-cased and sorted by email, with their current RSVP. */
+  attendees: { email: string; responseStatus: AttendeeStatus }[];
 }
 
 /** Read one event back. Returns null when it's gone (404) or the call fails. */
@@ -197,10 +208,13 @@ export async function getEvent(
     startIso: e.start?.dateTime ?? '',
     endIso: e.end?.dateTime ?? '',
     transparency: e.transparency === 'transparent' ? 'transparent' : 'opaque',
-    attendeeEmails: ((e.attendees ?? []) as any[])
-      .map((a) => String(a.email ?? '').toLowerCase())
-      .filter(Boolean)
-      .sort(),
+    attendees: ((e.attendees ?? []) as any[])
+      .map((a) => ({
+        email: String(a.email ?? '').toLowerCase(),
+        responseStatus: (a.responseStatus as AttendeeStatus) || 'needsAction',
+      }))
+      .filter((a) => a.email)
+      .sort((a, b) => a.email.localeCompare(b.email)),
   };
 }
 

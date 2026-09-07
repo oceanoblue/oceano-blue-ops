@@ -29,14 +29,29 @@ function escapeAttr(s: string): string {
   return s.replace(/"/g, '%22');
 }
 
+/** Secondary (outlined) button for the "no" path. */
+function ghostButton(href: string, label: string, color = '#334155'): string {
+  return `<a href="${escapeAttr(href)}" style="display:inline-block;background:#ffffff;color:${color};text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:10px;border:1px solid #d5dbe1;">${escapeHtml(label)}</a>`;
+}
+
+/**
+ * "Can you shoot this?" — the assignment ask. Leads with when + where and the
+ * Accept / Decline buttons (login-free, signed links), then the upload folder
+ * for later. When no accept link is available (no signing secret configured)
+ * it degrades to the portal link.
+ */
 export function contractorAssignmentEmail(p: {
   contractorName: string;
   address: string;
   cityStateZip?: string;
+  whenText?: string | null;
   sqft?: number | null;
   services?: string | null;
+  payText?: string | null;
   uploadUrl: string;
   portalUrl: string;
+  acceptUrl?: string | null;
+  declineUrl?: string | null;
 }): { subject: string; html: string } {
   const first = (p.contractorName || '').split(' ')[0] || 'there';
   const meta = [
@@ -47,23 +62,41 @@ export function contractorAssignmentEmail(p: {
     .filter(Boolean)
     .join(' · ');
 
+  const respond =
+    p.acceptUrl && p.declineUrl
+      ? `<div style="margin-bottom:8px;">
+           <span style="display:inline-block;margin:0 8px 8px 0;">${button(p.acceptUrl, 'Accept shoot')}</span>
+           <span style="display:inline-block;margin:0 0 8px 0;">${ghostButton(p.declineUrl, 'Decline')}</span>
+         </div>
+         <p style="font-size:13px;color:#708698;margin:0 0 20px;">One tap either way — the office is told the moment you answer.</p>`
+      : `<div style="margin-bottom:8px;">${button(p.portalUrl, 'Accept or decline in your portal')}</div>
+         <p style="font-size:13px;color:#708698;margin:0 0 20px;">The office is told the moment you answer.</p>`;
+
   const body = `
     <p style="font-size:16px;margin:0 0 4px;">Hi ${escapeHtml(first)},</p>
     <p style="font-size:15px;line-height:1.5;color:#324354;margin:0 0 18px;">
-      You&rsquo;ve been assigned a shoot. When you&rsquo;re done, upload the RAW files straight to its folder — one tap, no account needed.
+      Can you take this shoot? Let us know either way.
     </p>
-    <div style="border:1px solid #e6eaee;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
+    <div style="border:1px solid #e6eaee;border-left:4px solid #0c8de9;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
+      ${p.whenText ? `<div style="font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#0c8de9;margin-bottom:6px;">${escapeHtml(p.whenText)}</div>` : ''}
       <div style="font-size:17px;font-weight:600;color:#0c1620;">${escapeHtml(p.address)}</div>
       ${meta ? `<div style="font-size:13px;color:#708698;margin-top:3px;">${escapeHtml(meta)}</div>` : ''}
+      ${p.payText ? `<div style="font-size:13px;color:#324354;margin-top:10px;padding-top:10px;border-top:1px solid #eef1f4;"><span style="color:#708698;">Your pay:</span> <strong>${escapeHtml(p.payText)}</strong></div>` : ''}
     </div>
-    <div style="margin-bottom:16px;">${button(p.uploadUrl, 'Open upload folder')}</div>
-    <p style="font-size:13px;color:#708698;margin:0;">
-      Prefer to track all your shoots? <a href="${escapeAttr(p.portalUrl)}" style="color:#0c8de9;">Open your photographer portal</a>.
-    </p>`;
+    ${respond}
+    <div style="border-top:1px solid #eef1f4;padding-top:18px;">
+      <p style="font-size:14px;line-height:1.5;color:#324354;margin:0 0 12px;">
+        After the shoot, upload the RAW files straight to its folder — one tap, no account needed.
+      </p>
+      <div style="margin-bottom:14px;">${ghostButton(p.uploadUrl, 'Open upload folder', '#0c8de9')}</div>
+      <p style="font-size:13px;color:#708698;margin:0;">
+        All your shoots, in one place: <a href="${escapeAttr(p.portalUrl)}" style="color:#0c8de9;">your photographer portal</a>.
+      </p>
+    </div>`;
 
   return {
-    subject: `New shoot assigned — ${p.address}`,
-    html: shell(body, `Upload the RAWs for ${p.address}`),
+    subject: `Can you shoot ${p.address}${p.whenText ? ` — ${p.whenText}` : ''}?`,
+    html: shell(body, `New shoot assignment${p.whenText ? ` for ${p.whenText}` : ''} — accept or decline`),
   };
 }
 

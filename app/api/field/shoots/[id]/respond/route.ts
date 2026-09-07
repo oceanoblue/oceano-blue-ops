@@ -1,17 +1,14 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
-import { sendEmail } from '@/lib/email/resend';
-import { sendSms } from '@/lib/integrations/quo';
-import { contractorResponseEmail } from '@/lib/email/templates';
-import { fmtDateTime } from '@/lib/utils/format';
+import { createClient } from '@/lib/supabase/server';
+import { afterContractorResponse } from '@/lib/field/respond';
 
 /**
- * Contractor accepts or declines their assigned shoot. The state change goes
- * through respond_to_assignment() (SECURITY DEFINER — re-derives the caller's
- * contractor and enforces "your own assignment"), so this route is safe under
- * the public /api/field prefix. On success it emails every active admin so the
- * office knows the moment a shoot is taken or turned down.
+ * Contractor accepts or declines their assigned shoot from the portal. The
+ * state change goes through respond_to_assignment() (SECURITY DEFINER —
+ * re-derives the caller's contractor and enforces "your own assignment"), so
+ * this route is safe under the public /api/field prefix. Afterwards the office
+ * is notified and the answer is mirrored onto the Google Calendar invite.
  */
 const Body = z.object({
   response: z.enum(['accepted', 'declined']),
@@ -48,63 +45,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({ error: msg, reason }, { status: 400 });
   }
 
-  // Fire the admin notification. Never let an email hiccup fail the response —
-  // the accept/decline is already committed.
-  try {
-    await notifyAdmins(params.id, parsed.data.response, parsed.data.note ?? null, request);
-  } catch (e) {
-    console.error('[field/respond] admin notify failed:', e);
-  }
-
-  return NextResponse.json({ ok: true, response: parsed.data.response });
-}
-
-async function notifyAdmins(
-  orderId: string,
-  response: 'accepted' | 'declined',
-  note: string | null,
-  request: Request
-) {
-  const admin = createAdminClient() as any;
-
-  const { data: order } = await admin
-    .from('orders')
-    .select('order_number, contractor_id, scheduled_at, listings(address_line1, city, state, zip)')
-    .eq('id', orderId)
-    .maybeSingle();
-  if (!order) return;
-
-  const [{ data: contractor }, { data: admins }] = await Promise.all([
-    order.contractor_id
-      ? admin.from('contractors').select('full_name').eq('id', order.contractor_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    admin.from('team_members').select('email, full_name, phone').eq('role', 'admin').eq('is_active', true),
-  ]);
-
-  const adminRows = (admins ?? []) as Array<{ email: string | null; phone: string | null }>;
-  const emailTo = adminRows.map((a) => a.email).filter((e): e is string => Boolean(e));
-  const smsTo = adminRows.map((a) => a.phone).filter((p): p is string => Boolean(p));
-  if (emailTo.length === 0 && smsTo.length === 0) return;
-
-  const listing = (order.listings ?? {}) as any;
-  const address = listing.address_line1 || `Order #${order.order_number}`;
-  const base = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-  const who = contractor?.full_name ?? 'A photographer';
-
-  const { subject, html } = contractorResponseEmail({
-    contractorName: who,
-    response,
-    address,
-    cityStateZip: [listing.city, listing.state, listing.zip].filter(Boolean).join(', ') || null,
-    whenText: order.scheduled_at ? fmtDateTime(order.scheduled_at) : null,
-    note,
-    orderUrl: `${base}/dashboard/orders/${orderId}`,
+  await afterContractorResponse({
+    orderId: params.id,
+    response: parsed.data.response,
+    note: parsed.data.note ?? null,
+    source: 'portal',
+    baseUrl: process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin,
   });
 
-  const smsText = `Oceano Blue: ${who} ${response} the shoot at ${address}${note ? ` — "${note}"` : ''}`;
-
-  await Promise.all([
-    ...emailTo.map((to) => sendEmail({ to, subject, html })),
-    ...smsTo.map((to) => sendSms({ to, text: smsText })),
-  ]);
+  return NextResponse.json({ ok: true, response: parsed.data.response });
 }

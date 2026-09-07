@@ -8,6 +8,7 @@ import {
   type ExistingEvent,
 } from './api';
 import { logEvent } from '@/lib/observability/report';
+import { signRespondToken, respondPageUrl, respondTokenExpiry } from '@/lib/field/respond-token';
 
 // The master "office" calendar that shows EVERY shoot. Shared with the connected
 // admin account so one token can write it. Override with env if it ever changes.
@@ -90,7 +91,9 @@ export function sameEvent(ex: ExistingEvent, p: EventPayload): boolean {
     const t = new Date(iso).getTime();
     return Number.isNaN(t) ? iso : t;
   };
-  const want = (p.attendeeEmails ?? []).map((e) => e.toLowerCase()).sort();
+  const want = (p.attendees ?? [])
+    .map((a) => ({ email: a.email.toLowerCase(), responseStatus: a.responseStatus }))
+    .sort((a, b) => a.email.localeCompare(b.email));
   return (
     ex.status !== 'cancelled' &&
     ex.summary === p.summary &&
@@ -99,9 +102,27 @@ export function sameEvent(ex: ExistingEvent, p: EventPayload): boolean {
     ms(ex.startIso) === ms(p.startIso) &&
     ms(ex.endIso) === ms(p.endIso) &&
     ex.transparency === (p.transparency ?? 'opaque') &&
-    ex.attendeeEmails.length === want.length &&
-    ex.attendeeEmails.every((e, i) => e === want[i])
+    ex.attendees.length === want.length &&
+    ex.attendees.every(
+      (a, i) =>
+        a.email === want[i].email &&
+        // An unset status in the payload means "leave whatever Google has".
+        (want[i].responseStatus === undefined || a.responseStatus === want[i].responseStatus)
+    )
   );
+}
+
+/** Fill in RSVPs we don't want to touch with what Google currently has. */
+function carryForwardRsvps(payload: EventPayload, current: ExistingEvent): EventPayload {
+  if (!payload.attendees?.length) return payload;
+  return {
+    ...payload,
+    attendees: payload.attendees.map((a) => {
+      if (a.responseStatus) return a;
+      const cur = current.attendees.find((c) => c.email === a.email.toLowerCase());
+      return cur ? { ...a, responseStatus: cur.responseStatus } : a;
+    }),
+  };
 }
 
 /**
@@ -135,7 +156,7 @@ export async function syncShootCalendar(orderId: string): Promise<void> {
   const { data: order } = await admin
     .from('orders')
     .select(
-      'id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, contractor_id, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
+      'id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, contractor_id, contractor_response, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
     )
     .eq('id', orderId)
     .maybeSingle();
@@ -213,10 +234,35 @@ export async function syncShootCalendar(orderId: string): Promise<void> {
     const shooterLabel = shooterName
       ? `${shooterName}${isContractor ? ' (contractor)' : ''}`
       : '';
+    // Invite the shooter as a guest on the master unless we can write to their
+    // calendar directly (own connection). Never both — that would double it up.
+    const guestEmail = shooterEmail && !ownConn ? shooterEmail : null;
+
+    // A contractor's accept / decline in the app becomes their RSVP on the
+    // invite. Unanswered in the app → leave whatever they said on Google (the
+    // RSVP mirror cron copies a Google answer back into the app).
+    const rsvp: 'accepted' | 'declined' | undefined =
+      order.contractor_id && (order.contractor_response === 'accepted' || order.contractor_response === 'declined')
+        ? order.contractor_response
+        : undefined;
+
+    // Give the invited shooter their links right in the event: where to accept
+    // or decline, and where to upload afterwards.
+    const base = process.env.NEXT_PUBLIC_APP_URL || 'https://app.oceanoblue.net';
+    // Deterministic per shoot (expiry keyed off the shoot date) so the
+    // description — and therefore the event — doesn't change on every sync.
+    const respondToken =
+      guestEmail && order.contractor_id
+        ? signRespondToken(orderId, order.contractor_id, respondTokenExpiry(order.scheduled_at))
+        : null;
+    const respondUrl = respondToken ? respondPageUrl(base, respondToken) : null;
+
     const description = [
       client ? `Client: ${client}` : null,
       shooterLabel ? `Shooter: ${shooterLabel}` : 'Unassigned',
       services ? `Services: ${services}` : null,
+      respondUrl ? `Accept or decline: ${respondUrl}` : null,
+      guestEmail && order.dropbox_intake_url ? `Upload RAWs: ${order.dropbox_intake_url}` : null,
       'Booked via Oceano Blue Ops',
     ]
       .filter(Boolean)
@@ -224,10 +270,6 @@ export async function syncShootCalendar(orderId: string): Promise<void> {
 
     const startIso = start.toISOString();
     const endIso = end.toISOString();
-
-    // Invite the shooter as a guest on the master unless we can write to their
-    // calendar directly (own connection). Never both — that would double it up.
-    const guestEmail = shooterEmail && !ownConn ? shooterEmail : null;
 
     // Master — every shoot, prefixed with the shooter's first name for at-a-glance.
     // FREE (transparent): it's a visible reference layer, so it never marks anyone
@@ -245,7 +287,7 @@ export async function syncShootCalendar(orderId: string): Promise<void> {
         endIso,
         timezone: tz,
         transparency: 'transparent',
-        attendeeEmails: guestEmail ? [guestEmail] : [],
+        attendees: guestEmail ? [{ email: guestEmail, responseStatus: rsvp }] : [],
       },
     });
 
@@ -266,7 +308,7 @@ export async function syncShootCalendar(orderId: string): Promise<void> {
             endIso,
             timezone: tz,
             transparency: 'opaque',
-            attendeeEmails: [],
+            attendees: [],
           },
         });
       }
@@ -297,8 +339,9 @@ export async function syncShootCalendar(orderId: string): Promise<void> {
       // ping every guest with an "updated invitation" email.
       const current = await getEvent(d.actorId, d.calendarId, ex.event_id).catch(() => null);
       if (current && current.status !== 'cancelled') {
-        if (!sameEvent(current, d.payload)) {
-          await updateEvent(d.actorId, d.calendarId, ex.event_id, d.payload, sendUpdates).catch(
+        const payload = carryForwardRsvps(d.payload, current);
+        if (!sameEvent(current, payload)) {
+          await updateEvent(d.actorId, d.calendarId, ex.event_id, payload, sendUpdates).catch(
             () => {}
           );
         }

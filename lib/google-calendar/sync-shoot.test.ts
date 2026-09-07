@@ -12,7 +12,7 @@ const existing: ExistingEvent = {
   startIso: '2026-09-09T14:00:00-04:00',
   endIso: '2026-09-09T15:00:00-04:00',
   transparency: 'transparent',
-  attendeeEmails: ['karenmcdonnell24@gmail.com'],
+  attendees: [{ email: 'karenmcdonnell24@gmail.com', responseStatus: 'needsAction' }],
 };
 
 const payload: EventPayload = {
@@ -23,7 +23,7 @@ const payload: EventPayload = {
   endIso: '2026-09-09T19:00:00.000Z',
   timezone: 'America/New_York',
   transparency: 'transparent',
-  attendeeEmails: ['Karenmcdonnell24@gmail.com'],
+  attendees: [{ email: 'Karenmcdonnell24@gmail.com' }],
 };
 
 describe('sameEvent', () => {
@@ -36,8 +36,20 @@ describe('sameEvent', () => {
   });
 
   it('detects a guest change (reassignment)', () => {
-    expect(sameEvent(existing, { ...payload, attendeeEmails: [] })).toBe(false);
-    expect(sameEvent(existing, { ...payload, attendeeEmails: ['someone@else.com'] })).toBe(false);
+    expect(sameEvent(existing, { ...payload, attendees: [] })).toBe(false);
+    expect(sameEvent(existing, { ...payload, attendees: [{ email: 'someone@else.com' }] })).toBe(false);
+  });
+
+  it('detects an RSVP the app wants to set, but leaves an unset one alone', () => {
+    const accepted = { ...payload, attendees: [{ email: 'karenmcdonnell24@gmail.com', responseStatus: 'accepted' as const }] };
+    expect(sameEvent(existing, accepted)).toBe(false);
+    const alreadyAccepted = {
+      ...existing,
+      attendees: [{ email: 'karenmcdonnell24@gmail.com', responseStatus: 'accepted' as const }],
+    };
+    expect(sameEvent(alreadyAccepted, accepted)).toBe(true);
+    // App has no answer → whatever Google has is fine.
+    expect(sameEvent(alreadyAccepted, payload)).toBe(true);
   });
 
   it('detects a retitle or free/busy flip', () => {
