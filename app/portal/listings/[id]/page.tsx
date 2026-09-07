@@ -7,6 +7,8 @@ import { ClientGalleryGrid } from '@/components/gallery/ClientGalleryGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PortalHero } from '@/components/portal/PortalHero';
+import { NotAClient } from '@/components/portal/NotAClient';
+import { requireClientIds } from '@/lib/portal/require-client';
 import { MediaRoom, type DeliverableView } from '@/components/portal/MediaRoom';
 import { toEmbedUrl } from '@/lib/deliverables/embed';
 
@@ -19,10 +21,15 @@ export default async function ClientListingDetail({ params }: { params: { id: st
   } = await supabase.auth.getUser();
   if (!user) redirect('/portal');
 
+  // Client-only, scoped to their own client ids (never just RLS).
+  const clientIds = await requireClientIds(supabase, user.id);
+  if (clientIds.length === 0) return <NotAClient />;
+
   const { data: listing } = await supabase
     .from('listings')
     .select('id, address_line1, address_line2, city, state, zip, bedrooms, bathrooms, sqft, status')
     .eq('id', params.id)
+    .in('client_id', clientIds)
     .maybeSingle();
   if (!listing) notFound();
 
@@ -32,6 +39,7 @@ export default async function ClientListingDetail({ params }: { params: { id: st
     .from('orders')
     .select('id, status, scheduled_at, delivered_at, order_number')
     .eq('listing_id', params.id)
+    .in('client_id', clientIds)
     .order('created_at', { ascending: false });
 
   const { data: photos } = await supabase

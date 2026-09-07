@@ -34,8 +34,9 @@ export function CalendarBackfillButton() {
       {msg && <p className="text-sm text-emerald-700">{msg}</p>}
       {error && <p className="text-sm text-rose-600">{error}</p>}
       <p className="text-xs text-slate-500">
-        Puts every upcoming shoot on the master (info@) calendar, plus a busy hold on the assigned
-        photographer&rsquo;s own calendar. New bookings sync automatically.
+        Puts every upcoming shoot on the master (info@) calendar and on the assigned
+        photographer&rsquo;s own calendar (a busy hold if they connected Google, otherwise a guest
+        invitation). New bookings sync automatically.
       </p>
     </div>
   );

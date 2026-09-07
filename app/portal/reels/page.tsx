@@ -6,6 +6,8 @@ import { fmtRelative } from '@/lib/utils/format';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PortalHero } from '@/components/portal/PortalHero';
+import { NotAClient } from '@/components/portal/NotAClient';
+import { requireClientIds } from '@/lib/portal/require-client';
 import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
 
 export const dynamic = 'force-dynamic';
@@ -21,11 +23,15 @@ export default async function ClientReelsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/portal');
 
-  // RLS scopes these to the signed-in client's own orders.
+  // Client-only, scoped to their own client ids (never just RLS).
+  const clientIds = await requireClientIds(supabase, user.id);
+  if (clientIds.length === 0) return <NotAClient />;
+
   const { data: orders } = await supabase
     .from('orders')
     .select('id, order_number, status, created_at, reel_briefs(reel_type, aspect, subject_name, length_target_s)')
     .eq('order_kind', 'reel_edit')
+    .in('client_id', clientIds)
     .order('created_at', { ascending: false });
 
   const reelLabel = (v?: string) => REEL_TYPES.find((t) => t.value === v)?.label ?? '—';
