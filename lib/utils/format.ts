@@ -1,29 +1,59 @@
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 
-export function fmtDate(d: string | Date | null | undefined, pattern = 'MMM d, yyyy') {
-  if (!d) return '—';
-  return format(typeof d === 'string' ? new Date(d) : d, pattern);
+/**
+ * The business runs on Eastern time. Every timestamp is stored in UTC and must
+ * be RENDERED in this zone — never the machine's clock. On Vercel the server
+ * clock is UTC, so a naive format() shows "11:35 PM" for a 7:35 PM accept.
+ */
+export const BUSINESS_TZ = process.env.NEXT_PUBLIC_BUSINESS_TZ || 'America/New_York';
+
+function toDate(d: string | Date): Date {
+  return typeof d === 'string' ? new Date(d) : d;
 }
 
+function parts(d: Date, tz: string, opts: Intl.DateTimeFormatOptions) {
+  const list = new Intl.DateTimeFormat('en-US', { ...opts, timeZone: tz }).formatToParts(d);
+  return (t: string) => list.find((p) => p.type === t)?.value ?? '';
+}
+
+/** "Sep 7, 2026" in the business timezone. */
+export function fmtDate(d: string | Date | null | undefined, tz: string = BUSINESS_TZ) {
+  if (!d) return '—';
+  const g = parts(toDate(d), tz, { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${g('month')} ${g('day')}, ${g('year')}`;
+}
+
+/** "Sep 7, 2026 at 7:35 PM" in the business timezone. */
 export function fmtDateTime(d: string | Date | null | undefined) {
-  return fmtDate(d, "MMM d, yyyy 'at' h:mm a");
+  return fmtDateTimeTz(d, BUSINESS_TZ);
 }
 
 /**
  * Like fmtDateTime but rendered in a specific IANA timezone (e.g. the shoot's
- * `America/New_York`). Uses Intl so a UTC-stored instant shows the LOCAL shoot
- * time, matching the Schedule view — instead of the server's UTC.
+ * own `timezone` column). Falls back to the business timezone, never the
+ * server's.
  */
 export function fmtDateTimeTz(d: string | Date | null | undefined, tz?: string | null) {
   if (!d) return '—';
-  const date = typeof d === 'string' ? new Date(d) : d;
-  const parts = new Intl.DateTimeFormat('en-US', {
+  const g = parts(toDate(d), tz || BUSINESS_TZ, {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit', hour12: true,
-    timeZone: tz || undefined,
-  }).formatToParts(date);
-  const g = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  });
   return `${g('month')} ${g('day')}, ${g('year')} at ${g('hour')}:${g('minute')} ${g('dayPeriod')}`;
+}
+
+/** "7:35 PM" in the business timezone (or the given one). */
+export function fmtTime(d: string | Date | null | undefined, tz: string = BUSINESS_TZ) {
+  if (!d) return '—';
+  const g = parts(toDate(d), tz, { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${g('hour')}:${g('minute')} ${g('dayPeriod')}`;
+}
+
+/** "Wednesday, Sep 9, 2026" in the business timezone (or the given one). */
+export function fmtDayLong(d: string | Date | null | undefined, tz: string = BUSINESS_TZ) {
+  if (!d) return '—';
+  const g = parts(toDate(d), tz, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+  return `${g('weekday')}, ${g('month')} ${g('day')}, ${g('year')}`;
 }
 
 export function fmtRelative(d: string | Date | null | undefined) {

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { MapPin, CalendarDays } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { fmtCents } from '@/lib/utils/format';
+import { fmtCents, fmtDayLong, fmtTime } from '@/lib/utils/format';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PortalHero } from '@/components/portal/PortalHero';
@@ -33,17 +33,10 @@ type Shoot = {
   } | null;
 };
 
-function dayKey(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-function timeLabel(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
+// Rendered in the business timezone — this is a server component and the
+// server clock is UTC, so a naive toLocale*String() would shift every shoot.
+const dayKey = (iso: string) => fmtDayLong(iso);
+const timeLabel = (iso: string) => fmtTime(iso);
 
 export default async function FieldCalendarPage() {
   const supabase = createClient();
