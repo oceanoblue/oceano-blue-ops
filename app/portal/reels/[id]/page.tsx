@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server';
 import { fmtRelative } from '@/lib/utils/format';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PortalHero } from '@/components/portal/PortalHero';
+import { NotAClient } from '@/components/portal/NotAClient';
+import { requireClientIds } from '@/lib/portal/require-client';
 import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
 
 export const dynamic = 'force-dynamic';
@@ -49,7 +51,10 @@ export default async function ClientReelDetail({ params }: { params: { id: strin
   } = await supabase.auth.getUser();
   if (!user) redirect('/portal');
 
-  // RLS scopes this to the signed-in client's own orders — a foreign id 404s.
+  // Client-only, scoped to their own client ids — a foreign id 404s.
+  const clientIds = await requireClientIds(supabase, user.id);
+  if (clientIds.length === 0) return <NotAClient />;
+
   const { data: order } = await supabase
     .from('orders')
     .select(
@@ -59,6 +64,7 @@ export default async function ClientReelDetail({ params }: { params: { id: strin
     )
     .eq('id', params.id)
     .eq('order_kind', 'reel_edit')
+    .in('client_id', clientIds)
     .maybeSingle();
   if (!order) notFound();
 

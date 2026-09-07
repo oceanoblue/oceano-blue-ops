@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { PortalHero } from '@/components/portal/PortalHero';
+import { requireClientIds } from '@/lib/portal/require-client';
 import { ReelIntakeWizard } from '@/components/portal/ReelIntakeWizard';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,9 @@ export default async function NewReelPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/portal');
+
+  // Client-only (staff / contractors are sent to their own portal).
+  await requireClientIds(supabase, user.id);
 
   // The wizard uploads footage into the client's own storage prefix, so it
   // needs the caller's client_id. current_client_id() is the same helper RLS

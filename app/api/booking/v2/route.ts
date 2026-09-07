@@ -106,6 +106,27 @@ export async function POST(request: Request) {
     await supabase.from('orders').update({ project_type: b.project_type as any }).eq('id', data);
   }
 
+  // The wizard assigns by team_member (photographer_id). When that person is
+  // also a contractor (linked via contractors.team_member_id), complete the
+  // assignment the way the office picker does — contractor_id + their pay rate
+  // — so the shoot shows up in their field portal and pays out correctly.
+  if (b.photographer_id) {
+    const { data: linked } = await (supabase as any)
+      .from('contractors')
+      .select('id, pay_rate_cents')
+      .eq('team_member_id', b.photographer_id)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+    if (linked?.id) {
+      await (supabase as any)
+        .from('orders')
+        .update({ contractor_id: linked.id, pay_amount_cents: linked.pay_rate_cents ?? 0 })
+        .eq('id', data)
+        .is('contractor_id', null);
+    }
+  }
+
   // Sync the shoot onto the office calendars (master info@ + the assigned
   // photographer's own calendar). Fail-soft — never fails a committed booking.
   try {

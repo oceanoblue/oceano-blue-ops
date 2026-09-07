@@ -6,6 +6,8 @@ import { fmtAddress, fmtRelative } from '@/lib/utils/format';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PortalHero } from '@/components/portal/PortalHero';
+import { NotAClient } from '@/components/portal/NotAClient';
+import { requireClientIds } from '@/lib/portal/require-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,16 +18,22 @@ export default async function ClientListingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/portal');
 
-  // Listings — RLS filters by current_client_id() automatically.
+  // Only a client belongs here (staff / contractors are redirected to their own
+  // portal). Filter explicitly by their client ids on top of RLS.
+  const clientIds = await requireClientIds(supabase, user.id);
+  if (clientIds.length === 0) return <NotAClient />;
+
   const { data: listings } = await supabase
     .from('listings')
     .select('id, address_line1, city, state, zip, bedrooms, bathrooms, sqft, status, updated_at')
+    .in('client_id', clientIds)
     .order('updated_at', { ascending: false });
 
   // Most recent order per listing for status pill + delivery info.
   const { data: orders } = await supabase
     .from('orders')
     .select('id, listing_id, status, scheduled_at, delivered_at')
+    .in('client_id', clientIds)
     .order('updated_at', { ascending: false });
 
   const latestOrder = new Map<string, any>();

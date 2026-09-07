@@ -177,14 +177,18 @@ export async function POST(request: Request) {
   if (isTeam) orderInsert.photographer_id = b.assignee!.id;
 
   // Snapshot the contractor's rate onto the order (payout math stays stable
-  // even if the rate changes later).
+  // even if the rate changes later). A contractor linked to a team_members row
+  // (e.g. Karen) also gets photographer_id — their scheduling identity — so the
+  // calendar sync and double-book guard treat them as one person, exactly like
+  // the order-page picker does.
   if (isContractor) {
     const { data: c } = await admin
       .from('contractors')
-      .select('pay_rate_cents')
+      .select('pay_rate_cents, team_member_id')
       .eq('id', b.assignee!.id)
       .maybeSingle();
     orderInsert.pay_amount_cents = c?.pay_rate_cents ?? 0;
+    if (c?.team_member_id) orderInsert.photographer_id = c.team_member_id;
   }
 
   // Insert via the RPC so a staff "book anyway" can override the travel buffer

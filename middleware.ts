@@ -84,13 +84,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Signed in, but office routes require STAFF (team member). Contractors and
-  // clients are in the same auth pool and only ever use the public-prefixed
-  // /field, /portal, /api/field, /api/portal, /api/delivery routes — so a
-  // non-staff session reaching here is either a mistyped URL or an attempt to
-  // hit an office endpoint by id. is_team_member() is SECURITY DEFINER on
-  // auth.uid(); anon key + cookies is enough to evaluate it.
-  const { data: isStaff } = await supabase.rpc('is_team_member');
+  // Signed in, but office routes require OFFICE STAFF. Contractors and clients
+  // are in the same auth pool and only ever use the public-prefixed /field,
+  // /portal, /api/field, /api/portal, /api/delivery routes — so a non-staff
+  // session reaching here is either a mistyped URL or an attempt to hit an
+  // office endpoint by id. Each member can read their own team_members row
+  // (RLS "self select"), which also tells us their role.
+  const { data: me } = await supabase
+    .from('team_members')
+    .select('role, is_active')
+    .eq('id', user.id)
+    .maybeSingle();
+  const isStaff = Boolean(me?.is_active);
   if (!isStaff) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
@@ -98,6 +103,20 @@ export async function middleware(request: NextRequest) {
     // Non-staff on an office page → send them to the public home.
     const url = request.nextUrl.clone();
     url.pathname = '/';
+    url.search = '';
+    return NextResponse.redirect(url);
+  }
+
+  // Photographers are field, not office. Their team_members row exists for
+  // scheduling (availability, double-book guard, calendar) — not so they can
+  // browse every order, client, and price. Send them to their own portal,
+  // which shows only the shoots assigned to them.
+  if (me?.role === 'photographer') {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = '/field/shoots';
     url.search = '';
     return NextResponse.redirect(url);
   }

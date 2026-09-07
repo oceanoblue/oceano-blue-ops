@@ -4,10 +4,14 @@ import { createPhotoIntakeRequest } from '@/lib/integrations/dropbox';
 import { sendEmail } from '@/lib/email/resend';
 import { sendSms } from '@/lib/integrations/quo';
 import { contractorAssignmentEmail } from '@/lib/email/templates';
+import { fmtDateTimeTz, fmtCents } from '@/lib/utils/format';
+import { signRespondToken, respondPageUrl, respondTokenExpiry } from '@/lib/field/respond-token';
 
 /**
- * Office action: email the assigned contractor their shoot + a one-tap Dropbox
- * upload link. Ensures the Dropbox folder/link exists first. Team-only.
+ * Office action: ask the assigned contractor to take the shoot. Email + text
+ * with the date, address, one-tap Accept / Decline links, and the Dropbox
+ * upload link for later. Ensures the Dropbox folder/link exists first.
+ * Team-only.
  */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -28,7 +32,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const { data: order } = await admin
     .from('orders')
-    .select('id, order_number, contractor_id, dropbox_intake_url, dropbox_intake_path, listings(address_line1, city, state, zip, sqft), internal_notes')
+    .select(
+      'id, order_number, contractor_id, scheduled_at, timezone, pay_amount_cents, dropbox_intake_url, dropbox_intake_path, listings(address_line1, city, state, zip, sqft), internal_notes'
+    )
     .eq('id', params.id)
     .maybeSingle();
   if (!order) return NextResponse.json({ error: 'order_not_found' }, { status: 404 });
@@ -69,14 +75,27 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   const base = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+  const whenText = order.scheduled_at ? fmtDateTimeTz(order.scheduled_at, order.timezone) : null;
+  const pay = (order as any).pay_amount_cents as number | null;
+
+  // Login-free accept / decline links (signed; die on reassignment).
+  const token = signRespondToken(order.id, order.contractor_id, respondTokenExpiry(order.scheduled_at));
+  const acceptUrl = token ? respondPageUrl(base, token, 'accepted') : null;
+  const declineUrl = token ? respondPageUrl(base, token, 'declined') : null;
+  const respondUrl = token ? respondPageUrl(base, token) : `${base}/field/shoots/${order.id}`;
+
   const { subject, html } = contractorAssignmentEmail({
     contractorName: contractor.full_name,
     address: addr,
     cityStateZip: [listing.city, listing.state, listing.zip].filter(Boolean).join(', '),
+    whenText,
     sqft: listing.sqft,
     services: order.internal_notes,
+    payText: pay && pay > 0 ? fmtCents(pay) : null,
     uploadUrl: uploadUrl!,
     portalUrl: `${base}/field/shoots/${order.id}`,
+    acceptUrl,
+    declineUrl,
   });
 
   const sent = await sendEmail({ to: contractor.email, subject, html });
@@ -91,7 +110,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // went out, so an SMS hiccup never fails the request.
   const sms = await sendSms({
     to: contractor.phone,
-    text: `Oceano Blue: new shoot assigned — ${addr}. Upload the RAWs here: ${uploadUrl}`,
+    text: `Oceano Blue: can you shoot ${addr}${whenText ? ` on ${whenText}` : ''}? Accept or decline: ${respondUrl}`,
   });
   if (sms.status === 'failed') console.error('[notify-contractor] sms failed:', sms.error);
 

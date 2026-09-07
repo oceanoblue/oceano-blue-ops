@@ -120,10 +120,26 @@ export interface EventPayload {
   startIso: string;
   endIso: string;
   timezone: string;
-  attendeeEmails?: string[];
+  /**
+   * Guests to invite. Google delivers the event to each guest's own calendar
+   * (any Gmail / Workspace address) with an emailed invitation — no calendar
+   * sharing required. This is how a shoot reaches a photographer whose calendar
+   * we can't write to directly. `responseStatus` lets the organizer SET the
+   * guest's RSVP (we mirror the app's accept / decline onto the invite).
+   */
+  attendees?: Attendee[];
   /** 'transparent' = shows as FREE (visible but doesn't block); 'opaque' = busy. */
   transparency?: 'opaque' | 'transparent';
 }
+
+export type AttendeeStatus = 'needsAction' | 'accepted' | 'declined' | 'tentative';
+export interface Attendee {
+  email: string;
+  responseStatus?: AttendeeStatus;
+}
+
+/** Whether Google should email guests about this write. Defaults to 'none'. */
+export type SendUpdates = 'all' | 'none';
 
 function toBody(payload: EventPayload): any {
   const body: any = {
@@ -135,14 +151,72 @@ function toBody(payload: EventPayload): any {
     reminders: { useDefault: true },
   };
   if (payload.transparency) body.transparency = payload.transparency;
-  if (payload.attendeeEmails?.length) {
-    body.attendees = payload.attendeeEmails.map((email) => ({ email }));
-  }
+  // Always send the attendee list (even empty) so a PATCH can REMOVE a guest
+  // after a reassignment — omitting the key would leave the old guest invited.
+  body.attendees = (payload.attendees ?? []).map((a) => ({
+    email: a.email,
+    ...(a.responseStatus ? { responseStatus: a.responseStatus } : {}),
+  }));
   return body;
 }
 
 const calUrl = (calendarId: string, suffix = '') =>
   `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events${suffix}`;
+
+/** Log a non-2xx Calendar API response so a silent sync failure is greppable. */
+async function reportApiFailure(op: string, r: Response, ctx: Record<string, unknown>) {
+  const body = await r.text().catch(() => '');
+  captureError(`gcal.${op}`, new Error(`${op}_${r.status}: ${body.slice(0, 300)}`), ctx);
+}
+
+/** A trimmed view of an existing Google event, for change detection. */
+export interface ExistingEvent {
+  id: string;
+  status: string;
+  summary: string;
+  description: string;
+  location: string;
+  startIso: string;
+  endIso: string;
+  transparency: 'opaque' | 'transparent';
+  /** Guests, lower-cased and sorted by email, with their current RSVP. */
+  attendees: { email: string; responseStatus: AttendeeStatus }[];
+}
+
+/** Read one event back. Returns null when it's gone (404) or the call fails. */
+export async function getEvent(
+  actorTeamMemberId: string,
+  calendarId: string,
+  eventId: string
+): Promise<ExistingEvent | null> {
+  const token = await getAccessToken(actorTeamMemberId);
+  if (!token) return null;
+  const r = await fetch(calUrl(calendarId, `/${encodeURIComponent(eventId)}`), {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) {
+    if (r.status !== 404) await reportApiFailure('getEvent', r, { calendarId, eventId });
+    return null;
+  }
+  const e: any = await r.json();
+  return {
+    id: e.id,
+    status: e.status ?? 'confirmed',
+    summary: e.summary ?? '',
+    description: e.description ?? '',
+    location: e.location ?? '',
+    startIso: e.start?.dateTime ?? '',
+    endIso: e.end?.dateTime ?? '',
+    transparency: e.transparency === 'transparent' ? 'transparent' : 'opaque',
+    attendees: ((e.attendees ?? []) as any[])
+      .map((a) => ({
+        email: String(a.email ?? '').toLowerCase(),
+        responseStatus: (a.responseStatus as AttendeeStatus) || 'needsAction',
+      }))
+      .filter((a) => a.email)
+      .sort((a, b) => a.email.localeCompare(b.email)),
+  };
+}
 
 /**
  * Insert an event onto `calendarId`, authenticating as `actorTeamMemberId`.
@@ -152,16 +226,23 @@ const calUrl = (calendarId: string, suffix = '') =>
 export async function insertEvent(
   actorTeamMemberId: string,
   calendarId: string,
-  payload: EventPayload
+  payload: EventPayload,
+  sendUpdates: SendUpdates = 'none'
 ): Promise<CalendarEvent | null> {
   const token = await getAccessToken(actorTeamMemberId);
-  if (!token) return null;
-  const r = await fetch(calUrl(calendarId, '?sendUpdates=none'), {
+  if (!token) {
+    logEvent('gcal.insertEvent', 'no_token', { actorTeamMemberId, calendarId });
+    return null;
+  }
+  const r = await fetch(calUrl(calendarId, `?sendUpdates=${sendUpdates}`), {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(toBody(payload)),
   });
-  if (!r.ok) return null;
+  if (!r.ok) {
+    await reportApiFailure('insertEvent', r, { actorTeamMemberId, calendarId });
+    return null;
+  }
   const data: any = await r.json();
   return { id: data.id, htmlLink: data.htmlLink };
 }
@@ -171,16 +252,26 @@ export async function updateEvent(
   actorTeamMemberId: string,
   calendarId: string,
   eventId: string,
-  payload: EventPayload
+  payload: EventPayload,
+  sendUpdates: SendUpdates = 'none'
 ): Promise<CalendarEvent | null> {
   const token = await getAccessToken(actorTeamMemberId);
-  if (!token) return null;
-  const r = await fetch(calUrl(calendarId, `/${encodeURIComponent(eventId)}?sendUpdates=none`), {
-    method: 'PATCH',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify(toBody(payload)),
-  });
-  if (!r.ok) return null;
+  if (!token) {
+    logEvent('gcal.updateEvent', 'no_token', { actorTeamMemberId, calendarId });
+    return null;
+  }
+  const r = await fetch(
+    calUrl(calendarId, `/${encodeURIComponent(eventId)}?sendUpdates=${sendUpdates}`),
+    {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(toBody(payload)),
+    }
+  );
+  if (!r.ok) {
+    await reportApiFailure('updateEvent', r, { actorTeamMemberId, calendarId, eventId });
+    return null;
+  }
   const data: any = await r.json();
   return { id: data.id, htmlLink: data.htmlLink };
 }
@@ -188,12 +279,20 @@ export async function updateEvent(
 export async function deleteEvent(
   actorTeamMemberId: string,
   calendarId: string,
-  eventId: string
+  eventId: string,
+  sendUpdates: SendUpdates = 'none'
 ): Promise<void> {
   const token = await getAccessToken(actorTeamMemberId);
   if (!token) return;
-  await fetch(calUrl(calendarId, `/${encodeURIComponent(eventId)}`), {
-    method: 'DELETE',
-    headers: { authorization: `Bearer ${token}` },
-  });
+  const r = await fetch(
+    calUrl(calendarId, `/${encodeURIComponent(eventId)}?sendUpdates=${sendUpdates}`),
+    {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${token}` },
+    }
+  );
+  // 404/410 = already gone, which is the outcome we wanted.
+  if (!r.ok && r.status !== 404 && r.status !== 410) {
+    await reportApiFailure('deleteEvent', r, { actorTeamMemberId, calendarId, eventId });
+  }
 }

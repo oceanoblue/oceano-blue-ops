@@ -72,9 +72,11 @@ export default async function IntegrationsPage({
           )}
         </div>
         <p className="mt-4 text-xs text-slate-500">
-          Every shoot is pushed to the master <strong>info@oceanoblue.net</strong> calendar, plus a
-          busy hold on the assigned photographer&rsquo;s own calendar. Existing calendar events also
-          block availability in the booking wizard.
+          Every shoot is pushed to the master <strong>info@oceanoblue.net</strong> calendar. The
+          assigned photographer gets it on their own calendar too: if they&rsquo;ve connected Google
+          here, a busy hold is written straight to their calendar; otherwise they&rsquo;re invited
+          as a guest, which lands on any Gmail with an emailed invitation and no setup. Existing
+          calendar events also block availability in the booking wizard.
         </p>
         {gcal && (
           <div className="mt-5 border-t border-slate-100 pt-5">
