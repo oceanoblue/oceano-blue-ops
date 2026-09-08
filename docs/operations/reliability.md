@@ -20,6 +20,12 @@ Temporary token refresh failures leave the connection active and surface an erro
 
 Google virtual subscription calendars ending in `@group.v.calendar.google.com` may return `notFound` from FreeBusy even when calendar enumeration succeeds. Only that unsupported-subscription response is skipped; standard personal/shared calendar errors and other subscription failures remain blocking. Preview validation exposed this case, and regression tests preserve busy ranges from the working calendars.
 
+## Payment confirmations
+
+The Stripe destination at `/api/stripe/webhook` must subscribe to both `checkout.session.completed` and `checkout.session.async_payment_succeeded`. Completion alone can mean a delayed payment is still pending. Downloads unlock only for a payment-mode session whose payment status is `paid` or `no_payment_required` (a fully discounted checkout).
+
+The handler verifies Stripe's signature against the raw request body and stamps an order only if it is not already paid. A database write error returns HTTP 500 so Stripe can retry; check `stripe.paymentPersistence` logs and Stripe event deliveries if a settled payment leaves downloads locked. Do not mark an order paid merely because the customer reached the checkout success page.
+
 ## Release validation and rollback
 
 The release upgrades Next 14 through Next 15 to Next 16, React 19, current patched Sharp, and patched test/database tooling. Server request cookies and route parameters use the asynchronous APIs. Node 24 is configured in CI to match Vercel. Tests, TypeScript, build, lint errors, and high/critical dependency advisories are blocking CI steps. Compiler-adoption lint rules remain disabled pending a separate React Compiler migration; existing lint warnings are not build failures.

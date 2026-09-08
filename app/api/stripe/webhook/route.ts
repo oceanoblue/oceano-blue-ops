@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe/server';
+import { captureError } from '@/lib/observability/report';
 
 export const dynamic = 'force-dynamic';
 // Stripe needs the raw, unparsed body to verify the signature.
@@ -32,13 +33,18 @@ export async function POST(req: Request) {
     );
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as any;
-    const orderId = session.metadata?.order_id as string | undefined;
+  if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+    const session = event.data.object;
+    // Checkout can complete while a delayed payment is still pending. Only
+    // settlement (or a fully discounted checkout) may unlock the downloads.
+    if (session.mode !== 'payment' || !['paid', 'no_payment_required'].includes(session.payment_status)) {
+      return NextResponse.json({ received: true });
+    }
+    const orderId = session.metadata?.order_id;
     if (orderId) {
       const supabase = createAdminClient();
       // Idempotent: only stamp if not already paid.
-      await supabase
+      const { error } = await supabase
         .from('orders')
         .update({
           download_paid_at: new Date().toISOString(),
@@ -47,6 +53,12 @@ export async function POST(req: Request) {
         })
         .eq('id', orderId)
         .is('download_paid_at', null);
+      if (error) {
+        captureError('stripe.paymentPersistence', error, { eventId: event.id, orderId });
+        // Stripe retries non-2xx responses. Acknowledging here would permanently
+        // lose the payment notification and leave the customer's downloads locked.
+        return NextResponse.json({ error: 'payment_persistence_failed' }, { status: 500 });
+      }
     }
   }
 
