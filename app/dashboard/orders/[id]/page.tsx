@@ -345,6 +345,7 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
                   orderId={order.id}
                   autoEnhanceOnUpload={autoEnhanceOnUpload}
                   aiEditingEnabled={aiEditingEnabled}
+                  externalFinalsCount={finalsCount}
                 />
               </section>
 
