@@ -35,6 +35,7 @@ beforeAll(async () => {
   if (!trigger) throw new Error('Missing production overlap guard');
   await db.exec(trigger + `create trigger no_overlap before insert or update on orders for each row execute function check_order_no_double_book();`);
   await db.exec(readFileSync('supabase/migrations/20260908140351_reliable_public_booking.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260908141709_idempotent_order_pricing.sql','utf8'));
   const search = readFileSync('supabase/migrations/20260908140411_operations_search_and_health.sql','utf8').split('-- Cache the per-request')[0];
   await db.exec(search + 'commit;');
 }, 30000);
@@ -89,6 +90,17 @@ describe('public booking transaction', () => {
     await db.exec('create or replace function is_team_member() returns boolean language sql as $$select false$$;');
     const denied = await db.query<{result:{total:number}}>('select search_operations_orders() as result');
     expect(denied.rows[0].result.total).toBe(0);
+  });
+  it('replays pricing without duplicate items and retains totals from other lines', async () => {
+    const order = (await book()).rows[0].id;
+    await db.query("insert into order_items(order_id,description,quantity,total_cents) values($1,'Custom service',1,5000)",[order]);
+    const args = [order,JSON.stringify(payload.items),2000];
+    await db.query('select add_order_items_priced($1,$2::jsonb,$3)',args);
+    await db.query('select add_order_items_priced($1,$2::jsonb,$3)',args);
+    expect((await db.query('select count(*)::int as n from order_items')).rows).toEqual([{n:2}]);
+    expect((await db.query('select total_cents from orders')).rows).toEqual([{total_cents:25000}]);
+    await expect(db.query('select add_order_items_priced($1,$2::jsonb,$3)',[order,JSON.stringify([{product_id:product,quantity:-1}]),2000])).rejects.toThrow('invalid_quantity');
+    expect((await db.query('select total_cents from orders')).rows).toEqual([{total_cents:25000}]);
   });
   it('rejects a past booking', async () => { await expect(book({...payload,scheduled_at:'2020-01-01T14:00:00Z'})).rejects.toThrow('slot_unavailable'); });
   it('rejects long blocks that span the entire selected day', async () => {
