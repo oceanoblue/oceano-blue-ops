@@ -20,6 +20,14 @@ export interface RawExifTags {
   DateTimeOriginal: string | null;
   Make?: string;
   Model?: string;
+  LensModel?: string;
+  FocalLength?: number;
+  ExposureTime?: number;
+  FNumber?: number;
+  ISO?: number;
+  Flash?: number;
+  SubSecTimeOriginal?: string;
+  OffsetTimeOriginal?: string;
 }
 
 // ─── Embedded JPEG extraction ──────────────────────────────────────────────
@@ -121,7 +129,7 @@ function makeReaders(b: Uint8Array, le: boolean) {
  * (as "YYYY-MM-DDTHH:MM:SS"), and camera make/model. Best-effort: any field that
  * can't be read is simply omitted/null.
  */
-export function readRawExifTags(b: Uint8Array): RawExifTags {
+function readTiffExifTags(b: Uint8Array): RawExifTags {
   const out: RawExifTags = { ExposureBiasValue: null, DateTimeOriginal: null };
   try {
     if (b.length < 8) return out;
@@ -153,33 +161,89 @@ export function readRawExifTags(b: Uint8Array): RawExifTags {
         const count = u32(ent + 4);
         const size = (TYPE_SIZE[type] ?? 1) * count;
         const valOff = size <= 4 ? ent + 8 : u32(ent + 8);
+        if (!TYPE_SIZE[type] || !Number.isSafeInteger(size) || valOff + size > b.length) continue;
         want(tag, type, count, valOff);
       }
     };
 
     let exifIFD = 0;
-    readIFD(u32(4), (tag, _type, count, valOff) => {
-      if (tag === TAG_EXIF_IFD) exifIFD = u32(valOff);
-      else if (tag === TAG_MAKE) out.Make = ascii(valOff, count);
-      else if (tag === TAG_MODEL) out.Model = ascii(valOff, count);
-    });
-
-    if (exifIFD) {
-      readIFD(exifIFD, (tag, _type, count, valOff) => {
-        if (tag === TAG_EXPOSURE_BIAS) {
-          const num = s32(valOff);
-          const den = s32(valOff + 4);
-          if (den !== 0) out.ExposureBiasValue = num / den;
-        } else if (tag === TAG_DATETIME_ORIGINAL) {
-          const raw = ascii(valOff, count); // "YYYY:MM:DD HH:MM:SS"
-          const m = raw.match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    const readTag = (tag: number, type: number, count: number, valOff: number) => {
+      if (tag === TAG_EXIF_IFD && type === 4 && count === 1) exifIFD = u32(valOff);
+      else if (type === 2) {
+        const value = ascii(valOff, count);
+        if (tag === TAG_MAKE) out.Make = value;
+        else if (tag === TAG_MODEL) out.Model = value;
+        else if (tag === 0xa434) out.LensModel = value;
+        else if (tag === 0x9291) out.SubSecTimeOriginal = value;
+        else if (tag === 0x9011) out.OffsetTimeOriginal = value;
+        else if (tag === TAG_DATETIME_ORIGINAL) {
+          const m = value.match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
           if (m) out.DateTimeOriginal = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`;
         }
-      });
-    }
+      } else if ((type === 5 || type === 10) && count === 1) {
+        const read = type === 10 ? s32 : u32;
+        const denominator = read(valOff + 4);
+        if (!denominator) return;
+        const value = read(valOff) / denominator;
+        if (tag === TAG_EXPOSURE_BIAS) out.ExposureBiasValue = value;
+        else if (value > 0) {
+          if (tag === 0x829a) out.ExposureTime = value;
+          else if (tag === 0x829d) out.FNumber = value;
+          else if (tag === 0x920a) out.FocalLength = value;
+        }
+      } else if (tag === 0x9209 && type === 3 && count === 1) {
+        out.Flash = u16(valOff);
+      } else if (tag === 0x8827 && type === 3 && count === 1) {
+        const value = u16(valOff);
+        if (value > 0) out.ISO = value;
+      }
+    };
+    // TIFF RAW stores exposure in a sub-IFD; Canon CR3 CMT2 uses IFD0 itself.
+    readIFD(u32(4), readTag);
+    if (exifIFD) readIFD(exifIFD, readTag);
+
   } catch {
     /* best-effort */
   }
+  return out;
+}
+
+/** Read TIFF RAW or Canon CR3's bounded CMT1/CMT2 metadata boxes.
+ * Never scan image payloads for apparent TIFF headers: only descend through
+ * moov and the known Canon metadata UUID, and keep offsets inside each box.
+ */
+export function readRawExifTags(b: Uint8Array): RawExifTags {
+  const out = readTiffExifTags(b);
+  if (b.length < 16 || String.fromCharCode(...b.subarray(4, 8)) !== 'ftyp' ||
+      String.fromCharCode(...b.subarray(8, 12)) !== 'crx ') return out;
+  const view = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const canonUuid = '85c0b687820f11e08111f4ce462b6a48';
+  const walk = (start: number, end: number, depth: number) => {
+    if (depth > 3) return;
+    for (let pos = start; pos + 8 <= end;) {
+      let size = view.getUint32(pos);
+      let header = 8;
+      if (size === 1) {
+        if (pos + 16 > end) return;
+        size = view.getUint32(pos + 8) * 2 ** 32 + view.getUint32(pos + 12);
+        header = 16;
+      } else if (size === 0) size = end - pos;
+      if (!Number.isSafeInteger(size) || size < header || pos + size > end) return;
+      const type = String.fromCharCode(...b.subarray(pos + 4, pos + 8));
+      const payload = pos + header;
+      if (type === 'moov' && depth === 0) walk(payload, pos + size, depth + 1);
+      else if (type === 'uuid' && depth === 1 && size >= header + 16) {
+        const uuid = Array.from(b.subarray(payload, payload + 16), x => x.toString(16).padStart(2, '0')).join('');
+        if (uuid === canonUuid) walk(payload + 16, pos + size, depth + 1);
+      } else if (depth === 2 && (type === 'CMT1' || type === 'CMT2')) {
+        for (const [key, value] of Object.entries(readTiffExifTags(b.subarray(payload, pos + size)))) {
+          if (value != null) Object.assign(out, { [key]: value });
+        }
+      }
+      pos += size;
+    }
+  };
+  walk(0, b.length, 0);
   return out;
 }
 

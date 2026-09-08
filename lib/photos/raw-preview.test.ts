@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { extractLargestEmbeddedJpeg, readRawExifTags } from './raw-preview';
+import { describe, it, expect, vi } from 'vitest';
+import { extractLargestEmbeddedJpeg, readRawExifTags, extractRawForUpload } from './raw-preview';
 
 /** Build a minimal but structurally-valid JPEG: SOI, APP0(payload), SOS, entropy, EOI. */
 function makeJpeg(payload: number, entropy: number): Uint8Array {
@@ -112,4 +112,92 @@ describe('readRawExifTags', () => {
     expect(t.ExposureBiasValue).toBeNull();
     expect(t.DateTimeOriginal).toBeNull();
   });
+});
+
+function box(type: string, payload: Uint8Array): Uint8Array {
+  const out = new Uint8Array(payload.length + 8);
+  new DataView(out.buffer).setUint32(0, out.length);
+  out.set(new TextEncoder().encode(type), 4);
+  out.set(payload, 8);
+  return out;
+}
+function concat(...parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let offset = 0;
+  for (const p of parts) { out.set(p, offset); offset += p.length; }
+  return out;
+}
+function cr3(...metadata: Uint8Array[]): Uint8Array {
+  const uuid = Uint8Array.from('85c0b687820f11e08111f4ce462b6a48'.match(/../g)!.map(s => parseInt(s, 16)));
+  return concat(box('ftyp', new TextEncoder().encode('crx     ')),
+    box('moov', box('uuid', concat(uuid, ...metadata))));
+}
+function exposureTiff(): Uint8Array {
+  const b = new Uint8Array(400), v = new DataView(b.buffer);
+  b.set([0x49, 0x49, 0x2a, 0, 8, 0, 0, 0]);
+  const tags: [number, number, number, number][] = [
+    [0x829a, 5, 1, 160], [0x829d, 5, 1, 168], [0x8827, 3, 1, 100],
+    [0x9204, 10, 1, 176], [0x920a, 5, 1, 184],
+    [0x9003, 2, 20, 200], [0xa434, 2, 11, 224],
+  ];
+  v.setUint16(8, tags.length, true);
+  tags.forEach(([tag, type, count, value], i) => {
+    const pos = 10 + i * 12;
+    v.setUint16(pos, tag, true); v.setUint16(pos + 2, type, true);
+    v.setUint32(pos + 4, count, true); v.setUint32(pos + 8, value, true);
+  });
+  [[160, 6, 10], [168, 8, 1], [176, 0, 1], [184, 16, 1]].forEach(([o, n, d]) => {
+    v.setUint32(o, n, true); v.setUint32(o + 4, d, true);
+  });
+  b.set(new TextEncoder().encode('2026:08:24 12:27:35\0'), 200);
+  b.set(new TextEncoder().encode('16-35mm II\0'), 224);
+  return b;
+}
+
+describe('Canon CR3 metadata', () => {
+  it('merges camera CMT1 and exposure CMT2 TIFF roots without losing zero bias', () => {
+    const tags = readRawExifTags(cr3(box('CMT1', makeTiff(0, 1, '2026:08:24 12:27:35')), box('CMT2', exposureTiff())));
+    expect(tags).toMatchObject({ Make: 'SONY', Model: 'ILCE-7M4', ExposureBiasValue: 0,
+      ExposureTime: 0.6, FNumber: 8, ISO: 100, FocalLength: 16, LensModel: '16-35mm II',
+      DateTimeOriginal: '2026-08-24T12:27:35' });
+  });
+
+  it('does not read apparent metadata from image data or an unknown UUID', () => {
+    expect(readRawExifTags(concat(box('ftyp', new TextEncoder().encode('crx     ')),
+      box('mdat', box('CMT2', exposureTiff())))).ExposureTime).toBeUndefined();
+    const bytes = cr3(box('CMT2', exposureTiff()));
+    bytes[32] = 0; // first UUID byte
+    expect(readRawExifTags(bytes).ExposureTime).toBeUndefined();
+  });
+
+  it('ignores truncated boxes and out-of-bounds TIFF value pointers', () => {
+    const bytes = cr3(box('CMT2', exposureTiff()));
+    expect(readRawExifTags(bytes.subarray(0, bytes.length - 1)).ExposureTime).toBeUndefined();
+    const tiff = exposureTiff();
+    new DataView(tiff.buffer).setUint32(18, 0xfffffffc, true);
+    expect(readRawExifTags(cr3(box('CMT2', tiff))).ExposureTime).toBeUndefined();
+  });
+
+  it('extracts upload metadata from CR3 original without exifr or a preview', async () => {
+    const { extractUploadExif } = await import('./exif-extract');
+    const file = new File([cr3(box('CMT2', exposureTiff())).slice()], 'bracket.CR3');
+    expect(await extractUploadExif(file)).toMatchObject({ ExposureBiasValue: 0, ExposureTime: 0.6, ISO: 100 });
+  });
+});
+
+
+it('keeps CR3 metadata beside the normalized JPEG preview', async () => {
+  vi.stubGlobal('createImageBitmap', async () => ({ width: 4096, height: 2732, close() {} }));
+  vi.stubGlobal('document', { createElement: () => ({
+    getContext: () => ({ drawImage() {} }),
+    toBlob: (done: (blob: Blob) => void) => done(new Blob(['normalized-preview'])),
+  }) });
+  try {
+    const bytes = concat(cr3(box('CMT2', exposureTiff())), box('mdat', makeJpeg(10, 20)));
+    const result = await extractRawForUpload(new File([bytes.slice()], 'capture.CR3'));
+    expect(result?.file.name).toBe('capture.jpg');
+    expect(result?.exif).toMatchObject({ ExposureTime: 0.6, ExposureBiasValue: 0, FNumber: 8, ISO: 100 });
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

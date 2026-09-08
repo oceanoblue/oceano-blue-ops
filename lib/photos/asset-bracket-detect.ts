@@ -1,6 +1,6 @@
 import type { Photo } from '@/lib/supabase/database.types';
 import { groupWithExif, type ExifSnapshot } from './bracket-grouping';
-import { detectBrackets } from '@/lib/ai/bracket-detect';
+import { detectBrackets, isShutterBracket, exposureTimeOf } from '@/lib/ai/bracket-detect';
 
 /**
  * Real estate bracket detection over Production OS `assets` rows.
@@ -19,6 +19,7 @@ import { detectBrackets } from '@/lib/ai/bracket-detect';
  *   filename run, no EXIF available to confirm → 0.82  (no review)
  *   filename run with partial/ambiguous EXIF   → 0.70  (review)
  *   EXIF-only group (filenames not sequential) → 0.65  (review)
+ *   Same-bias burst with regular shutter steps → 0.65  (review)
  *
  * Groups below REVIEW_THRESHOLD (0.80) are flagged for human review. The
  * threshold sits below the filename-only score (0.82, reliable) and above the
@@ -47,7 +48,7 @@ export type BracketRole =
   | 'reject'
   | 'manual_review';
 
-export type DetectionMethod = 'filename+exif' | 'filename' | 'exif';
+export type DetectionMethod = 'filename+exif' | 'filename' | 'exif' | 'exif-exposure';
 
 export interface DetectedGroup {
   /** Asset ids ordered darkest → brightest where exposure bias is known. */
@@ -121,13 +122,17 @@ function makeGroup(
   // Order darkest → brightest when we know the bias; otherwise keep input order
   // (which is already filename- or timestamp-sequential from the detectors).
   let ordered = ids;
-  if (allHaveBias) {
+  if (method === 'exif-exposure') {
+    ordered = [...members].sort((a, b) => (exposureTimeOf(a as unknown as Photo) ?? 0) - (exposureTimeOf(b as unknown as Photo) ?? 0)).map(a => a.id);
+  } else if (allHaveBias) {
     ordered = [...biases].sort((x, y) => (x.bias as number) - (y.bias as number)).map((b) => b.a.id);
   }
 
   // Base exposure = frame with bias closest to 0, else the middle frame.
   let baseId: string;
-  if (allHaveBias) {
+  if (method === 'exif-exposure') {
+    baseId = ordered[Math.floor(ordered.length / 2)];
+  } else if (allHaveBias) {
     baseId = biases.reduce((best, cur) =>
       Math.abs(cur.bias as number) < Math.abs(best.bias as number) ? cur : best
     ).a.id;
@@ -186,14 +191,17 @@ export function detectAssetBracketGroups(assets: AssetLike[]): AssetDetectionRes
 
   // 2) EXIF-only recovery: brackets whose filenames are not sequential (renamed
   //    or interleaved from two bodies) get pulled out of the leftover singles by
-  //    a sliding capture-time window + distinct exposure bias.
+  //    a sliding capture-time window + distinct exposure bias. Same-bias shutter
+  //    recovery is enabled only here, where proposals require human review.
   const leftovers = primary.singles.map((p) => byId.get(p.id)!).filter(Boolean);
-  for (const ids of detectBrackets(leftovers as unknown as Photo[]).values()) {
+  for (const ids of detectBrackets(leftovers as unknown as Photo[], { allowShutterFallback: true }).values()) {
     if (ids.length < 3) continue;
     if (ids.some((id) => used.has(id))) continue;
     ids.forEach((id) => used.add(id));
-    groups.push(
-      makeGroup(ids, byId, 0.65, 'exif', 'Grouped only by EXIF timestamp + exposure bias; filenames are not sequential — please verify.')
+    const shutter = isShutterBracket(ids.map(id => byId.get(id)!) as unknown as Photo[]);
+    groups.push(shutter
+      ? makeGroup(ids, byId, 0.65, 'exif-exposure', 'Same-bias capture burst with fixed camera, lens, aperture and ISO, and evenly spaced shutter exposures — verify the scene before merging.')
+      : makeGroup(ids, byId, 0.65, 'exif', 'Grouped only by EXIF timestamp + exposure bias; filenames are not sequential — please verify.')
     );
   }
 
