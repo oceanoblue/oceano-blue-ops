@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { localToUtc, dayOfWeekInTz, fmtDateInTz } from '@/lib/utils/timezone';
 import { fetchBusyRanges } from '@/lib/google-calendar/api';
 import { validDate } from './validation';
+import { captureError } from '@/lib/observability/report';
 
 const SLOT_MINUTES = 30;
 
@@ -124,7 +125,8 @@ export async function getAvailability(dateStr: string, duration: number, photogr
         for (const r of ranges) {
           ph.busy.push({ start: new Date(r.start).getTime(), end: new Date(r.end).getTime() });
         }
-      } catch {
+      } catch (error) {
+        captureError('booking.calendarAvailability', error, { teamMemberId: ph.id });
         calendarDegraded = true;
         photographers.delete(ph.id);
       }

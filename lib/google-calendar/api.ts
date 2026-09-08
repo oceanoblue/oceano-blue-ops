@@ -113,6 +113,10 @@ export async function fetchBusyRanges(
   const busy: FreeBusyRange[] = [];
   for (const key of calendarIds) {
     if (!cals[key] || cals[key].errors?.length || !Array.isArray(cals[key].busy)) {
+      logEvent('gcal.freeBusy', 'incomplete', {
+        calendarType: key.endsWith('@group.v.calendar.google.com') ? 'subscription' : 'standard',
+        reasons: (cals[key]?.errors ?? []).map((error: { reason?: string }) => error.reason),
+      });
       throw new Error('calendar_freebusy_incomplete');
     }
     for (const b of cals[key]?.busy ?? []) busy.push(b);
