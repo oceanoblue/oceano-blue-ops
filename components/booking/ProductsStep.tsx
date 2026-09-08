@@ -24,19 +24,25 @@ export function ProductsStep({
 }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [detailFor, setDetailFor] = useState<Product | null>(null);
   const [showAddons, setShowAddons] = useState<Product | null>(null);
 
   useEffect(() => {
-    fetch(`/api/products?sqft=${sqft}&audience=${audience}`)
-      .then((r) => r.json())
+    const controller = new AbortController();
+    setLoading(true); setError(false);
+    fetch(`/api/products?sqft=${sqft}&audience=${audience}`, { signal: controller.signal })
+      .then((r) => { if (!r.ok) throw new Error('catalog_unavailable'); return r.json(); })
       .then((d) => {
+        if (controller.signal.aborted) return;
         setProducts(d.products ?? []);
-        setLoading(false);
         onLoaded?.(d.products ?? []);
       })
-      .catch(() => setLoading(false));
-  }, [sqft, audience, onLoaded]);
+      .catch(() => { if (!controller.signal.aborted) setError(true); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [sqft, audience, onLoaded, retry]);
 
   const baseProducts = products.filter((p) => !p.is_addon);
   const itemIds = new Set(items.map((i) => i.product_id));
@@ -65,7 +71,12 @@ export function ProductsStep({
 
         {loading ? (
           <div className="text-sm text-slate-500">Loading products…</div>
-        ) : (
+        ) : error ? (
+          <div role="alert" className="rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+            <p>We could not load the service catalog. Your property details are saved.</p>
+            <button className="btn-secondary mt-2" onClick={() => setRetry(value => value + 1)}>Try again</button>
+          </div>
+        ) : baseProducts.length === 0 ? <p className="text-sm text-slate-600">No services are available online right now. Please contact the office.</p> : (
           <div className="grid gap-4 sm:grid-cols-2">
             {baseProducts.map((p) => (
               <ProductCard
@@ -80,7 +91,7 @@ export function ProductsStep({
 
         <div className="flex gap-2 justify-between pt-2">
           <button className="btn-ghost" onClick={onBack}>← Back</button>
-          <button className="btn-primary" disabled={items.length === 0} onClick={onComplete}>
+          <button className="btn-primary" disabled={loading || error || items.length === 0 || items.some(item => !products.some(product => product.id === item.product_id))} onClick={onComplete}>
             Continue to Scheduling →
           </button>
         </div>

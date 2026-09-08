@@ -55,10 +55,10 @@ export function ContactStep({
 
       <div className="mt-6 space-y-3">
         <div>
-          <label className="label">Email <span className="text-rose-600">*</span></label>
+          <label className="label" htmlFor="contact-email">Email <span className="text-rose-600">*</span></label>
           <input
             className="input"
-            type="email"
+            id="contact-email" autoComplete="email" type="email"
             required
             value={c.email}
             onChange={(e) => setC({ ...c, email: e.target.value })}
@@ -68,17 +68,17 @@ export function ContactStep({
         {mode === 'guest' && (
           <>
             <div>
-              <label className="label">Full name <span className="text-rose-600">*</span></label>
-              <input className="input" required value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} />
+              <label className="label" htmlFor="contact-name">Full name <span className="text-rose-600">*</span></label>
+              <input id="contact-name" autoComplete="name" className="input" required value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="label">Phone</label>
-                <input className="input" value={c.phone} onChange={(e) => setC({ ...c, phone: e.target.value })} />
+                <label className="label" htmlFor="contact-phone">Phone</label>
+                <input id="contact-phone" autoComplete="tel" className="input" value={c.phone} onChange={(e) => setC({ ...c, phone: e.target.value })} />
               </div>
               <div>
-                <label className="label">Brokerage</label>
-                <input className="input" value={c.brokerage} onChange={(e) => setC({ ...c, brokerage: e.target.value })} />
+                <label className="label" htmlFor="contact-brokerage">Brokerage</label>
+                <input id="contact-brokerage" autoComplete="organization" className="input" value={c.brokerage} onChange={(e) => setC({ ...c, brokerage: e.target.value })} />
               </div>
             </div>
           </>
@@ -90,7 +90,7 @@ export function ContactStep({
         )}
       </div>
 
-      {error && <p className="mt-3 text-sm text-rose-700">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
 
       <div className="mt-6 flex gap-2 justify-between">
         <button type="button" className="btn-ghost" onClick={onBack}>← Back</button>

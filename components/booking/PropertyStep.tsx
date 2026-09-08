@@ -49,36 +49,36 @@ export function PropertyStep({
 
       <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="label">Address line 1</label>
-          <input className="input" required value={a.address_line1} onChange={(e) => setA({ ...a, address_line1: e.target.value })} />
+          <label className="label" htmlFor="confirm-address_line1">Address line 1</label>
+          <input id="confirm-address_line1" autoComplete="address-line1" className="input" required value={a.address_line1} onChange={(e) => setA({ ...a, address_line1: e.target.value })} />
         </div>
         <div>
-          <label className="label">Address line 2</label>
-          <input className="input" placeholder="Suite 100" value={a.address_line2} onChange={(e) => setA({ ...a, address_line2: e.target.value })} />
+          <label className="label" htmlFor="confirm-address_line2">Address line 2</label>
+          <input id="confirm-address_line2" autoComplete="address-line2" className="input" placeholder="Suite 100" value={a.address_line2} onChange={(e) => setA({ ...a, address_line2: e.target.value })} />
         </div>
         <div>
-          <label className="label">City</label>
-          <input className="input" required value={a.city} onChange={(e) => setA({ ...a, city: e.target.value })} />
+          <label className="label" htmlFor="confirm-city">City</label>
+          <input id="confirm-city" autoComplete="address-level2" className="input" required value={a.city} onChange={(e) => setA({ ...a, city: e.target.value })} />
         </div>
         <div>
-          <label className="label">State</label>
-          <input className="input" required maxLength={2} value={a.state} onChange={(e) => setA({ ...a, state: e.target.value.toUpperCase() })} />
+          <label className="label" htmlFor="confirm-state">State</label>
+          <input id="confirm-state" autoComplete="address-level1" className="input" required maxLength={2} value={a.state} onChange={(e) => setA({ ...a, state: e.target.value.toUpperCase() })} />
         </div>
         <div>
-          <label className="label">Postal code</label>
-          <input className="input" required value={a.zip} onChange={(e) => setA({ ...a, zip: e.target.value })} />
+          <label className="label" htmlFor="confirm-zip">Postal code</label>
+          <input id="confirm-zip" autoComplete="postal-code" className="input" required value={a.zip} onChange={(e) => setA({ ...a, zip: e.target.value })} />
         </div>
       </div>
 
       <div className="mt-6">
         <div className="text-xs uppercase tracking-wide text-slate-500">Property details</div>
         <div className="mt-2">
-          <label className="label">Square footage <span className="text-rose-600">*</span></label>
+          <label className="label" htmlFor="property-sqft">Square footage <span className="text-rose-600">*</span></label>
           <input
-            type="number"
+            id="property-sqft" type="number"
             className="input"
             required
-            min={100}
+            min={100} max={1000000}
             placeholder="2500"
             value={p.sqft || ''}
             onChange={(e) => setP({ ...p, sqft: Number(e.target.value) })}
