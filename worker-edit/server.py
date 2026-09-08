@@ -640,7 +640,7 @@ async def edit(
     # Opt-in enhancements (default OFF → behaviour unchanged for existing callers).
     # Enable per-profile from the app layer once validated on real renders.
     window_pull: bool = Form(False),    # fuse mode: recover blown windows from the darkest bracket
-    straighten: bool = Form(False),     # de-skew + bounded keystone so verticals are plumb
+    apply_straighten: bool = Form(False, alias="straighten"),  # keep the public form name distinct from the helper
     keystone: bool = Form(True),        # whether straighten also applies the keystone warp
     sky_mode: str = Form("keep"),       # 'keep' | 'replace' (replace is no-op for the 'sober' style)
     x_edit_secret: Optional[str] = Header(None),
@@ -666,12 +666,12 @@ async def edit(
         if window_pull and len(imgs) > 1:
             out = pull_windows(out, pick_darkest(imgs))
         del imgs
-        if straighten:
+        if apply_straighten:
             out = straighten_verticals(out, apply_keystone=keystone)
     elif mode == "grade":
         # Single frame — safe at native; grade then bound (no-op when target<=0).
         img = _decode(await files[0].read())
-        if straighten:  # geometry before tone/colour
+        if apply_straighten:  # geometry before tone/colour
             img = straighten_verticals(img, apply_keystone=keystone)
         out = grade(img, style=style)
         if sky_mode == "replace":

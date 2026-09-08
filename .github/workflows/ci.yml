@@ -63,7 +63,7 @@ jobs:
 
       - name: Install
         working-directory: worker-edit
-        run: pip install -r requirements.txt pytest
+        run: pip install -r requirements.txt pytest httpx==0.28.1
 
       - name: Grade-math tests
         working-directory: worker-edit

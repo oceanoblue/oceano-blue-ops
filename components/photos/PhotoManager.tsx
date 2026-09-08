@@ -525,11 +525,9 @@ export function PhotoManager({
             file = prev.file;
             rawOriginal = original; // upload alongside the preview for the engine
             dims = { width: prev.width, height: prev.height };
-            presetExif = {};
-            if (typeof prev.exif.ExposureBiasValue === 'number') presetExif.ExposureBiasValue = prev.exif.ExposureBiasValue;
-            if (prev.exif.DateTimeOriginal) presetExif.DateTimeOriginal = prev.exif.DateTimeOriginal;
-            if (prev.exif.Make) presetExif.Make = prev.exif.Make;
-            if (prev.exif.Model) presetExif.Model = prev.exif.Model;
+            presetExif = Object.fromEntries(
+              Object.entries(prev.exif).filter(([, value]) => value != null)
+            );
           } else {
             file = original; // no usable preview → the raw original IS storage_path
           }
@@ -589,9 +587,9 @@ export function PhotoManager({
           entry.height = dims.height;
         }
         registered.push(entry);
-        if (presetExif) {
+        if (presetExif && Object.keys(presetExif).length) {
           // Exposure bias already read from the RAW header — no background job.
-          if (Object.keys(presetExif).length) entry.exif = presetExif;
+          entry.exif = presetExif;
         } else {
           // Extract bracket-relevant EXIF in the background (so detection can
           // tell HDR sets from in-sequence detail singles).

@@ -93,6 +93,6 @@ they make the parameter-tuning loop regression-safe. They run in CI
 (`edit-engine` job) and locally:
 
 ```sh
-pip install -r requirements.txt pytest
+pip install -r requirements.txt pytest httpx
 pytest -q
 ```
