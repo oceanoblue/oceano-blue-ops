@@ -1,5 +1,3 @@
-import { isStripeConfigured } from '@/lib/stripe/server';
-
 /** The order fields the paywall needs to decide lock state. */
 export type PaywallOrder = {
   total_cents: number | null;
@@ -7,7 +5,7 @@ export type PaywallOrder = {
 };
 
 export type PaywallState = {
-  /** Stripe is configured AND this order has a price AND it isn't paid yet. */
+  /** This order has a price and has not been paid yet. */
   active: boolean;
   /** Whether this order has already been paid for. */
   paid: boolean;
@@ -19,14 +17,13 @@ export type PaywallState = {
 /**
  * Single source of truth for "should downloads be locked for this order".
  *
- * The paywall is only ever ACTIVE when: Stripe keys exist, the order carries a
- * price (> 0), and it hasn't been paid. If Stripe isn't configured, or the
- * order has no price, downloads behave exactly as they did before — nothing is
- * gated. This is what lets us ship the feature dormant.
+ * Payment configuration controls whether checkout is available, not access to
+ * purchased files. A missing Stripe key must never release an unpaid order.
+ * Free orders and orders with a recorded payment remain downloadable.
  */
 export function paywallFor(order: PaywallOrder | null | undefined): PaywallState {
   const priceCents = order?.total_cents ?? 0;
   const paid = !!order?.download_paid_at;
-  const active = isStripeConfigured() && priceCents > 0 && !paid;
+  const active = priceCents > 0 && !paid;
   return { active, paid, priceCents, currency: 'usd' };
 }
