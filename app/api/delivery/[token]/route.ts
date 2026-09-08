@@ -35,7 +35,7 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
     .single();
   if (!order) return NextResponse.json({ error: 'order_missing' }, { status: 404 });
 
-  // Locked orders (Stripe on + priced + unpaid) show watermarked previews only;
+  // Locked orders (priced + unpaid) show watermarked previews only;
   // the clean masters are never signed until payment unlocks the order.
   const pay = paywallFor(order as any);
 
