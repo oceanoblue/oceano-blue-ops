@@ -6,7 +6,7 @@ import { SchedulingSettingsForm } from '@/components/settings/SchedulingSettings
 export const dynamic = 'force-dynamic';
 
 export default async function SchedulingSettingsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

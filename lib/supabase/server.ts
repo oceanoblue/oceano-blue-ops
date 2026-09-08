@@ -8,8 +8,8 @@ import type { Database } from './database.types';
 // plumbing). The runtime object IS a real SupabaseClient, so we annotate the
 // factory return as the correctly-typed supabase-js SupabaseClient<Database> —
 // restoring strict insert/update typing with zero runtime change.
-export function createClient(): SupabaseClient<Database> {
-  const cookieStore = cookies();
+export async function createClient(): Promise<SupabaseClient<Database>> {
+  const cookieStore = await cookies();
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

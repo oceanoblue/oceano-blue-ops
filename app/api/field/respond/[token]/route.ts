@@ -15,7 +15,8 @@ const Body = z.object({
   note: z.string().max(2000).optional(),
 });
 
-export async function POST(request: Request, { params }: { params: { token: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const payload = verifyRespondToken(decodeURIComponent(params.token));
   if (!payload) return NextResponse.json({ error: 'invalid_or_expired_link' }, { status: 400 });
 

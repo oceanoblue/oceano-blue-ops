@@ -10,7 +10,7 @@ import { TeamMemberActions } from '@/components/team/TeamMemberActions';
 export const dynamic = 'force-dynamic';
 
 export default async function TeamPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

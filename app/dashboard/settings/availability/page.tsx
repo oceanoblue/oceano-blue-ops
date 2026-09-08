@@ -6,7 +6,7 @@ import { AvailabilityEditor } from '@/components/settings/AvailabilityEditor';
 export const dynamic = 'force-dynamic';
 
 export default async function AvailabilitySettingsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -44,7 +44,7 @@ export default async function AvailabilitySettingsPage() {
       <SettingsNav />
 
       <p className="text-sm text-slate-600">
-        Bookings are offered to clients only during these working hours. Days that aren't
+        Bookings are offered to clients only during these working hours. Days that aren&apos;t
         listed here are treated as days off.
       </p>
 

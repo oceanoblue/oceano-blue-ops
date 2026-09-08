@@ -4,7 +4,7 @@ import { fmtRelative, fmtCents } from '@/lib/utils/format';
 export const dynamic = 'force-dynamic';
 
 export default async function PhotosOverviewPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: recentJobs } = await supabase
     .from('ai_jobs')

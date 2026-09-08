@@ -62,11 +62,16 @@ export async function exchangeCodeForTokens(code: string): Promise<TokenResponse
   });
   const r = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(10000),
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body,
   });
   if (!r.ok) throw new Error(`Google token exchange failed: ${await r.text()}`);
   return r.json();
+}
+
+export class GoogleTokenError extends Error {
+  constructor(public code: string) { super(`Google token refresh: ${code}`); }
 }
 
 export async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
@@ -78,10 +83,14 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
   });
   const r = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(10000),
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body,
   });
-  if (!r.ok) throw new Error(`Google refresh failed: ${await r.text()}`);
+  if (!r.ok) {
+    const error = await r.json().catch(() => ({}));
+    throw new GoogleTokenError(typeof error.error === 'string' ? error.error : `http_${r.status}`);
+  }
   return r.json();
 }
 

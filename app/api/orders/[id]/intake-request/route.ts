@@ -7,8 +7,9 @@ import { createPhotoIntakeRequest } from '@/lib/integrations/dropbox';
  * to upload RAWs for this order. Idempotent: if the order already has a link,
  * it is returned instead of creating a duplicate request.
  */
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function POST(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

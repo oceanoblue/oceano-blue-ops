@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/mirror-calendar-rsvp",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/booking-followups",
+      "schedule": "* * * * *"
     }
   ]
 }

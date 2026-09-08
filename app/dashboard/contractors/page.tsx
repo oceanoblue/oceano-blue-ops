@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 const PAYABLE = new Set(['uploaded', 'processing', 'editing', 'ready', 'delivered']);
 
 export default async function ContractorsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -12,12 +12,13 @@ import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ClientReelsPage({
-  searchParams,
-}: {
-  searchParams: { submitted?: string };
-}) {
-  const supabase = createClient();
+export default async function ClientReelsPage(
+  props: {
+    searchParams: Promise<{ submitted?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

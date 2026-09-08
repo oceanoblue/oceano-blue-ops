@@ -16,7 +16,7 @@ const COLUMNS: Column<any>[] = [
 ];
 
 export default async function AssetsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: assets, error } = await supabase
     .from('assets')
     .select('id, filename, media_type, asset_type, status, jobs(title)')

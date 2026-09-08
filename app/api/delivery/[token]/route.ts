@@ -5,7 +5,8 @@ import { toEmbedUrl } from '@/lib/deliverables/embed';
 import { paywallFor } from '@/lib/payments/gate';
 
 /** Returns gallery metadata + signed URLs for the token. Public endpoint. */
-export async function GET(_req: Request, { params }: { params: { token: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const supabase = createAdminClient();
 
   const { data: link, error } = await supabase

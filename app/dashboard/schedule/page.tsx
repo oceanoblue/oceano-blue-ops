@@ -29,12 +29,13 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const dynamic = 'force-dynamic';
 
-export default async function SchedulePage({
-  searchParams,
-}: {
-  searchParams: { week?: string };
-}) {
-  const supabase = createClient();
+export default async function SchedulePage(
+  props: {
+    searchParams: Promise<{ week?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

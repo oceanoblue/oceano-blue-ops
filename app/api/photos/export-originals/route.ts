@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   const orderId = new URL(req.url).searchParams.get('order_id');
   if (!orderId) return new Response('order_id required', { status: 400 });
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

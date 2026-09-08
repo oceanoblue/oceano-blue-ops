@@ -35,6 +35,7 @@ export function AddressStep({
 }) {
   const [query, setQuery] = useState(initial?.formatted ?? '');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resolving, setResolving] = useState(false);
@@ -98,6 +99,9 @@ export function AddressStep({
         setManual(true);
         setManualAddr((m) => ({ ...m, address_line1: s.text }));
       }
+    } catch {
+      setManual(true);
+      setManualAddr(m => ({ ...m, address_line1: s.text }));
     } finally {
       sessionToken.current = crypto.randomUUID(); // new billing session
       setResolving(false);
@@ -112,12 +116,25 @@ export function AddressStep({
 
       {!manual ? (
         <div className="mt-8">
+          <label htmlFor="property-search" className="label">Property address</label>
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
             <input
+              id="property-search"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={open && suggestions.length > 0}
+              aria-controls="property-suggestions"
+              aria-activedescendant={open && activeSuggestion >= 0 && activeSuggestion < suggestions.length ? `property-option-${activeSuggestion}` : undefined}
+              onKeyDown={e => {
+                if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActiveSuggestion(i => Math.min(i + 1, suggestions.length - 1)); }
+                if (e.key === "ArrowUp") { e.preventDefault(); setActiveSuggestion(i => Math.max(i - 1, 0)); }
+                if (e.key === "Escape") { setOpen(false); setActiveSuggestion(-1); }
+                if (e.key === "Enter" && open && suggestions[activeSuggestion]) { e.preventDefault(); void pick(suggestions[activeSuggestion]); }
+              }}
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => { setQuery(e.target.value); setActiveSuggestion(-1); }}
               onFocus={() => suggestions.length && setOpen(true)}
               placeholder="Search property address…"
               className="input pl-11 py-3 text-base"
@@ -128,13 +145,13 @@ export function AddressStep({
               <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-slate-400" />
             )}
             {open && suggestions.length > 0 && (
-              <ul className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lift">
-                {suggestions.map((s) => (
-                  <li key={s.placeId}>
+              <ul id="property-suggestions" role="listbox" aria-label="Address suggestions" className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lift">
+                {suggestions.map((s, index) => (
+                  <li key={s.placeId} id={`property-option-${index}`} role="option" aria-selected={activeSuggestion === index}>
                     <button
                       type="button"
                       onClick={() => pick(s)}
-                      className="flex w-full items-start gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50"
+                      className={`flex w-full items-start gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50 ${activeSuggestion === index ? 'bg-ocean-50' : ''}`}
                     >
                       <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                       <span>{s.text}</span>
@@ -187,7 +204,9 @@ function ManualAddressForm({
       }}
       className="mt-8 space-y-3"
     >
+      <label className="label" htmlFor="street-address">Street address</label>
       <input
+        id="street-address" autoComplete="address-line1"
         className="input"
         placeholder="Street address"
         required
@@ -195,9 +214,9 @@ function ManualAddressForm({
         onChange={(e) => onChange({ ...value, address_line1: e.target.value })}
       />
       <div className="grid grid-cols-3 gap-2">
-        <input className="input" placeholder="City" required value={value.city} onChange={(e) => onChange({ ...value, city: e.target.value })} />
-        <input className="input" placeholder="State" required maxLength={2} value={value.state} onChange={(e) => onChange({ ...value, state: e.target.value.toUpperCase() })} />
-        <input className="input" placeholder="ZIP" required value={value.zip} onChange={(e) => onChange({ ...value, zip: e.target.value })} />
+        <label className="label">City<input autoComplete="address-level2" className="input" placeholder="City" required value={value.city} onChange={(e) => onChange({ ...value, city: e.target.value })} /></label>
+        <label className="label">State<input autoComplete="address-level1" className="input" placeholder="State" required maxLength={2} value={value.state} onChange={(e) => onChange({ ...value, state: e.target.value.toUpperCase() })} /></label>
+        <label className="label">ZIP<input autoComplete="postal-code" className="input" placeholder="ZIP" pattern="[0-9]{5}(-[0-9]{4})?" title="Enter a five-digit ZIP code" required value={value.zip} onChange={(e) => onChange({ ...value, zip: e.target.value })} /></label>
       </div>
       <div className="flex items-center justify-between gap-3">
         <button type="button" onClick={onBackToSearch} className="text-sm text-slate-500 underline hover:text-slate-700">

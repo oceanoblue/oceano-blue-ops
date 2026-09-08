@@ -39,7 +39,7 @@ const dayKey = (iso: string) => fmtDayLong(iso);
 const timeLabel = (iso: string) => fmtTime(iso);
 
 export default async function FieldCalendarPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

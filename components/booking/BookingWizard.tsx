@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { z } from 'zod';
 import { StepHeader } from '@/components/booking/StepHeader';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { OrderSummary } from '@/components/booking/OrderSummary';
@@ -29,6 +30,18 @@ const EMPTY: BookingState = {
   contact: { email: '', name: '', phone: '', brokerage: '' },
 };
 
+
+const SavedDraft = z.object({
+  version: z.literal(1), savedAt: z.number(),
+  state: z.object({
+    address: z.object({formatted:z.string(),address_line1:z.string(),address_line2:z.string(),city:z.string(),state:z.string(),zip:z.string(),lat:z.number().nullable(),lng:z.number().nullable()}),
+    property: z.object({sqft:z.number().min(0)}),
+    items: z.array(z.object({product_id:z.string().uuid(),quantity:z.number().int().min(1).max(20)})).max(30),
+    contact: z.object({email:z.string(),name:z.string(),phone:z.string(),brokerage:z.string()}),
+    schedule: z.object({timezone:z.string().refine(value => {try {new Intl.DateTimeFormat('en',{timeZone:value});return true;} catch{return false;}}),highlights:z.string()}),
+  }),
+});
+
 /**
  * Public booking wizard. Rendered at /book (real estate) and /book/architectural
  * (construction / architectural). `audience` selects which product catalog shows
@@ -43,10 +56,34 @@ export function BookingWizard({
   label?: string;
 }) {
   const [state, setState] = useState<BookingState>(EMPTY);
+  const [restored, setRestored] = useState(false);
+  const requestKey = useRef<{ body: string; key: string } | null>(null);
+  const draftKey = `oceano-booking-${audience}`;
   const [products, setProducts] = useState<Product[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ orderId: string } | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(draftKey);
+      if (raw) {
+        const draft = SavedDraft.parse(JSON.parse(raw));
+        if (draft.version === 1 && Date.now() - draft.savedAt < 4 * 3600000 && draft.state?.address && Array.isArray(draft.state?.items)) {
+          setState({ ...EMPTY, ...draft.state, step: 3, schedule: { ...EMPTY.schedule, ...draft.state.schedule, scheduled_at: null, photographer_id: null, access_method: '' } });
+        }
+      }
+    } catch { /* Storage unavailable or an obsolete draft. */ }
+    setRestored(true);
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!restored || done) return;
+    try {
+      // Session-only; never persist lockbox/access codes in browser storage.
+      sessionStorage.setItem(draftKey, JSON.stringify({ version: 1, savedAt: Date.now(), state: { ...state, schedule: { ...state.schedule, access_method: '' } } }));
+    } catch { /* Booking still works with storage disabled. */ }
+  }, [state, restored, done, draftKey]);
 
   const totalDuration = useMemo(() => {
     return (
@@ -61,13 +98,11 @@ export function BookingWizard({
 
   async function submitBooking(contact: typeof state.contact) {
     if (!state.address || !state.schedule.scheduled_at) return;
+    setState(s => ({ ...s, contact }));
     setSubmitting(true);
     setError(null);
     try {
-      const r = await fetch('/api/booking/v2', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
+      const body = JSON.stringify({
           client_email: contact.email,
           client_name: contact.name || contact.email.split('@')[0],
           client_phone: contact.phone,
@@ -88,17 +123,30 @@ export function BookingWizard({
           photographer_id: state.schedule.photographer_id,
           items: state.items,
           project_type: audience === 'architectural' ? 'architectural' : undefined,
-        }),
+        });
+      if (!requestKey.current || requestKey.current.body !== body) {
+        requestKey.current = { body, key: crypto.randomUUID() };
+      }
+      const r = await fetch('/api/booking/v2', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'Idempotency-Key': requestKey.current.key },
+        body,
       });
       const data = await r.json();
       if (!r.ok) {
-        setError(data.error || 'Booking failed');
+        setError(data.message || 'We could not confirm your booking. Please try again.');
+        if (data.error === 'slot_unavailable' || data.error === 'availability_unavailable') {
+          setState(s => ({ ...s, contact, step: 4, schedule: { ...s.schedule, scheduled_at: null, photographer_id: null } }));
+        } else if (data.error === 'invalid_product') {
+          setState(s => ({ ...s, contact, step: 3 }));
+        }
       } else {
+        try { sessionStorage.removeItem(draftKey); } catch {}
         setDone({ orderId: data.order_id });
         setState((s) => ({ ...s, step: 5, contact }));
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+    } catch {
+      setError("We could not confirm the response. Please try again with the same details; duplicate requests are protected.");
     } finally {
       setSubmitting(false);
     }
@@ -143,6 +191,7 @@ export function BookingWizard({
       </header>
 
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
+        {error && state.step !== 5 && <p role="alert" className="mb-4 rounded-lg bg-amber-50 p-4 text-amber-900">{error}</p>}
         {state.step === 1 && (
           <AddressStep
             initial={state.address}

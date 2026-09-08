@@ -43,7 +43,7 @@ const COLUMNS: Column<any>[] = [
 ];
 
 export default async function QuotesPage() {
-  const supabase = createClient() as any; // quotes table not yet in generated types
+  const supabase = await createClient() as any; // quotes table not yet in generated types
   const { data: quotes, error } = await supabase
     .from('quotes')
     .select('id, token, client_type, client_name, address_line1, city, subtotal_cents, status, expires_at, created_at')

@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
  * this gallery token. Public — the token itself is the capability. Returns
  * { url } to redirect the buyer to Stripe's hosted checkout.
  */
-export async function POST(req: Request, { params }: { params: { token: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const stripe = getStripe();
   if (!isStripeConfigured() || !stripe) {
     return NextResponse.json({ error: 'payments_unavailable' }, { status: 503 });

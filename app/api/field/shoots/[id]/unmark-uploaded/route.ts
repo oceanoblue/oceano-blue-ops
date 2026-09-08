@@ -4,8 +4,9 @@ import { createClient } from '@/lib/supabase/server';
 /** Contractor undoes an accidental "I've uploaded everything" — reverts the
  *  shoot from 'uploaded' back to 'shooting'. Ownership + the (uploaded-only)
  *  transition are enforced inside unmark_field_shoot_uploaded(). */
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function POST(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

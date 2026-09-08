@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase/server';
  * (images fail to render). The loupe omits `w` to get the full image.
  */
 export async function GET(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

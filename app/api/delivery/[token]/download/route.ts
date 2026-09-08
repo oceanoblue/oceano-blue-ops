@@ -31,7 +31,8 @@ const SIZE_PRESETS: Record<string, { longEdge: number; quality: number; suffix: 
  * For very large galleries you'll want to pre-build the zip and serve via
  * signed URL instead; this works fine for the typical 30-50 photo listing.
  */
-export async function GET(req: Request, { params }: { params: { token: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const sizeParam = new URL(req.url).searchParams.get('size') ?? '';
   const preset = SIZE_PRESETS[sizeParam];
   const supabase = createAdminClient();

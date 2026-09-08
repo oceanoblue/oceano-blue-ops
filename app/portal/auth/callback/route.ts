@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   let next = safeRelativePath(requested, '/portal/listings');
 
   if (code) {
-    const supabase = createClient();
+    const supabase = await createClient();
     await supabase.auth.exchangeCodeForSession(code);
     await Promise.all([
       supabase.rpc('link_client_account').then(() => null, () => null),

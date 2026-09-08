@@ -25,8 +25,9 @@ function exposureBias(exif: any): number | null {
   return Number(m[1]) / (m[2] ? Number(m[2]) : 1);
 }
 
-export default async function PhotoRescuePage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function PhotoRescuePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
 
   const { data: job } = await supabase
     .from('jobs')

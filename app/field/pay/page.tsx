@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 const PAYABLE = ['uploaded', 'processing', 'editing', 'ready', 'delivered'] as const;
 
 export default async function FieldPayPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -10,7 +10,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default async function IntegrationsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: integrations } = await supabase
     .from('integrations')
     .select('id, provider, name, status, last_synced_at')

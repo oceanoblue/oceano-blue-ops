@@ -22,8 +22,9 @@ const Body = z.discriminatedUnion('action', [
   z.object({ action: z.literal('mark_paid') }),
 ]);
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -113,8 +114,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
  *  no shoots — deleting someone with history would cascade away their pay
  *  records (pay_requests) and orphan order links, so those get deactivated
  *  instead (is_active=false blocks portal sign-in via current_contractor_id). */
-export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function DELETE(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

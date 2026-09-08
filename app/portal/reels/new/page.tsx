@@ -7,7 +7,7 @@ import { ReelIntakeWizard } from '@/components/portal/ReelIntakeWizard';
 export const dynamic = 'force-dynamic';
 
 export default async function NewReelPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

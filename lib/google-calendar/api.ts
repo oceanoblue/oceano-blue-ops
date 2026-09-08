@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
+import { calendarNeedsReconnect } from './health';
 import { createAdminClient } from '@/lib/supabase/server';
-import { refreshAccessToken } from './oauth';
+import { refreshAccessToken, GoogleTokenError } from './oauth';
 import { captureError, logEvent } from '@/lib/observability/report';
 
 /**
@@ -9,13 +11,14 @@ import { captureError, logEvent } from '@/lib/observability/report';
  */
 export async function getAccessToken(teamMemberId: string): Promise<string | null> {
   const supabase = createAdminClient();
-  const { data: row } = await supabase
+  const { data: row, error: readError } = await supabase
     .from('team_calendar_connections')
     .select('id, access_token, refresh_token, expires_at, is_active')
     .eq('team_member_id', teamMemberId)
     .eq('provider', 'google')
     .maybeSingle();
 
+  if (readError) throw readError;
   if (!row || !(row as any).is_active) return null;
   const r = row as any;
   const expiresAt = r.expires_at ? new Date(r.expires_at).getTime() : 0;
@@ -31,7 +34,9 @@ export async function getAccessToken(teamMemberId: string): Promise<string | nul
       .eq('id', r.id);
     return t.access_token;
   } catch (e) {
-    // Token revoked or invalid — mark connection inactive
+    // A temporary provider/network outage must not disconnect the account.
+    if (!(e instanceof GoogleTokenError) || e.code !== 'invalid_grant') throw e;
+    // Revoked refresh tokens require consent again.
     await supabase
       .from('team_calendar_connections')
       .update({ is_active: false })
@@ -48,35 +53,44 @@ export async function fetchBusyRanges(
   startIso: string,
   endIso: string
 ): Promise<FreeBusyRange[]> {
+  const admin = createAdminClient();
+  const { data: connection, error } = await admin.from('team_calendar_connections')
+    .select('is_active, scope').eq('team_member_id', teamMemberId).eq('provider', 'google').maybeSingle();
+  if (error) throw error;
+  // Never-connected photographers are scheduled through internal hours/blocks.
+  // Once a calendar is connected, a broken connection must never look empty.
+  if (!connection) return [];
+  if (calendarNeedsReconnect(connection)) throw new Error('calendar_reconnect_required');
   const token = await getAccessToken(teamMemberId);
   if (!token) {
-    logEvent('gcal.freeBusy', 'no_token', { teamMemberId });
-    return [];
+    throw new Error('calendar_reconnect_required');
   }
 
   // Enumerate the user's calendars so events on ANY calendar (not just
-  // 'primary') block availability. Falls back to 'primary' if the list call
-  // fails (e.g. scope not yet re-granted).
+  // 'primary') block availability. An incomplete response blocks these slots.
   let calendarIds: string[] = ['primary'];
   try {
     const lr = await fetch(
-      'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250&fields=items(id,accessRole)',
-      { headers: { authorization: `Bearer ${token}` } }
+      'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250&fields=items(id,accessRole),nextPageToken',
+      { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) }
     );
+    if (!lr.ok) throw new Error(`calendar_list_${lr.status}`);
     if (lr.ok) {
       const ld: any = await lr.json();
       const ids = (ld.items ?? [])
         .filter((c: any) => c.accessRole && c.accessRole !== 'none')
         .map((c: any) => c.id)
         .filter(Boolean);
-      if (ids.length) calendarIds = ids.slice(0, 50); // freeBusy caps at 50 items
+      if (ld.nextPageToken || ids.length > 50) throw new Error('calendar_list_limit');
+      if (ids.length) calendarIds = ids;
     }
   } catch {
-    /* keep primary fallback */
+    throw new Error('calendar_list_unavailable');
   }
 
   const r = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
     method: 'POST',
+    signal: AbortSignal.timeout(10000),
     headers: {
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
@@ -92,12 +106,28 @@ export async function fetchBusyRanges(
     captureError('gcal.freeBusy', new Error(`freebusy_${r.status}: ${body.slice(0, 300)}`), {
       teamMemberId,
     });
-    return [];
+    throw new Error(`calendar_freebusy_${r.status}`);
   }
   const data: any = await r.json();
   const cals = data?.calendars ?? {};
   const busy: FreeBusyRange[] = [];
-  for (const key of Object.keys(cals)) {
+  for (const key of calendarIds) {
+    // Google's virtual subscription calendars (holidays, birthdays, etc.) can
+    // be listed successfully but return notFound from FreeBusy. They must not
+    // invalidate working personal/shared calendars. Other errors still block.
+    const errors = cals[key]?.errors;
+    if (key.endsWith('@group.v.calendar.google.com') && errors?.length &&
+        errors.every((error: { reason?: string }) => error.reason === 'notFound')) {
+      logEvent('gcal.freeBusy', 'unsupported_subscription', { teamMemberId });
+      continue;
+    }
+    if (!cals[key] || cals[key].errors?.length || !Array.isArray(cals[key].busy)) {
+      logEvent('gcal.freeBusy', 'incomplete', {
+        calendarType: key.endsWith('@group.v.calendar.google.com') ? 'subscription' : 'standard',
+        reasons: (cals[key]?.errors ?? []).map((error: { reason?: string }) => error.reason),
+      });
+      throw new Error('calendar_freebusy_incomplete');
+    }
     for (const b of cals[key]?.busy ?? []) busy.push(b);
   }
   logEvent('gcal.freeBusy', 'ok', {
@@ -183,21 +213,24 @@ export interface ExistingEvent {
   attendees: { email: string; responseStatus: AttendeeStatus }[];
 }
 
-/** Read one event back. Returns null when it's gone (404) or the call fails. */
+/** Read one event back. Only a confirmed 404/410 means it is gone. */
 export async function getEvent(
   actorTeamMemberId: string,
   calendarId: string,
   eventId: string
 ): Promise<ExistingEvent | null> {
   const token = await getAccessToken(actorTeamMemberId);
-  if (!token) return null;
+  if (!token) throw new Error('calendar_reconnect_required');
   const r = await fetch(calUrl(calendarId, `/${encodeURIComponent(eventId)}`), {
+    signal: AbortSignal.timeout(10000),
     headers: { authorization: `Bearer ${token}` },
   });
   if (!r.ok) {
-    if (r.status !== 404) await reportApiFailure('getEvent', r, { calendarId, eventId });
-    return null;
+    if (r.status === 404 || r.status === 410) return null;
+    await reportApiFailure('getEvent', r, { calendarId, eventId });
+    throw new Error(`calendar_read_${r.status}`);
   }
+
   const e: any = await r.json();
   return {
     id: e.id,
@@ -227,7 +260,8 @@ export async function insertEvent(
   actorTeamMemberId: string,
   calendarId: string,
   payload: EventPayload,
-  sendUpdates: SendUpdates = 'none'
+  sendUpdates: SendUpdates = 'none',
+  idempotencyKey?: string
 ): Promise<CalendarEvent | null> {
   const token = await getAccessToken(actorTeamMemberId);
   if (!token) {
@@ -236,9 +270,18 @@ export async function insertEvent(
   }
   const r = await fetch(calUrl(calendarId, `?sendUpdates=${sendUpdates}`), {
     method: 'POST',
+    signal: AbortSignal.timeout(10000),
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify(toBody(payload)),
+    body: JSON.stringify({ ...toBody(payload), ...(idempotencyKey ? { id: createHash('sha256').update(idempotencyKey).digest('hex') } : {}) }),
   });
+  if (r.status === 409 && idempotencyKey) {
+    const id = createHash('sha256').update(idempotencyKey).digest('hex');
+    const existing = await getEvent(actorTeamMemberId, calendarId, id);
+    if (existing && existing.status !== 'cancelled') {
+      return updateEvent(actorTeamMemberId, calendarId, id, payload, sendUpdates);
+    }
+    throw new Error('calendar_event_id_conflict');
+  }
   if (!r.ok) {
     await reportApiFailure('insertEvent', r, { actorTeamMemberId, calendarId });
     return null;
@@ -264,6 +307,7 @@ export async function updateEvent(
     calUrl(calendarId, `/${encodeURIComponent(eventId)}?sendUpdates=${sendUpdates}`),
     {
       method: 'PATCH',
+      signal: AbortSignal.timeout(10000),
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify(toBody(payload)),
     }
@@ -288,6 +332,7 @@ export async function deleteEvent(
     calUrl(calendarId, `/${encodeURIComponent(eventId)}?sendUpdates=${sendUpdates}`),
     {
       method: 'DELETE',
+      signal: AbortSignal.timeout(10000),
       headers: { authorization: `Bearer ${token}` },
     }
   );

@@ -16,7 +16,7 @@ const COLUMNS: Column<any>[] = [
 ];
 
 export default async function TeamsPage() {
-  const supabase = createClient() as any;
+  const supabase = await createClient() as any;
   const { data: teams, error } = await supabase
     .from('client_teams')
     .select('id, name, brokerage, created_at, client_team_members(count)')

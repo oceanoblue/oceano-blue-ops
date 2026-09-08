@@ -27,7 +27,7 @@ import { createClient } from '@/lib/supabase/server';
 export async function requireTeamMember(): Promise<
   { error: NextResponse; user: null } | { error: null; user: User }
 > {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

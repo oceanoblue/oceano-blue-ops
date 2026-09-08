@@ -83,6 +83,7 @@ export async function sendSms(params: { to: string | null | undefined; text: str
 
     const res = await fetch(`${apiBase()}/messages`, {
       method: 'POST',
+      signal: AbortSignal.timeout(10000),
       headers: { Authorization: key, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });

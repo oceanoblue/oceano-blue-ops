@@ -25,8 +25,9 @@ const ORDER_COLUMNS: Column<any>[] = [
   { key: 'status', header: 'Status', cell: (o) => <StatusBadge status={o.status} /> },
 ];
 
-export default async function ListingDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function ListingDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
 
   const { data: listing, error } = await supabase
     .from('listings')

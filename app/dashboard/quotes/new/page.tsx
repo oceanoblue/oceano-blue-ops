@@ -6,7 +6,7 @@ import { QuoteBuilder } from '@/components/quotes/QuoteBuilder';
 export const dynamic = 'force-dynamic';
 
 export default async function NewQuotePage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: products } = await supabase
     .from('products')
     .select('slug, name, is_addon, base_price_cents, sort_order')

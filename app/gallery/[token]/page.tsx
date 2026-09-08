@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { Download, Image as ImageIcon, ChevronDown, LayoutGrid, Rows3, X, ChevronLeft, ChevronRight, Lock, ShieldCheck, Loader2 } from 'lucide-react';
 import { groupByRoom, roomLabel } from '@/lib/photos/rooms';
@@ -41,7 +41,8 @@ interface GalleryData {
   paywall?: Paywall;
 }
 
-export default function GalleryPage({ params }: { params: { token: string } }) {
+export default function GalleryPage(props: { params: Promise<{ token: string }> }) {
+  const params = use(props.params);
   const [data, setData] = useState<GalleryData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null);

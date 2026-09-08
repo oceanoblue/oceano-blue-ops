@@ -13,14 +13,15 @@ export const dynamic = 'force-dynamic';
 
 const BASE = '/dashboard/deliveries';
 
-export default async function DeliveriesPage({
-  searchParams,
-}: {
-  searchParams?: Record<string, string | string[] | undefined>;
-}) {
+export default async function DeliveriesPage(
+  props: {
+    searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const { status, type, client } = parseDeliveryFilters(searchParams);
 
-  const supabase = createClient();
+  const supabase = await createClient();
   let query = supabase
     .from('delivery_versions')
     .select('id, title, delivery_type, status, version_number, external_url, created_at, job_id, jobs(title, client_id)')

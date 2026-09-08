@@ -6,7 +6,7 @@ import { NewShootForm } from '@/components/field/NewShootForm';
 export const dynamic = 'force-dynamic';
 
 export default async function NewFieldShootPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

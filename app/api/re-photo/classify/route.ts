@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 const Body = z.object({ job_id: z.string().uuid(), limit: z.number().int().min(1).max(60).optional() });
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

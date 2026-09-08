@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 /** List Transistor shows for the show-settings picker (internal). */
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

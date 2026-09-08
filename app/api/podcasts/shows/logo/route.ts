@@ -25,7 +25,7 @@ const EXT: Record<string, string> = {
 const MAX_BYTES = 3 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

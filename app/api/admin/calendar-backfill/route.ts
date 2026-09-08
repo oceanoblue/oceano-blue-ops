@@ -11,7 +11,7 @@ export const maxDuration = 60;
  * Staff-gated. Idempotent — re-running just updates the existing events.
  */
 export async function POST() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

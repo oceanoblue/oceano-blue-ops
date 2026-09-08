@@ -31,14 +31,14 @@ const RAW_EXT = /\.(arw|cr2|cr3|nef|dng|raf|rw2|orf)$/i;
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
   if (!user) {
     const { cookies } = await import('next/headers');
-    const all = cookies().getAll();
+    const all = (await cookies()).getAll();
     const sb = all.filter((c) => c.name.startsWith('sb-')).length;
     const err = authError?.message ? ` ${authError.message}` : '';
     return NextResponse.json(

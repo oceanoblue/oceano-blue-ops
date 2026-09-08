@@ -24,7 +24,7 @@ const COLUMNS: Column<any>[] = [
 ];
 
 export default async function JobsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: jobs, error } = await supabase
     .from('jobs')
     .select(

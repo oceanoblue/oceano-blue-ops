@@ -102,7 +102,7 @@ function Section({ title, jobs }: { title: string; jobs: JobRow[] }) {
 }
 
 export default async function CommandCenterPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: jobsData } = await supabase
     .from('jobs')

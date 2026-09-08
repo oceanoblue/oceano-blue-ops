@@ -9,7 +9,7 @@ import { createClient } from '@/lib/supabase/server';
  * Used by the Stage 1 bracket cards to show ARW previews.
  */
 export async function GET(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

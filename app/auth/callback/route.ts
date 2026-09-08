@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const next = safeRelativePath(url.searchParams.get('next'), '/dashboard');
 
   if (code) {
-    const supabase = createClient();
+    const supabase = await createClient();
     await supabase.auth.exchangeCodeForSession(code);
   }
 

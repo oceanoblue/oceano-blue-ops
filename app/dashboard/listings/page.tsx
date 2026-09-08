@@ -28,7 +28,7 @@ const COLUMNS: Column<any>[] = [
 ];
 
 export default async function ListingsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: listings, error } = await supabase
     .from('listings')
     .select('id, address_line1, city, state, zip, bedrooms, bathrooms, sqft, status, clients(full_name, brokerage)')

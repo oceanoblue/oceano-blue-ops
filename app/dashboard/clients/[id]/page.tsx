@@ -6,8 +6,9 @@ import { ClientEditForm } from '@/components/clients/ClientEditForm';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ClientDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function ClientDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
 
   const { data: client } = await supabase
     .from('clients')

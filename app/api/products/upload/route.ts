@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
  * Stored in the public-assets bucket. Returns public URLs.
  */
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

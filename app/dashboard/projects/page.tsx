@@ -22,7 +22,7 @@ const COLUMNS: Column<any>[] = [
 ];
 
 export default async function ProjectsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: projects, error } = await supabase
     .from('projects')
     .select('id, name, status, due_date, language, clients(full_name), jobs(count)')

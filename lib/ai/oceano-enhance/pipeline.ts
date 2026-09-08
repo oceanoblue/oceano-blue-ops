@@ -415,7 +415,7 @@ export async function enhanceSingle(
   // 1. Decode + orient + resize
   let img = sharp(inputBuf, { failOn: 'none' }).rotate().toColorspace('srgb');
   img = await resize(img, opts);
-  let buf = await img.toBuffer();
+  let buf: Buffer = await img.toBuffer();
 
   // 2. Auto white balance (grey world) — always run as a baseline so the
   // photo starts neutral. Subsequent temp/tint sliders shift from there.

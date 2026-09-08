@@ -14,7 +14,7 @@ const RUN_COLUMNS: Column<any>[] = [
 ];
 
 export default async function WorkflowsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [{ data: templates }, { data: runs, error: runsError }] = await Promise.all([
     supabase

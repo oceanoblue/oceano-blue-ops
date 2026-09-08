@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
  * chain across four screens.
  */
 export default async function NewShootPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [{ data: clients }, { data: contractorRows }, { data: team }, { data: productRows }] =
     await Promise.all([

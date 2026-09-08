@@ -41,7 +41,7 @@ async function priceQuote(
 }
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
 
 // Live pricing preview for the builder (no insert).
 export async function PUT(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
