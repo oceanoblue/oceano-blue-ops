@@ -96,7 +96,7 @@ export default async function QuotePage({ params }: { params: { token: string } 
           </p>
           {q.expires_at && (
             <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.1em] text-slate-500">
-              Held until {new Date(q.expires_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+              Held until {new Date(q.expires_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}
             </p>
           )}
         </section>

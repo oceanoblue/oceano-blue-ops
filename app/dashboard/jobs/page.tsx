@@ -1,3 +1,4 @@
+import { fmtDate } from '@/lib/utils/format';
 import { Briefcase } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -18,7 +19,7 @@ const COLUMNS: Column<any>[] = [
     key: 'due',
     header: 'Due',
     className: 'text-slate-700',
-    cell: (j) => (j.due_date ? new Date(j.due_date).toLocaleDateString() : '—'),
+    cell: (j) => fmtDate(j.due_date),
   },
 ];
 

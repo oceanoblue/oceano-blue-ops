@@ -1,3 +1,4 @@
+import { fmtDateTime } from '@/lib/utils/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Youtube } from 'lucide-react';
@@ -143,7 +144,7 @@ export default async function PodcastEpisodePage({ params }: { params: { id: str
                 <li key={ev.id}>
                   <div className="text-slate-800">{ev.summary ?? ev.event_type}</div>
                   <div className="text-xs text-slate-400">
-                    {ev.actor_type} · {new Date(ev.created_at).toLocaleString()}
+                    {ev.actor_type} · {fmtDateTime(ev.created_at)}
                   </div>
                 </li>
               ))}

@@ -1,3 +1,4 @@
+import { fmtDate } from '@/lib/utils/format';
 import Link from 'next/link';
 import { FileText } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -38,7 +39,7 @@ const COLUMNS: Column<any>[] = [
       return <span className={`pill ${cls} capitalize`}>{s}</span>;
     },
   },
-  { key: 'created', header: 'Created', className: 'text-slate-500', cell: (q) => new Date(q.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) },
+  { key: 'created', header: 'Created', className: 'text-slate-500', cell: (q) => fmtDate(q.created_at) },
 ];
 
 export default async function QuotesPage() {

@@ -1,3 +1,4 @@
+import { fmtDateTime } from '@/lib/utils/format';
 import { createClient } from '@/lib/supabase/server';
 import { RegisterWorkerButton } from '@/components/workers/RegisterWorkerButton';
 import { EnqueueScanForm } from '@/components/workers/EnqueueScanForm';
@@ -86,7 +87,7 @@ export default async function WorkersPage() {
                   </td>
                   <td className="px-4 py-3 text-slate-600">{(w.capabilities ?? []).join(', ') || '—'}</td>
                   <td className="px-4 py-3 text-slate-500">
-                    {w.last_heartbeat_at ? new Date(w.last_heartbeat_at).toLocaleString() : 'never'}
+                    {w.last_heartbeat_at ? fmtDateTime(w.last_heartbeat_at) : 'never'}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-400">{w.api_key_prefix ?? '—'}…</td>
                 </tr>
@@ -131,7 +132,7 @@ export default async function WorkersPage() {
                       ? Object.entries(t.result).map(([k, v]) => `${k}: ${v}`).join(' · ')
                       : '—'}
                   </td>
-                  <td className="px-4 py-3 text-slate-400">{new Date(t.created_at).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-slate-400">{fmtDateTime(t.created_at)}</td>
                 </tr>
               ))}
               {(recentTasks ?? []).length === 0 && (

@@ -8,7 +8,13 @@ import { formatDistanceToNow } from 'date-fns';
 export const BUSINESS_TZ = process.env.NEXT_PUBLIC_BUSINESS_TZ || 'America/New_York';
 
 function toDate(d: string | Date): Date {
-  return typeof d === 'string' ? new Date(d) : d;
+  if (typeof d !== 'string') return d;
+  // A date-only value ("2026-09-10", e.g. a `date` column) is a calendar day,
+  // not an instant — anchor it at noon UTC so it renders as that same day in
+  // any zone, instead of the previous evening when read as UTC midnight.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], 12));
+  return new Date(d);
 }
 
 function parts(d: Date, tz: string, opts: Intl.DateTimeFormatOptions) {

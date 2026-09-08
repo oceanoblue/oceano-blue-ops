@@ -1,3 +1,4 @@
+import { fmtDate } from '@/lib/utils/format';
 import { Users2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -11,7 +12,7 @@ const COLUMNS: Column<any>[] = [
   { key: 'name', header: 'Team', className: 'font-medium', cell: (t) => t.name },
   { key: 'brokerage', header: 'Brokerage', className: 'text-slate-700', cell: (t) => t.brokerage ?? '—' },
   { key: 'members', header: 'Members', className: 'tabular-nums text-slate-700', cell: (t) => t.client_team_members?.[0]?.count ?? 0 },
-  { key: 'created', header: 'Created', className: 'text-slate-500', cell: (t) => new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+  { key: 'created', header: 'Created', className: 'text-slate-500', cell: (t) => fmtDate(t.created_at) },
 ];
 
 export default async function TeamsPage() {

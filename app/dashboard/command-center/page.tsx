@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '@/lib/utils/format';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 
@@ -75,7 +76,7 @@ function JobCard({ job }: { job: JobRow }) {
       )}
       {job.due_date && (
         <div className="mt-1 text-xs text-slate-400">
-          Due {new Date(job.due_date).toLocaleDateString()}
+          Due {fmtDate(job.due_date)}
         </div>
       )}
     </Link>
@@ -192,7 +193,7 @@ export default async function CommandCenterPage() {
                     {r.provider ?? r.tool_type}
                   </div>
                   <div className="text-xs text-rose-600">
-                    {new Date(r.created_at).toLocaleString()}
+                    {fmtDateTime(r.created_at)}
                   </div>
                 </div>
               ))

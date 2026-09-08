@@ -1,3 +1,4 @@
+import { fmtDateTime } from '@/lib/utils/format';
 import { Zap } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -16,7 +17,7 @@ const SCENARIO_COLUMNS: Column<any>[] = [
 const RUN_COLUMNS: Column<any>[] = [
   { key: 'provider', header: 'Provider', className: 'text-slate-700', cell: (r) => r.provider ?? r.tool_type },
   { key: 'status', header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
-  { key: 'when', header: 'When', className: 'text-slate-500', cell: (r) => new Date(r.created_at).toLocaleString() },
+  { key: 'when', header: 'When', className: 'text-slate-500', cell: (r) => fmtDateTime(r.created_at) },
 ];
 
 export default async function AutomationsPage() {
