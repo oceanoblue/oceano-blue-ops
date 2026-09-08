@@ -3,8 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 
 /** Contractor marks their own shoot's RAWs as uploaded. Ownership + the
  *  allowed status transition are enforced inside mark_field_shoot_uploaded(). */
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function POST(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -85,7 +85,7 @@ export function ContactStep({
         )}
         {mode === 'signin' && (
           <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-md">
-            After we confirm your booking we'll email you a sign-in link to view your listings and download photos.
+            After we confirm your booking we&apos;ll email you a sign-in link to view your listings and download photos.
           </p>
         )}
       </div>

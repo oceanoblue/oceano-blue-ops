@@ -7,8 +7,9 @@ import { ApprovalPanel } from '@/components/podcasts/ApprovalPanel';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PodcastEpisodePage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function PodcastEpisodePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
 
   const { data: ep } = await supabase
     .from('podcast_episodes')

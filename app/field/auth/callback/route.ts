@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   let next = safeRelativePath(requested, '/field/shoots');
 
   if (code) {
-    const supabase = createClient();
+    const supabase = await createClient();
     await supabase.auth.exchangeCodeForSession(code);
     // Best-effort: bind contractors.auth_user_id by matching email.
     await supabase.rpc('link_contractor_account').then(() => null, () => null);

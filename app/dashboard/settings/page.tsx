@@ -4,7 +4,7 @@ import { SettingsNav } from '@/components/layout/SettingsNav';
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: team } = await supabase
     .from('team_members')
     .select('id, full_name, email, role, is_active')

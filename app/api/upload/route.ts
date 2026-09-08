@@ -13,7 +13,7 @@ import type { Json } from '@/lib/supabase/database.types';
  *  - inserted into the `photos` table with EXIF parsed
  */
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

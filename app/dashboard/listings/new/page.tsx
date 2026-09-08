@@ -6,7 +6,7 @@ import { NewListingForm } from '@/components/listings/NewListingForm';
 export const dynamic = 'force-dynamic';
 
 export default async function NewListingPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: clients } = await supabase
     .from('clients')
     .select('id, full_name, brokerage')

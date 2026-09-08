@@ -34,14 +34,17 @@ export async function sendEmail(params: {
   html: string;
   from?: string;
   replyTo?: string;
+  idempotencyKey?: string;
 }): Promise<EmailResult> {
   if (!isEmailConfigured()) return { status: 'not_configured' };
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
+      signal: AbortSignal.timeout(10000),
       headers: {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
+        ...(params.idempotencyKey ? { 'Idempotency-Key': params.idempotencyKey } : {}),
       },
       body: JSON.stringify({
         from: params.from || defaultFrom(),

@@ -24,7 +24,7 @@ const ext = (name: string) => (name.split('.').pop() ?? '').toLowerCase();
 const Body = z.object({ job_id: z.string().uuid() });
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   if (!isDropboxConfigured()) return NextResponse.json({ error: 'dropbox_not_configured', message: 'Dropbox is not configured on the server.' }, { status: 400 });

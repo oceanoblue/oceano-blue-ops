@@ -24,7 +24,7 @@ const Body = z
   .refine((b) => b.order_id || b.job_id, { message: 'order_id or job_id required' });
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 

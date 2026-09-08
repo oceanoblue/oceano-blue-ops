@@ -8,7 +8,7 @@ import { LUXURY_BASELINE } from '@/lib/ai/oceano-enhance/pipeline';
 export const dynamic = 'force-dynamic';
 
 export default async function EnhanceSettingsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

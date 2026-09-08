@@ -1,3 +1,4 @@
+import { calendarNeedsReconnect } from '@/lib/google-calendar/health';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { SettingsNav } from '@/components/layout/SettingsNav';
@@ -5,12 +6,13 @@ import { CalendarBackfillButton } from '@/components/settings/CalendarBackfillBu
 
 export const dynamic = 'force-dynamic';
 
-export default async function IntegrationsPage({
-  searchParams,
-}: {
-  searchParams: { gcal_error?: string; gcal_connected?: string };
-}) {
-  const supabase = createClient();
+export default async function IntegrationsPage(
+  props: {
+    searchParams: Promise<{ gcal_error?: string; gcal_connected?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -18,7 +20,7 @@ export default async function IntegrationsPage({
 
   const { data: gcal } = await supabase
     .from('team_calendar_connections')
-    .select('account_email, primary_calendar_id, is_active, last_synced_at')
+    .select('account_email, primary_calendar_id, is_active, scope, last_synced_at')
     .eq('team_member_id', user.id)
     .eq('provider', 'google')
     .maybeSingle();
@@ -41,7 +43,7 @@ export default async function IntegrationsPage({
       )}
       {searchParams.gcal_connected && !gcal && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          OAuth completed but the connection didn't save. Check the database / logs.
+          OAuth completed but the connection didn&apos;t save. Check the database / logs.
         </div>
       )}
 
@@ -54,7 +56,10 @@ export default async function IntegrationsPage({
             </p>
             {gcal ? (
               <div className="mt-3 text-sm">
-                <span className="pill bg-emerald-100 text-emerald-800">Connected</span>
+                <span className={`pill ${calendarNeedsReconnect(gcal) ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-800'}`}>
+                  {calendarNeedsReconnect(gcal) ? 'Reconnect required' : 'Connected'}
+                </span>
+                {calendarNeedsReconnect(gcal) && <p className="mt-2 text-amber-900">Availability cannot be verified until you reconnect and approve calendar access.</p>}
                 <span className="ml-2 text-slate-700">{(gcal as any).account_email}</span>
               </div>
             ) : (
@@ -62,9 +67,9 @@ export default async function IntegrationsPage({
             )}
           </div>
           {gcal ? (
-            <form action="/api/auth/google/disconnect" method="POST">
+            <div className="flex flex-wrap gap-2"><a href="/api/auth/google/connect" className="btn-primary text-sm">Reconnect Google Calendar</a><form action="/api/auth/google/disconnect" method="POST">
               <button className="btn-secondary text-sm">Disconnect</button>
-            </form>
+            </form></div>
           ) : (
             <a href="/api/auth/google/connect" className="btn-primary text-sm">
               Connect Google Calendar

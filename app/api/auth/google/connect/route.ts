@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
  * encoded in `state` so the callback knows who to attach the tokens to.
  */
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

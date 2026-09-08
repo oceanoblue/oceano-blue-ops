@@ -9,8 +9,9 @@ import { RespondControl } from '@/components/field/RespondControl';
 
 export const dynamic = 'force-dynamic';
 
-export default async function FieldShootDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function FieldShootDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

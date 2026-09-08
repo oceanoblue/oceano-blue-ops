@@ -1,203 +1,62 @@
 import { NextResponse } from 'next/server';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
-import { syncShootCalendar } from '@/lib/google-calendar/sync-shoot';
 import { enforceRateLimit } from '@/lib/security/rate-limit';
-import { sendEmail } from '@/lib/email/resend';
-import { sendSms } from '@/lib/integrations/quo';
-import { bookingConfirmationEmail, bookingReceivedEmail } from '@/lib/email/templates';
-import { fmtDateTimeTz } from '@/lib/utils/format';
+import { BookingBody, productDuration } from '@/lib/booking/validation';
+import { getAvailability } from '@/lib/booking/availability';
+import { fmtDateInTz } from '@/lib/utils/timezone';
+import { captureError } from '@/lib/observability/report';
 
-const Body = z.object({
-  client_email: z.string().email(),
-  client_name: z.string().min(1),
-  client_phone: z.string().optional().default(''),
-  client_brokerage: z.string().optional().default(''),
-
-  address_line1: z.string().min(2),
-  address_line2: z.string().optional().default(''),
-  city: z.string().min(1),
-  state: z.string().min(2),
-  zip: z.string().min(3),
-  lat: z.number().nullable().optional(),
-  lng: z.number().nullable().optional(),
-  sqft: z.number().int().min(0),
-
-  scheduled_at: z.string().datetime(),
-  duration_minutes: z.number().int().min(15),
-  timezone: z.string().default('America/New_York'),
-  photographer_id: z.string().uuid().nullable().optional(),
-
-  access_method: z.string().optional().default(''),
-  highlights: z.string().optional().default(''),
-
-  // Production profile (from which booking link). Defaults to MLS real estate.
-  project_type: z
-    .enum(['mls_real_estate', 'luxury_real_estate', 'architectural', 'interior_design'])
-    .optional(),
-
-  items: z
-    .array(
-      z.object({
-        product_id: z.string().uuid(),
-        quantity: z.number().int().min(1).default(1),
-      })
-    )
-    .min(1),
-});
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  // Public, unauthenticated endpoint — throttle per IP (creates rows + pushes a
-  // calendar event). 5 bookings / 10 min is generous for a real client.
   const limited = await enforceRateLimit(request, 'booking_v2', 5, 600);
   if (limited) return limited;
-
-  const parsed = Body.safeParse(await request.json());
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: 'validation_failed', issues: parsed.error.issues },
-      { status: 400 }
-    );
-  }
+  const parsed = BookingBody.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: 'validation_failed', message: 'Please check your booking details.' }, { status: 400 });
+  const key = request.headers.get('Idempotency-Key') || randomUUID();
+  if (!z.string().uuid().safeParse(key).success) return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
   const b = parsed.data;
-  const supabase = createAdminClient();
-  const { data, error } = await supabase.rpc('create_booking_v2', {
-    p_client_email: b.client_email,
-    p_client_name: b.client_name,
-    p_client_phone: b.client_phone,
-    p_client_brokerage: b.client_brokerage,
-    p_address_line1: b.address_line1,
-    p_address_line2: b.address_line2,
-    p_city: b.city,
-    p_state: b.state,
-    p_zip: b.zip,
-    // SQL accepts NULL (double precision); generated RPC arg type is non-null.
-    p_lat: (b.lat ?? null) as number,
-    p_lng: (b.lng ?? null) as number,
-    p_sqft: b.sqft,
-    p_scheduled_at: b.scheduled_at,
-    p_duration_minutes: b.duration_minutes,
-    p_timezone: b.timezone,
-    p_access_method: b.access_method,
-    p_highlights: b.highlights,
-    p_items: b.items,
-    // Assign the photographer inside the RPC transaction so the double-book
-    // guard runs atomically — a conflict rolls the whole booking back.
-    p_photographer_id: (b.photographer_id ?? null) as string,
-  });
-  if (error) {
-    // The DB guard raises SQLSTATE 23P01 (exclusion_violation) when the slot is
-    // already taken — surface that as a 409 the booking UI can act on, not a 500.
-    const conflict =
-      (error as any).code === '23P01' || /slot_unavailable/i.test(error.message);
-    if (conflict) {
-      return NextResponse.json(
-        { error: 'slot_unavailable', message: 'That time was just taken — please pick another slot.' },
-        { status: 409 }
-      );
-    }
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // Stamp the production profile (architectural / etc.) chosen by the booking
-  // link. The RPC defaults new orders to mls_real_estate, so only override when
-  // it's something else.
-  if (b.project_type && b.project_type !== 'mls_real_estate') {
-    await supabase.from('orders').update({ project_type: b.project_type as any }).eq('id', data);
-  }
-
-  // The wizard assigns by team_member (photographer_id). When that person is
-  // also a contractor (linked via contractors.team_member_id), complete the
-  // assignment the way the office picker does — contractor_id + their pay rate
-  // — so the shoot shows up in their field portal and pays out correctly.
-  if (b.photographer_id) {
-    const { data: linked } = await (supabase as any)
-      .from('contractors')
-      .select('id, pay_rate_cents')
-      .eq('team_member_id', b.photographer_id)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
-    if (linked?.id) {
-      await (supabase as any)
-        .from('orders')
-        .update({ contractor_id: linked.id, pay_amount_cents: linked.pay_rate_cents ?? 0 })
-        .eq('id', data)
-        .is('contractor_id', null);
-    }
-  }
-
-  // Sync the shoot onto the office calendars (master info@ + the assigned
-  // photographer's own calendar). Fail-soft — never fails a committed booking.
+  const hash = createHash('sha256').update(JSON.stringify(b)).digest('hex');
+  const admin = createAdminClient() as any;
   try {
-    await syncShootCalendar(data as string);
-  } catch (e) {
-    console.error('[booking] calendar sync failed:', e);
+    // A lost response can be retried even after the booked slot is no longer free.
+    const { data: existing, error: lookupError } = await admin.from('booking_requests').select('request_hash, order_id').eq('id', key).maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing) {
+      if (existing.request_hash !== hash) return NextResponse.json({ error: 'idempotency_conflict', message: 'This request changed. Please review the booking and try again.' }, { status: 409 });
+      return NextResponse.json({ order_id: existing.order_id });
+    }
+    const audience = ['architectural', 'interior_design'].includes(b.project_type) ? 'architectural' : 'real_estate';
+    const { data: products, error: productError } = await admin.from('products').select('id, duration_minutes')
+      .in('id', b.items.map(item => item.product_id)).eq('is_active', true).contains('audiences', [audience]);
+    if (productError) throw productError;
+    let duration: number;
+    try { duration = productDuration(b.items, products || []); }
+    catch { return NextResponse.json({ error: 'invalid_product', message: 'Your selected services changed. Please choose your services again.' }, { status: 400 }); }
+    const { data: settings, error: settingsError } = await admin.from('business_settings').select('default_timezone').eq('id', true).maybeSingle();
+    if (settingsError) throw settingsError;
+    const date = fmtDateInTz(b.scheduled_at, settings?.default_timezone || 'America/New_York', 'iso');
+    const available = await getAvailability(date, duration, b.photographer_id);
+    if (!available.slots.some(slot => Date.parse(slot.iso) === Date.parse(b.scheduled_at))) {
+      return NextResponse.json({ error: available.calendarDegraded ? 'availability_unavailable' : 'slot_unavailable', message: available.calendarDegraded
+        ? 'We cannot verify this photographer’s calendar. Please try later or contact the office.'
+        : 'That time is no longer available. Please choose another time.' }, { status: available.calendarDegraded ? 503 : 409 });
+    }
+    const { data: orderId, error } = await admin.rpc('commit_public_booking', {
+      p_payload: { ...b, duration_minutes: duration }, p_request_id: key, p_request_hash: hash,
+    });
+    if (error) {
+      if (error.code === '23P01') return NextResponse.json({ error: 'slot_unavailable', message: 'That time was just taken. Please choose another time.' }, { status: 409 });
+      if (error.message?.includes('idempotency_conflict')) return NextResponse.json({ error: 'idempotency_conflict', message: 'This request changed. Please review it and try again.' }, { status: 409 });
+      throw error;
+    }
+    // Calendar/email/SMS follow-ups were committed atomically and are processed
+    // by cron. A provider outage cannot lose the booking or its notifications.
+    return NextResponse.json({ order_id: orderId });
+  } catch (error) {
+    captureError('booking.commit', error);
+    return NextResponse.json({ error: 'booking_unavailable', message: 'We could not confirm your booking. Please try again shortly; your details are saved.' }, { status: 503 });
   }
-
-  // Confirm to the client + alert the office (email + text). Fail-soft — a
-  // notification hiccup must never fail a booking that already committed.
-  try {
-    await notifyBooking(data as string, b, request, supabase);
-  } catch (e) {
-    console.error('[booking] notify failed:', e);
-  }
-
-  return NextResponse.json({ order_id: data });
-}
-
-async function notifyBooking(
-  orderId: string,
-  b: z.infer<typeof Body>,
-  request: Request,
-  admin: ReturnType<typeof createAdminClient>
-) {
-  const base = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-  const cityStateZip = [b.city, b.state, b.zip].filter(Boolean).join(', ') || null;
-  const whenText = fmtDateTimeTz(b.scheduled_at, b.timezone);
-
-  // 1) Client booking confirmation.
-  const clientMail = bookingConfirmationEmail({
-    clientName: b.client_name,
-    address: b.address_line1,
-    cityStateZip,
-    whenText,
-  });
-  await sendEmail({ to: b.client_email, subject: clientMail.subject, html: clientMail.html });
-
-  // 2) Office alert to every active admin — email + text.
-  const { data: admins } = await (admin as any)
-    .from('team_members')
-    .select('email, phone')
-    .eq('role', 'admin')
-    .eq('is_active', true);
-  const rows = (admins ?? []) as Array<{ email: string | null; phone: string | null }>;
-  const emailTo = rows.map((a) => a.email).filter((e): e is string => Boolean(e));
-  const smsTo = rows.map((a) => a.phone).filter((p): p is string => Boolean(p));
-
-  const kindLabel =
-    b.project_type === 'architectural'
-      ? 'Architectural'
-      : b.project_type === 'interior_design'
-        ? 'Interior Design'
-        : b.project_type === 'luxury_real_estate'
-          ? 'Luxury'
-          : undefined;
-
-  const officeMail = bookingReceivedEmail({
-    clientName: b.client_name,
-    clientEmail: b.client_email,
-    clientPhone: b.client_phone || null,
-    address: b.address_line1,
-    cityStateZip,
-    whenText,
-    orderUrl: `${base}/dashboard/orders/${orderId}`,
-    kindLabel,
-  });
-  const smsText = `Oceano Blue: New ${kindLabel ? kindLabel + ' ' : ''}booking — ${b.client_name}, ${b.address_line1}${cityStateZip ? ', ' + cityStateZip : ''} · ${whenText}`;
-
-  await Promise.all([
-    ...emailTo.map((to) => sendEmail({ to, subject: officeMail.subject, html: officeMail.html })),
-    ...smsTo.map((to) => sendSms({ to, text: smsText })),
-  ]);
 }

@@ -8,8 +8,9 @@ import { createPhotoIntakeRequest } from '@/lib/integrations/dropbox';
  * belongs to the signed-in contractor. The Dropbox call + write-back then use
  * the admin client (contractors have no write grant on orders).
  */
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function POST(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   }
   const { photo_id, correction, provider: providerOverride } = parsed.data;
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

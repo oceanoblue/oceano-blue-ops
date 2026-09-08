@@ -1,3 +1,4 @@
+import { AttentionQueue } from '@/components/operations/AttentionQueue';
 import Link from 'next/link';
 import { CalendarClock, FileEdit, CalendarCheck2, Camera, Cog, PackageCheck, Send, AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -27,7 +28,7 @@ const PIPELINE_BUCKETS: Array<{
 ];
 
 export default async function DashboardHome() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // One round-trip's latency, not eight: the recent list, all six pipeline
   // counts, and the upcoming list are independent — fire them together.
@@ -45,13 +46,14 @@ export default async function DashboardHome() {
           .select('id', { count: 'exact', head: true })
           .is('archived_at', null)
           .in('status', b.statuses as OrderStatus[])
-          .then(({ count }) => [b.label, count ?? 0] as const)
+          .then(({ count, error }) => { if (error) throw error; return [b.label, count ?? 0] as const; })
       )
     ),
     supabase
       .from('orders')
-      .select('id, order_number, scheduled_at, status, photographer_id, listing_id, client_id')
+      .select('id, order_number, scheduled_at, status, photographer_id, listing_id, client_id, listings(address_line1, city), clients(full_name)')
       .is('archived_at', null)
+      .not('status', 'in', '(cancelled,draft,delivered)')
       .gte('scheduled_at', new Date().toISOString())
       .order('scheduled_at', { ascending: true })
       .limit(5),
@@ -81,11 +83,12 @@ export default async function DashboardHome() {
             label={b.label}
             value={counts[b.label] ?? 0}
             icon={b.icon}
-            href={`/dashboard/orders?status=${b.statuses[0]}`}
+            href={`/dashboard/orders?status=${b.statuses.join(',')}`}
           />
         ))}
       </div>
 
+      <AttentionQueue />
       <StuckTasksAlert groups={stuckGroups} />
 
       {(declined ?? []).length > 0 && (
@@ -144,6 +147,7 @@ export default async function DashboardHome() {
                     <Link href={`/dashboard/orders/${o.id}`} className="font-medium hover:underline">
                       #{o.order_number}
                     </Link>
+                    <div className="text-sm text-slate-600">{o.listings?.address_line1} · {o.clients?.full_name}</div>
                     <div className="text-xs text-slate-500">{fmtDateTime(o.scheduled_at)}</div>
                   </div>
                   <StatusBadge status={o.status} />

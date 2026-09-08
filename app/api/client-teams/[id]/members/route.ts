@@ -17,8 +17,9 @@ const PatchBody = z.object({
 });
 
 // Add a client to the team.
-export async function POST(request: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
@@ -35,8 +36,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
 }
 
 // Update a member's role / notification toggle.
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
@@ -57,8 +59,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 }
 
 // Remove a member from the team.
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 

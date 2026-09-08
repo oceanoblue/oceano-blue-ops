@@ -44,8 +44,9 @@ function fmtDur(s: number | null) {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-export default async function ClientReelDetail({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function ClientReelDetail(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

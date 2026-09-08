@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { addDays, addMonths, format, isSameDay, isSameMonth, startOfMonth, startOfWeek, endOfMonth, endOfWeek } from 'date-fns';
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import type { ScheduleData, AvailabilitySlot } from '@/lib/booking/types';
 import { cn } from '@/lib/utils/cn';
-import { fmtTimeInTz, fmtDateInTz } from '@/lib/utils/timezone';
+import { fmtTimeInTz } from '@/lib/utils/timezone';
 
 export function ScheduleStep({
   schedule,
@@ -27,6 +27,7 @@ export function ScheduleStep({
   const [slots, setSlots] = useState<AvailabilitySlot[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [degraded, setDegraded] = useState(false);
   const [hour24, setHour24] = useState(false);
 
   const days = useMemo(() => {
@@ -41,27 +42,36 @@ export function ScheduleStep({
     return arr;
   }, [monthCursor]);
 
+  const activeRequest = useRef<AbortController | null>(null);
   const loadSlots = useCallback(() => {
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
     if (!selectedDay) return;
     setLoading(true);
+    setSlots(null);
+    setDegraded(false);
+    setS(previous => ({ ...previous, scheduled_at: null, photographer_id: null }));
     setError(false);
-    // Send the date as YYYY-MM-DD in the TEAM timezone, not browser-local
-    fetch(`/api/availability?date=${fmtDateInTz(selectedDay, s.timezone, 'iso')}&duration=${s.duration_minutes}`)
+    // The chosen calendar cell is a date, independent of browser timezone.
+    fetch(`/api/availability?date=${format(selectedDay, 'yyyy-MM-dd')}&duration=${s.duration_minutes}`, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`status_${r.status}`);
         return r.json();
       })
-      .then((d) => setSlots(d.slots ?? []))
+      .then((d) => { if (controller.signal.aborted) return; setSlots(d.slots ?? []); setDegraded(Boolean(d.calendarDegraded)); })
       .catch(() => {
+        if (controller.signal.aborted) return;
         setSlots(null);
         setError(true);
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
   // re-run when the date changes, the picked duration, or the timezone changes
-  }, [selectedDay, s.duration_minutes, s.timezone]);
+  }, [selectedDay, s.duration_minutes]);
 
   useEffect(() => {
     loadSlots();
+    return () => activeRequest.current?.abort();
   }, [loadSlots]);
 
   const today = new Date();
@@ -101,13 +111,13 @@ export function ScheduleStep({
             <div className="text-xs uppercase tracking-wide text-slate-500">Timezone</div>
             <select
               className="input mt-1"
-              value={s.timezone}
+              aria-label="Appointment timezone" value={s.timezone}
               onChange={(e) => setS({ ...s, timezone: e.target.value })}
             >
-              <option value="America/New_York">America/New York (EDT)</option>
-              <option value="America/Chicago">America/Chicago (CDT)</option>
-              <option value="America/Denver">America/Denver (MDT)</option>
-              <option value="America/Los_Angeles">America/Los Angeles (PDT)</option>
+              <option value="America/New_York">America/New York (Eastern)</option>
+              <option value="America/Chicago">America/Chicago (Central)</option>
+              <option value="America/Denver">America/Denver (Mountain)</option>
+              <option value="America/Los_Angeles">America/Los Angeles (Pacific)</option>
             </select>
           </div>
         </div>
@@ -174,7 +184,8 @@ export function ScheduleStep({
               </button>
             </div>
           </div>
-          <div className="max-h-80 overflow-y-auto pr-1 space-y-1">
+          <div aria-live="polite" className="max-h-80 overflow-y-auto pr-1 space-y-1">
+            {degraded && <p className="text-sm text-amber-800">Some calendars cannot be verified. Please contact the office if you need another time.</p>}
             {!selectedDay ? (
               <p className="text-sm text-slate-500">Select a date to see times</p>
             ) : loading ? (
@@ -214,19 +225,19 @@ export function ScheduleStep({
 
       <div className="card p-4 sm:p-6 space-y-4">
         <div>
-          <label className="label">How will we access the property?</label>
+          <label htmlFor="access-method" className="label">How will we access the property?</label>
           <input
             className="input"
-            placeholder="Lockbox code 1234, side door"
+            id="access-method" placeholder="Lockbox code, side door"
             value={s.access_method}
             onChange={(e) => setS({ ...s, access_method: e.target.value })}
           />
         </div>
         <div>
-          <label className="label">Is there anything specific you want highlighted?</label>
+          <label htmlFor="shoot-highlights" className="label">Is there anything specific you want highlighted?</label>
           <textarea
             className="input"
-            rows={3}
+            id="shoot-highlights" rows={3}
             placeholder="Outdoor kitchen, primary suite, water views…"
             value={s.highlights}
             onChange={(e) => setS({ ...s, highlights: e.target.value })}
@@ -238,7 +249,7 @@ export function ScheduleStep({
         <button className="btn-ghost" onClick={onBack}>← Back</button>
         <button
           className="btn-primary"
-          disabled={!s.scheduled_at}
+          disabled={loading || !s.scheduled_at || !slots?.some(slot => slot.iso === s.scheduled_at && slot.photographer_id === s.photographer_id)}
           onClick={() => onComplete(s)}
         >
           Continue →

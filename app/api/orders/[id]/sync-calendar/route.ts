@@ -7,8 +7,9 @@ import { syncShootCalendar } from '@/lib/google-calendar/sync-shoot';
  * office controls after assigning, rescheduling, or changing a shoot's status.
  * Staff-gated. Fail-soft.
  */
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function POST(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -14,8 +14,9 @@ import { toEmbedUrl } from '@/lib/deliverables/embed';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ClientListingDetail({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function ClientListingDetail(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

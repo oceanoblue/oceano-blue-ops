@@ -13,8 +13,9 @@ import { signRespondToken, respondPageUrl, respondTokenExpiry } from '@/lib/fiel
  * upload link for later. Ensures the Dropbox folder/link exists first.
  * Team-only.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

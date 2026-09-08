@@ -4,8 +4,9 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 export const dynamic = 'force-dynamic';
 
 /** Live AI-processing progress for an order — drives the order-page progress bar. */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 

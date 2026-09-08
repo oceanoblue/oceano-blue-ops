@@ -10,8 +10,9 @@ import { EPISODE_STATUS_STYLE } from '@/lib/podcasts/constants';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ShowDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function ShowDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
 
   const [{ data: show }, { data: clients }] = await Promise.all([
     supabase

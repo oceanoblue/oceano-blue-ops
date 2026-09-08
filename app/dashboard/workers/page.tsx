@@ -14,7 +14,7 @@ function isOnline(status: string, lastHeartbeat: string | null): boolean {
 }
 
 export default async function WorkersPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: workers } = await supabase
     .from('local_workers')
     .select('id, name, hostname, status, capabilities, last_heartbeat_at, api_key_prefix, created_at')

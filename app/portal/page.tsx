@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
  * that is. Otherwise, the magic-link sign-in.
  */
 export default async function PortalLanding() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

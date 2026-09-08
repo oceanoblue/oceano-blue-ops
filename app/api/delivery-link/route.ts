@@ -11,7 +11,7 @@ import { galleryReadyEmail } from '@/lib/email/templates';
  * or fails delivery (email is not configured until the sending domain lands).
  */
 async function notifyClientAndTeam(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   orderId: string,
   galleryUrl: string
 ) {
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'validation_failed' }, { status: 400 });
   }
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

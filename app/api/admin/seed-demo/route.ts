@@ -24,7 +24,7 @@ const DEMO_EMAIL = 'demo-agent@oceanoblue.net';
 
 export async function POST(request: Request) {
   // Gate: a logged-in, active team ADMIN only.
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

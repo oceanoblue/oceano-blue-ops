@@ -27,7 +27,7 @@ const COLUMNS: Column<any>[] = [
 ];
 
 export default async function ReviewsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: reviews, error } = await supabase
     .from('review_sessions')
     .select('id, title, provider, status, external_url, created_at, jobs(title)')

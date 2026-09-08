@@ -7,8 +7,9 @@ import { createClient } from '@/lib/supabase/server';
  *  orders to paid in one transaction. */
 const Body = z.object({ paid_note: z.string().max(500).optional() });
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  const supabase = createClient();
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

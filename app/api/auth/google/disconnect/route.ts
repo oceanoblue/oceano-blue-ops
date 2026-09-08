@@ -5,7 +5,7 @@ import { revokeToken } from '@/lib/google-calendar/oauth';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

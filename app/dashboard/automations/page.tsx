@@ -21,7 +21,7 @@ const RUN_COLUMNS: Column<any>[] = [
 ];
 
 export default async function AutomationsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [{ data: scenarios, error: scenariosError }, { data: runs, error: runsError }] = await Promise.all([
     supabase

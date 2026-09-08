@@ -14,7 +14,8 @@ function fmtDate(d: string | null): string | null {
   return new Date(y, (m ?? 1) - 1, day ?? 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default async function QuotePage({ params }: { params: { token: string } }) {
+export default async function QuotePage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const admin = createAdminClient() as any;
   const { data: q } = await admin
     .from('quotes')

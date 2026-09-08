@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2, Trash2, UserPlus, Check } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
@@ -173,7 +174,7 @@ function AddMember({ available, onAdd, adding }: { available: Client[]; onAdd: (
         </div>
       )}
       <p className="mt-2 text-xs text-slate-400">
-        Only existing clients appear here. Need a new person? Add them on the <a href="/dashboard/clients" className="text-ocean-700 hover:underline">Clients</a> page first — they&apos;ll get their own login.
+        Only existing clients appear here. Need a new person? Add them on the <Link href="/dashboard/clients" className="text-ocean-700 hover:underline">Clients</Link> page first — they&apos;ll get their own login.
       </p>
     </div>
   );

@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
  * RLS handles authorization — clients only see their own rows.
  */
 export async function GET(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

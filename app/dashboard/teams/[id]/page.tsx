@@ -6,8 +6,9 @@ import { TeamManager } from '@/components/teams/TeamManager';
 
 export const dynamic = 'force-dynamic';
 
-export default async function TeamDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient() as any;
+export default async function TeamDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient() as any;
 
   const { data: team } = await supabase
     .from('client_teams')

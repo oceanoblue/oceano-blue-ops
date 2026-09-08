@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 /** Photographer front door. Signed in already? Straight to your shoots. */
 export default async function FieldLanding() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

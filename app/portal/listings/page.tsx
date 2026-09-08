@@ -12,7 +12,7 @@ import { requireClientIds } from '@/lib/portal/require-client';
 export const dynamic = 'force-dynamic';
 
 export default async function ClientListingsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

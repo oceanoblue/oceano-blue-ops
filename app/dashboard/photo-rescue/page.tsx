@@ -7,7 +7,7 @@ import { NewReJobButton } from '@/components/photos/rescue/NewReJobButton';
 export const dynamic = 'force-dynamic';
 
 export default async function PhotoRescueIndex() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Real estate photo jobs (by job type key).
   const { data: jobs } = await supabase

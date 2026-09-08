@@ -46,7 +46,7 @@ export function SchedulingSettingsForm({ initial }: { initial: Settings }) {
     <section className="card p-6 max-w-2xl">
       <h2 className="font-semibold text-ocean-900">Booking guards</h2>
       <p className="mt-1 text-sm text-slate-600">
-        These apply org-wide. Clients won't see slots that violate them.
+        These apply org-wide. Clients won&apos;t see slots that violate them.
       </p>
 
       <div className="mt-6 space-y-5">
@@ -101,7 +101,7 @@ export function SchedulingSettingsForm({ initial }: { initial: Settings }) {
             ))}
           </select>
           <p className="mt-1 text-xs text-slate-500">
-            Shown to clients in the booking flow when their device timezone isn't known.
+            Shown to clients in the booking flow when their device timezone isn&apos;t known.
           </p>
         </div>
 

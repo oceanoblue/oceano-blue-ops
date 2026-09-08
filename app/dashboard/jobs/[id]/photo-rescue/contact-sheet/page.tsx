@@ -8,8 +8,9 @@ import { sceneBadgeClass } from '@/lib/photos/scene';
 export const dynamic = 'force-dynamic';
 
 /** Whole-job contact sheet: every photo as a thumbnail with scene tag. */
-export default async function ContactSheetPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function ContactSheetPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
 
   const { data: job } = await supabase
     .from('jobs')

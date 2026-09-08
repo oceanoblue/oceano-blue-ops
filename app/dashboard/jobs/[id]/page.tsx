@@ -27,14 +27,15 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <div className="card p-6 text-sm text-slate-500">{children}</div>;
 }
 
-export default async function JobDetailPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { tab?: string };
-}) {
-  const supabase = createClient();
+export default async function JobDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ tab?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
+  const supabase = await createClient();
   const activeTab = searchParams.tab ?? 'overview';
 
   const { data: job } = await supabase
@@ -92,7 +93,7 @@ export default async function JobDetailPage({
 }
 
 async function TabContent({ tab, jobId, job }: { tab: string; jobId: string; job: any }) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   if (tab === 'overview') {
     const { data: events } = await supabase

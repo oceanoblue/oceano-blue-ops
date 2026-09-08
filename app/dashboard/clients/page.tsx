@@ -15,7 +15,7 @@ const COLUMNS: Column<any>[] = [
 ];
 
 export default async function ClientsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: clients, error } = await supabase
     .from('clients')
     .select('id, full_name, email, brokerage, phone, created_at')

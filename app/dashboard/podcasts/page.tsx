@@ -8,7 +8,7 @@ import { EPISODE_STATUS_STYLE } from '@/lib/podcasts/constants';
 export const dynamic = 'force-dynamic';
 
 export default async function PodcastsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const [{ data: shows }, { data: episodes }, { data: clients }] = await Promise.all([
     supabase
       .from('podcast_shows')

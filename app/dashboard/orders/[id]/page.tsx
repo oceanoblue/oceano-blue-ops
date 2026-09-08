@@ -32,8 +32,9 @@ import type { Json } from '@/lib/supabase/database.types';
 
 export const dynamic = 'force-dynamic';
 
-export default async function OrderDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function OrderDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from('orders')
     .select(`

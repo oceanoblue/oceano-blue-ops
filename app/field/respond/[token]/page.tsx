@@ -13,13 +13,14 @@ export const dynamic = 'force-dynamic';
  * shoot + photographer; the buttons POST to /api/field/respond/[token]. No
  * pricing is shown — only what the field portal itself would show them.
  */
-export default async function RespondPage({
-  params,
-  searchParams,
-}: {
-  params: { token: string };
-  searchParams: { choice?: string; state?: string };
-}) {
+export default async function RespondPage(
+  props: {
+    params: Promise<{ token: string }>;
+    searchParams: Promise<{ choice?: string; state?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const token = decodeURIComponent(params.token);
   const payload = verifyRespondToken(token);
 

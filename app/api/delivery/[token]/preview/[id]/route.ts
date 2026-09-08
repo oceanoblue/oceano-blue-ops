@@ -26,7 +26,8 @@ function watermarkSvg(w: number, h: number): string {
 </svg>`;
 }
 
-export async function GET(_req: Request, { params }: { params: { token: string; id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ token: string; id: string }> }) {
+  const params = await props.params;
   const supabase = createAdminClient();
 
   const { data: link } = await supabase

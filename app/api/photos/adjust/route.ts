@@ -42,7 +42,7 @@ const Body = z.object({
 // the handler receive an empty cookie store here, breaking getUser() auth.
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -143,29 +143,32 @@ function carryForwardRsvps(payload: EventPayload, current: ExistingEvent): Event
  *
  * Fail-soft: any Google hiccup is logged (see api.ts) but never breaks the caller.
  */
-export async function syncShootCalendar(orderId: string): Promise<void> {
+export async function syncShootCalendar(orderId: string, options: { strict?: boolean } = {}): Promise<void> {
   const admin = createAdminClient() as any;
 
   // Pick the actor: an active admin with a Google connection.
   const actorId = await getActorId(admin);
   if (!actorId) {
     logEvent('gcal.sync', 'no_connected_admin', { orderId });
-    return; // no connected admin → nothing to sync
+    if (options.strict) throw new Error('calendar_reconnect_required');
+    return;
   }
 
-  const { data: order } = await admin
+  const { data: order, error: orderError } = await admin
     .from('orders')
     .select(
       'id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, contractor_id, contractor_response, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
     )
     .eq('id', orderId)
     .maybeSingle();
-  if (!order) return;
+  if (orderError) throw orderError;
+  if (!order) throw new Error('order_not_found');
 
-  const { data: existingRows } = await admin
+  const { data: existingRows, error: existingError } = await admin
     .from('order_calendar_events')
     .select('id, calendar_id, event_id, role')
     .eq('order_id', orderId);
+  if (existingError) throw existingError;
   const existing = new Map<string, { id: string; event_id: string; role: string }>();
   for (const r of existingRows ?? []) {
     existing.set(r.calendar_id, { id: r.id, event_id: r.event_id, role: r.role });
@@ -337,13 +340,12 @@ export async function syncShootCalendar(orderId: string): Promise<void> {
     if (ex) {
       // Only PATCH when something actually changed — a no-op update would still
       // ping every guest with an "updated invitation" email.
-      const current = await getEvent(d.actorId, d.calendarId, ex.event_id).catch(() => null);
+      const current = await getEvent(d.actorId, d.calendarId, ex.event_id);
       if (current && current.status !== 'cancelled') {
         const payload = carryForwardRsvps(d.payload, current);
         if (!sameEvent(current, payload)) {
-          await updateEvent(d.actorId, d.calendarId, ex.event_id, payload, sendUpdates).catch(
-            () => {}
-          );
+          const updated = await updateEvent(d.actorId, d.calendarId, ex.event_id, payload, sendUpdates);
+          if (!updated && options.strict) throw new Error('calendar_update_failed');
         }
         await admin
           .from('order_calendar_events')
@@ -356,16 +358,18 @@ export async function syncShootCalendar(orderId: string): Promise<void> {
       await admin.from('order_calendar_events').delete().eq('id', ex.id);
     }
 
-    const ev = await insertEvent(d.actorId, d.calendarId, d.payload, sendUpdates);
+    const ev = await insertEvent(d.actorId, d.calendarId, d.payload, sendUpdates, options.strict ? `${orderId}:${d.calendarId}` : undefined);
     if (ev?.id) {
-      await admin
+      const { error: saveError } = await admin
         .from('order_calendar_events')
         .upsert(
           { order_id: orderId, calendar_id: d.calendarId, event_id: ev.id, role: d.role },
           { onConflict: 'order_id,calendar_id' }
         );
+      if (saveError) throw saveError;
     } else {
       logEvent('gcal.sync', 'insert_failed', { orderId, calendarId: d.calendarId, role: d.role });
+      if (options.strict) throw new Error('calendar_insert_failed');
     }
   }
 }

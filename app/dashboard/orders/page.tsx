@@ -62,68 +62,42 @@ const COLUMNS: Column<any>[] = [
   { key: 'status', header: 'Status', cell: (o) => <StatusBadge status={o.status} /> },
 ];
 
-// How each sortable column is compared. Returns null for "no value" so those
-// rows always sort to the bottom regardless of direction.
-const SORT_ACCESSORS: Record<string, (o: any) => number | string | null> = {
-  order: (o) => o.order_number ?? null,
-  address: (o) => o.listings?.address_line1?.toLowerCase() ?? null,
-  client: (o) => o.clients?.full_name?.toLowerCase() ?? null,
-  scheduled: (o) => (o.scheduled_at ? new Date(o.scheduled_at).getTime() : null),
-  total: (o) => (o.total_cents && o.total_cents > 0 ? o.total_cents : null),
-  status: (o) => o.status ?? null,
-};
+const SORT_KEYS = new Set(['order','address','client','scheduled','total','status']);
 
-function sortRows(rows: any[], key: string, asc: boolean) {
-  const val = SORT_ACCESSORS[key] ?? SORT_ACCESSORS.scheduled;
-  const dir = asc ? 1 : -1;
-  return [...rows].sort((a, b) => {
-    const va = val(a);
-    const vb = val(b);
-    const an = va == null;
-    const bn = vb == null;
-    if (an && bn) return 0;
-    if (an) return 1; // nulls last, always
-    if (bn) return -1;
-    if (va < vb) return -1 * dir;
-    if (va > vb) return 1 * dir;
-    return 0;
-  });
-}
-
-export default async function OrdersPage({
-  searchParams,
-}: {
-  searchParams: { status?: string; q?: string; kind?: string; archived?: string; sort?: string; dir?: string };
-}) {
+export default async function OrdersPage(
+  props: {
+    searchParams: Promise<{ status?: string; q?: string; kind?: string; archived?: string; sort?: string; dir?: string; page?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const sortKey =
-    searchParams.sort && searchParams.sort in SORT_ACCESSORS ? searchParams.sort : 'scheduled';
+    searchParams.sort && SORT_KEYS.has(searchParams.sort) ? searchParams.sort : 'scheduled';
   const asc = searchParams.dir === 'asc'; // default: descending (newest first)
 
-  const supabase = createClient();
-  let query = supabase
-    .from('orders')
-    .select(
-      'id, order_number, status, scheduled_at, rush, order_kind, project_type, listing_id, client_id, total_cents, download_paid_at, listings(address_line1, city, state, zip), clients(full_name, brokerage)'
-    )
-    // Pull a generous window ordered by date, then sort the page by the chosen
-    // column in-memory (works uniformly for joined columns like Address/Client).
-    .order('scheduled_at', { ascending: false, nullsFirst: false })
-    .limit(300);
-
-  if (searchParams.status) query = query.eq('status', searchParams.status as any);
-  if (searchParams.kind === 'reel') query = query.eq('order_kind', 'reel_edit');
-  // Archived shoots stay out of sight unless explicitly requested.
-  if (searchParams.archived === '1') query = query.not('archived_at', 'is', null);
-  else query = query.is('archived_at', null);
-
-  const { data: ordersRaw, error } = await query;
-  const orders = sortRows(ordersRaw ?? [], sortKey, asc);
+  const supabase = await createClient();
+  const page = Math.max(1, Math.min(100000, Number.parseInt(searchParams.page || '1', 10) || 1));
+  const q = (searchParams.q || '').slice(0, 100);
+  const statuses = searchParams.status?.split(',').filter(status => status in STATUS_LABEL) || null;
+  const { data, error } = await (supabase as any).rpc('search_operations_orders', {
+    p_statuses: statuses?.length ? statuses : null, p_kind: searchParams.kind === 'reel' ? 'reel_edit' : null,
+    p_archived: searchParams.archived === '1', p_query: q, p_sort: sortKey, p_ascending: asc, p_page: page, p_size: 50,
+  });
+  const orders = data?.rows || [];
+  const total = data?.total || 0;
+  const pages = Math.max(1, Math.ceil(total / 50));
+  const pageHref = (target: number) => {
+    const params = new URLSearchParams();
+    for (const [key,value] of Object.entries(searchParams)) if (value) params.set(key, value);
+    params.set('page', String(target));
+    return `/dashboard/orders?${params.toString()}`;
+  };
 
   // Build a sort URL that keeps the active filters and toggles direction when
   // the same column is clicked again.
   const sortHref = (key: string) => {
     const p = new URLSearchParams();
     if (searchParams.status) p.set('status', searchParams.status);
+    if (q) p.set('q', q);
     if (searchParams.kind) p.set('kind', searchParams.kind);
     if (searchParams.archived) p.set('archived', searchParams.archived);
     const nextAsc = !(sortKey === key && asc); // asc → desc on the active column, else asc
@@ -138,6 +112,12 @@ export default async function OrdersPage({
         <Link href="/dashboard/orders/new" className="btn-primary">New shoot</Link>
       </PageHeader>
 
+      <form className="flex flex-wrap items-end gap-2" action="/dashboard/orders">
+        {Object.entries(searchParams).filter(([key]) => key !== 'q' && key !== 'page').map(([key,value]) => <input key={key} type="hidden" name={key} value={value || ''} />)}
+        <label className="label flex-1">Search orders<input name="q" defaultValue={q} maxLength={100} className="input mt-1" placeholder="Order number, address, or client" /></label>
+        <button className="btn-secondary">Search</button>
+      </form>
+      {!error && <p className="text-sm text-slate-600">{total} orders · Page {page} of {pages}</p>}
       <div className="flex flex-wrap gap-2">
         <FilterPill label="All" href="/dashboard/orders" active={!searchParams.status && !searchParams.kind} />
         <FilterPill label="Reels" href="/dashboard/orders?kind=reel" active={searchParams.kind === 'reel'} />
@@ -177,6 +157,10 @@ export default async function OrdersPage({
         }
         error={error?.message ?? null}
       />
+      {!error && <nav aria-label="Order pages" className="flex gap-4">
+        {page > 1 && <Link className="btn-secondary" href={pageHref(page - 1)}>Previous</Link>}
+        {page < pages && <Link className="btn-secondary" href={pageHref(page + 1)}>Next</Link>}
+      </nav>}
     </div>
   );
 }
