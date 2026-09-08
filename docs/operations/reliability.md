@@ -18,6 +18,8 @@ Settings → Integrations includes a Reconnect action. The owner must approve `c
 
 Temporary token refresh failures leave the connection active and surface an error. Only a revoked/invalid refresh grant marks it inactive. Do not rotate unrelated API keys to resolve Google consent.
 
+Google virtual subscription calendars ending in `@group.v.calendar.google.com` may return `notFound` from FreeBusy even when calendar enumeration succeeds. Only that unsupported-subscription response is skipped; standard personal/shared calendar errors and other subscription failures remain blocking. Preview validation exposed this case, and regression tests preserve busy ranges from the working calendars.
+
 ## Release validation and rollback
 
 The release upgrades Next 14 through Next 15 to Next 16, React 19, current patched Sharp, and patched test/database tooling. Server request cookies and route parameters use the asynchronous APIs. Node 24 is configured in CI to match Vercel. Tests, TypeScript, build, lint errors, and high/critical dependency advisories are blocking CI steps. Compiler-adoption lint rules remain disabled pending a separate React Compiler migration; existing lint warnings are not build failures.

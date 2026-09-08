@@ -112,6 +112,15 @@ export async function fetchBusyRanges(
   const cals = data?.calendars ?? {};
   const busy: FreeBusyRange[] = [];
   for (const key of calendarIds) {
+    // Google's virtual subscription calendars (holidays, birthdays, etc.) can
+    // be listed successfully but return notFound from FreeBusy. They must not
+    // invalidate working personal/shared calendars. Other errors still block.
+    const errors = cals[key]?.errors;
+    if (key.endsWith('@group.v.calendar.google.com') && errors?.length &&
+        errors.every((error: { reason?: string }) => error.reason === 'notFound')) {
+      logEvent('gcal.freeBusy', 'unsupported_subscription', { teamMemberId });
+      continue;
+    }
     if (!cals[key] || cals[key].errors?.length || !Array.isArray(cals[key].busy)) {
       logEvent('gcal.freeBusy', 'incomplete', {
         calendarType: key.endsWith('@group.v.calendar.google.com') ? 'subscription' : 'standard',
