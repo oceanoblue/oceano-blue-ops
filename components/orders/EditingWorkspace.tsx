@@ -23,7 +23,6 @@ export function EditingWorkspace({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [importedNow, setImportedNow] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const onDrop = useCallback(
@@ -77,7 +76,6 @@ export function EditingWorkspace({
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || `Register failed (${r.status})`);
-        setImportedNow((n) => n + (d.registered ?? 0));
         router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -129,15 +127,11 @@ export function EditingWorkspace({
         )}
       </div>
 
-      {(finalsCount > 0 || importedNow > 0) && (
+      {finalsCount > 0 && (
         <p className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          {finalsCount + importedNow > 0 && (
-            <>
-              {finalsCount + importedNow} final{finalsCount + importedNow === 1 ? '' : 's'} on this
-              order — review below, then create the delivery link.
-            </>
-          )}
+          {finalsCount} final{finalsCount === 1 ? '' : 's'} on this
+          order — review below, then create the delivery link.
         </p>
       )}
 

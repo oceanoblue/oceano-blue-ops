@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
 import {
   Upload,
@@ -111,6 +112,7 @@ export function PhotoManager({
   orderId,
   autoEnhanceOnUpload = true,
   aiEditingEnabled = true,
+  externalFinalsCount = 0,
 }: {
   orderId: string;
   autoEnhanceOnUpload?: boolean;
@@ -118,7 +120,10 @@ export function PhotoManager({
    *  hidden entirely: uploads are stored, originals are viewable, and Review &
    *  Edit shows the finished files. No AI job is ever triggered from the UI. */
   aiEditingEnabled?: boolean;
+  /** Refetch when the adjacent finished-photo uploader refreshes server counts. */
+  externalFinalsCount?: number;
 }) {
+  const router = useRouter();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -180,7 +185,7 @@ export function PhotoManager({
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, externalFinalsCount]);
 
   // Poll while anything is running.
   useEffect(() => {
@@ -625,6 +630,8 @@ export function PhotoManager({
         if (!r.ok) {
           const j = await r.json().catch(() => ({}));
           setRunError(`Register failed: ${j.error || r.statusText}`);
+        } else {
+          router.refresh();
         }
       }
 
@@ -632,7 +639,7 @@ export function PhotoManager({
       setUploadProgress(null);
       refresh();
     },
-    [orderId, refresh]
+    [orderId, refresh, router]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
