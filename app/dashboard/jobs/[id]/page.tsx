@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '@/lib/utils/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
@@ -111,11 +112,11 @@ async function TabContent({ tab, jobId, job }: { tab: string; jobId: string; job
             <Detail label="Language" value={job.language} />
             <Detail
               label="Due"
-              value={job.due_date ? new Date(job.due_date).toLocaleDateString() : '—'}
+              value={fmtDate(job.due_date)}
             />
             <Detail
               label="Scheduled"
-              value={job.scheduled_at ? new Date(job.scheduled_at).toLocaleString() : '—'}
+              value={fmtDateTime(job.scheduled_at)}
             />
             <Detail label="Next action" value={job.next_action ?? '—'} />
           </dl>
@@ -131,7 +132,7 @@ async function TabContent({ tab, jobId, job }: { tab: string; jobId: string; job
               <li key={e.id}>
                 <div className="font-medium text-slate-800">{e.summary ?? e.event_type}</div>
                 <div className="text-xs text-slate-400">
-                  {e.actor_type} · {new Date(e.created_at).toLocaleString()}
+                  {e.actor_type} · {fmtDateTime(e.created_at)}
                 </div>
               </li>
             ))}
@@ -213,7 +214,7 @@ async function TabContent({ tab, jobId, job }: { tab: string; jobId: string; job
           <li key={e.id} className="px-4 py-3 text-sm">
             <div className="font-medium text-slate-800">{e.summary ?? e.event_type}</div>
             <div className="text-xs text-slate-400">
-              {e.actor_type} · {new Date(e.created_at).toLocaleString()}
+              {e.actor_type} · {fmtDateTime(e.created_at)}
             </div>
           </li>
         ))}

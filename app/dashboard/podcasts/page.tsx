@@ -1,3 +1,4 @@
+import { fmtDate } from '@/lib/utils/format';
 import Link from 'next/link';
 import { Mic } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -99,7 +100,7 @@ export default async function PodcastsPage() {
                       {e.status?.replace(/_/g, ' ')}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{new Date(e.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-slate-500">{fmtDate(e.created_at)}</td>
                 </tr>
               ))}
               {(episodes ?? []).length === 0 && (

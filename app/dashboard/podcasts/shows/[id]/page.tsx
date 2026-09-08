@@ -1,3 +1,4 @@
+import { fmtDate } from '@/lib/utils/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
@@ -114,7 +115,7 @@ export default async function ShowDetailPage({ params }: { params: { id: string 
                     <span className={`pill ${EPISODE_STATUS_STYLE[e.status] ?? 'bg-slate-100 text-slate-600'} capitalize`}>
                       {e.status?.replace(/_/g, ' ')}
                     </span>
-                    <span className="text-xs text-slate-400">{new Date(e.created_at).toLocaleDateString()}</span>
+                    <span className="text-xs text-slate-400">{fmtDate(e.created_at)}</span>
                   </div>
                 </li>
               ))}
