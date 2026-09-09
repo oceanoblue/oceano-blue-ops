@@ -185,7 +185,7 @@ async function dbxUserCall(token: string, url: string, body: unknown): Promise<R
 
 /** JSON for the `Dropbox-API-Arg` header, which must be pure ASCII. */
 export function headerSafeJson(value: unknown): string {
-  return JSON.stringify(value).replace(/[-￿]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+  return JSON.stringify(value).replace(/[\u007f-\uffff]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
 }
 
 /** POST a content-endpoint call (binary body + Dropbox-API-Arg); same team-token retry as dbxUserCall. */
