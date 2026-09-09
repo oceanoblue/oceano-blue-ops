@@ -183,6 +183,31 @@ async function dbxUserCall(token: string, url: string, body: unknown): Promise<R
   });
 }
 
+/** JSON for the `Dropbox-API-Arg` header, which must be pure ASCII. */
+export function headerSafeJson(value: unknown): string {
+  return JSON.stringify(value).replace(/[-￿]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+}
+
+/** POST a content-endpoint call (binary body + Dropbox-API-Arg); same team-token retry as dbxUserCall. */
+async function dbxContentCall(token: string, url: string, apiArg: unknown, body: Buffer): Promise<Response> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'Dropbox-API-Arg': headerSafeJson(apiArg),
+    'Content-Type': 'application/octet-stream',
+  };
+  const send = (extra: Record<string, string> = {}) =>
+    fetch(url, { method: 'POST', headers: { ...headers, ...extra }, body: new Uint8Array(body) });
+  const first = await send();
+  if (first.status !== 400) return first;
+
+  const text = await first.clone().text();
+  if (!text.includes(TEAM_TOKEN_400)) return first;
+
+  const memberId = await resolveTeamMemberId(token);
+  if (!memberId) return first;
+  return send({ 'Dropbox-API-Select-User': memberId });
+}
+
 export async function createPhotoIntakeRequest(
   orderNumber: number,
   slug: string,
@@ -342,6 +367,32 @@ export async function movePath(fromPath: string, toPath: string): Promise<MoveRe
     const detail = await dropboxErrorDetail(res);
     if (res.status === 409 && detail.includes('not_found')) return { status: 'not_found' };
     return { status: 'failed', error: `dropbox_move_${res.status}: ${detail}` };
+  } catch (e: any) {
+    return { status: 'failed', error: e?.message ?? 'dropbox_error' };
+  }
+}
+
+// ─── Writing small files (podcast thumbnail frames) ──────────────────────────────
+
+export type UploadResult = { status: 'ok' } | { status: 'not_configured' } | { status: 'failed'; error: string };
+
+/** Upload one file (< 150 MB) in a single request. Best-effort: never throws. */
+export async function uploadFile(
+  path: string,
+  bytes: Buffer,
+  opts: { mode?: 'overwrite' | 'add' } = {}
+): Promise<UploadResult> {
+  if (!isDropboxConfigured()) return { status: 'not_configured' };
+  try {
+    const token = await getAccessToken();
+    const res = await dbxContentCall(
+      token,
+      'https://content.dropboxapi.com/2/files/upload',
+      { path, mode: opts.mode ?? 'overwrite', mute: true },
+      bytes
+    );
+    if (res.ok) return { status: 'ok' };
+    return { status: 'failed', error: `dropbox_upload_${res.status}: ${await dropboxErrorDetail(res)}` };
   } catch (e: any) {
     return { status: 'failed', error: e?.message ?? 'dropbox_error' };
   }

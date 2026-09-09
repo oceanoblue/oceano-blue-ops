@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { showFolderPath, isDropboxConfigured } from './dropbox';
+import { showFolderPath, isDropboxConfigured, headerSafeJson } from './dropbox';
 
 describe('showFolderPath', () => {
   it('joins the default root with the slug', () => {
@@ -37,5 +37,13 @@ describe('isDropboxConfigured', () => {
     process.env.DROPBOX_APP_SECRET = 'b';
     process.env.DROPBOX_REFRESH_TOKEN = 'c';
     expect(isDropboxConfigured()).toBe(true);
+  });
+});
+
+describe('headerSafeJson', () => {
+  it('escapes non-ASCII so the value is legal in an HTTP header', () => {
+    const out = headerSafeJson({ path: '/Podcasts/Mind Your Health/señor.jpg', mode: 'overwrite' });
+    expect(out).toBe('{"path":"/Podcasts/Mind Your Health/se\\u00f1or.jpg","mode":"overwrite"}');
+    expect(/[^\x00-\x7f]/.test(out)).toBe(false);
   });
 });
