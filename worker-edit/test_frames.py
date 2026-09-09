@@ -95,3 +95,51 @@ def test_extract_frames_real_ffmpeg(tmp_path):
         img = cv2.imdecode(np.frombuffer(base64.b64decode(f["jpeg_b64"]), np.uint8), cv2.IMREAD_COLOR)
         assert img is not None
         assert img.shape[1] == 320
+
+
+def test_probe_error_never_embeds_url_query_string():
+    async def fake_run(args, timeout):
+        return 1, b"", b"https://dl.dropboxusercontent.com/x.mp4?rlkey=SECRETTOKEN&dl=1: Server returned 403 Forbidden"
+
+    with pytest.raises(frames.FrameError) as ei:
+        asyncio.run(frames.extract_frames("https://x/y.mp4", count=3, runner=fake_run))
+    msg = str(ei.value)
+    assert msg.startswith("probe_failed")
+    assert "SECRETTOKEN" not in msg
+    assert "403" in msg
+
+
+def test_missing_binary_is_a_probe_error():
+    async def fake_run(args, timeout):
+        raise FileNotFoundError("ffprobe")
+
+    with pytest.raises(frames.FrameError, match="probe_failed: FileNotFoundError"):
+        asyncio.run(frames.extract_frames("https://x/y.mp4", count=3, runner=fake_run))
+
+
+def test_runner_exception_drops_only_that_frame():
+    ts = frames.frame_timestamps(120.0, 3)
+    jpeg = _jpeg()
+
+    async def fake_run(args, timeout):
+        if args[0] == "ffprobe":
+            return 0, json.dumps({"format": {"duration": "120.0"}}).encode(), b""
+        if abs(float(args[args.index("-ss") + 1]) - ts[0]) < 1e-6:
+            raise RuntimeError("boom")
+        return 0, jpeg, b""
+
+    out = asyncio.run(frames.extract_frames("https://x/y.mp4", count=3, runner=fake_run))
+    assert [f["index"] for f in out["frames"]] == [2, 3]
+
+
+def test_default_runner_is_looked_up_at_call_time(monkeypatch):
+    jpeg = _jpeg()
+
+    async def fake_run(args, timeout):
+        if args[0] == "ffprobe":
+            return 0, json.dumps({"format": {"duration": "30"}}).encode(), b""
+        return 0, jpeg, b""
+
+    monkeypatch.setattr(frames, "run_subprocess", fake_run)
+    out = asyncio.run(frames.extract_frames("https://x/y.mp4", count=2))  # runner=None
+    assert [f["index"] for f in out["frames"]] == [1, 2]
