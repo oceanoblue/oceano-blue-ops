@@ -34,7 +34,7 @@ export const maxDuration = 300;
  * Never a 5xx for a picker miss — a miss is a valid answer.
  */
 const Body = z.object({
-  show_slug: z.string().min(1).max(100),
+  show_slug: z.string().regex(/^[a-z0-9-]{1,100}$/),
   youtube_id: z.string().regex(/^[A-Za-z0-9_-]{6,20}$/),
 });
 
@@ -141,7 +141,10 @@ export async function POST(request: Request) {
   const picked = await pickFramesWithVision(
     reference,
     frames.map(({ index, bytes }) => ({ index, bytes }))
-  );
+  ).catch((err) => {
+    console.warn('[pick-frames] picker failed:', (err as Error)?.message ?? err);
+    return null;
+  });
 
   let hostsUrl: string | null = null;
   let guestUrl: string | null = null;

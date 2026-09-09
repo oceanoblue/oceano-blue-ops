@@ -26,7 +26,7 @@ export function episodeBasename(filename: string): string {
     .toLowerCase();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// `admin` is the service-role client; typed loosely like the other automation routes.
 export async function resolveEpisodeSource(admin: any, youtubeId: string): Promise<EpisodeSource | null> {
   try {
     const { data: link } = await admin

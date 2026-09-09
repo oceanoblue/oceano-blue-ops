@@ -99,15 +99,16 @@ def test_extract_frames_real_ffmpeg(tmp_path):
         assert img.shape[1] == 320
 
 
-def test_probe_error_never_embeds_url_query_string():
+def test_probe_error_never_embeds_signed_url():
     async def fake_run(args, timeout):
-        return 1, b"", b"https://dl.dropboxusercontent.com/x.mp4?rlkey=SECRETTOKEN&dl=1: Server returned 403 Forbidden"
+        return 1, b"", b"https://uc9c.dl.dropboxusercontent.com/cd/0/get/SECRETTOKEN/file?dl=0: Server returned 403 Forbidden"
 
     with pytest.raises(frames.FrameError) as ei:
         asyncio.run(frames.extract_frames("https://x/y.mp4", count=3, runner=fake_run))
     msg = str(ei.value)
     assert msg.startswith("probe_failed")
     assert "SECRETTOKEN" not in msg
+    assert "dropboxusercontent" not in msg
     assert "403" in msg
 
 

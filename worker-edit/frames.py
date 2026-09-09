@@ -24,12 +24,12 @@ TOTAL_TIMEOUT = 150.0
 MAX_PARALLEL = 4
 MIN_FRAME_BYTES = 200  # anything smaller is not a real JPEG frame
 
-_QUERY_RE = re.compile(r"\?[^\s'\"]*")
+_URL_RE = re.compile(r"https?://\S+")
 
 
 def scrub(text: str, limit: int = 200) -> str:
-    """Error text safe to log: query strings (signed-URL tokens) removed, truncated."""
-    return _QUERY_RE.sub("?…", text)[:limit]
+    """Error text safe to log: any URL (a Dropbox temporary link IS a credential) removed, truncated."""
+    return _URL_RE.sub("<url>", text)[:limit]
 
 
 class FrameError(Exception):

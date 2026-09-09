@@ -89,8 +89,8 @@ export async function extractFrames(
     method: 'POST',
     headers: { 'x-edit-secret': secret, 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, count: opts.count ?? 12, long_edge: opts.longEdge ?? 1280 }),
-    // The worker caps itself at 150 s; leave headroom for a cold Fly machine.
-    signal: AbortSignal.timeout(opts.timeoutMs ?? 170_000),
+    // Worker worst case ≈ 30 s probe + 150 s extraction; leave headroom for a cold Fly machine.
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 190_000),
   });
   if (!r.ok) {
     const body = await r.text().catch(() => '');
