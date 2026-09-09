@@ -88,7 +88,9 @@ labels. Output strict JSON only:
 {"hosts_frame": number|null, "guest_frame": number|null, "guest_remote": boolean, "notes": string}
 `.trim();
 
-const DEFAULT_MODELS = ['gpt-5.4', 'gpt-4o'];
+// Current-generation vision models only: the 5-series rejects the legacy
+// `max_tokens` parameter and gpt-4o is retired on this account.
+const DEFAULT_MODELS = ['gpt-5.4', 'gpt-5.4-mini'];
 
 async function shrink(bytes: Buffer): Promise<string> {
   const small = await sharp(bytes).resize({ width: 896, withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
@@ -133,7 +135,7 @@ export async function pickFramesWithVision(
           { role: 'user', content },
         ],
         response_format: { type: 'json_object' },
-        max_tokens: 300,
+        max_completion_tokens: 400,
       });
       const text = res.choices[0]?.message?.content;
       if (!text) continue;
