@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePickerResponse, youtubeFrameCandidates } from './frame-picker';
+import { buildPickOutput, parsePickerResponse, youtubeFrameCandidates } from './frame-picker';
 
 describe('youtubeFrameCandidates', () => {
   it('prefers the maxres frame and falls back to hq for the same index', () => {
@@ -37,5 +37,60 @@ describe('parsePickerResponse', () => {
   it('caps runaway notes', () => {
     const r = parsePickerResponse({ notes: 'x'.repeat(2000) }, 3);
     expect(r.notes).toHaveLength(500);
+  });
+});
+
+describe('buildPickOutput', () => {
+  const picked = { result: { hosts_frame: 7, guest_frame: 3, guest_remote: false, notes: 'ok' }, model: 'gpt-5.4' };
+
+  it('reports the video source, folder and links', () => {
+    const out = buildPickOutput({
+      picked,
+      frameSource: 'video',
+      framesConsidered: 12,
+      hostsReferenceUsed: true,
+      hostsUrl: 'https://dl/h.jpg',
+      guestUrl: 'https://dl/g.jpg',
+      framesFolder: '/Podcasts/mind-your-health/Thumbnails/frames/ep',
+    });
+    expect(out).toEqual({
+      hosts_frame: 7,
+      guest_frame: 3,
+      guest_remote: false,
+      notes: 'ok',
+      hosts_frame_url: 'https://dl/h.jpg',
+      guest_frame_url: 'https://dl/g.jpg',
+      hosts_reference_used: true,
+      frames_considered: 12,
+      model: 'gpt-5.4',
+      frame_source: 'video',
+      frames_folder: '/Podcasts/mind-your-health/Thumbnails/frames/ep',
+    });
+  });
+
+  it('appends an upload-failure note without touching the picks', () => {
+    const out = buildPickOutput({
+      picked,
+      frameSource: 'video',
+      framesConsidered: 12,
+      hostsReferenceUsed: true,
+      hostsUrl: null,
+      guestUrl: 'https://dl/g.jpg',
+      framesFolder: '/f',
+      noteSuffix: ' (upload failed: dropbox_upload_409: path/conflict)',
+    });
+    expect(out.hosts_frame).toBe(7);
+    expect(out.hosts_frame_url).toBeNull();
+    expect(out.notes).toBe('ok (upload failed: dropbox_upload_409: path/conflict)');
+  });
+
+  it('is the v1 "picker unavailable" shape on a miss', () => {
+    const out = buildPickOutput({ picked: null, frameSource: 'youtube', framesConsidered: 3, hostsReferenceUsed: false, hostsUrl: null, guestUrl: null, framesFolder: null });
+    expect(out).toMatchObject({ hosts_frame: null, guest_frame: null, guest_remote: false, notes: 'Picker unavailable.', model: null, frame_source: 'youtube', frames_folder: null });
+  });
+
+  it('says so when there were no frames at all', () => {
+    const out = buildPickOutput({ picked: null, frameSource: 'youtube', framesConsidered: 0, hostsReferenceUsed: true, hostsUrl: null, guestUrl: null, framesFolder: null });
+    expect(out.notes).toBe('No video frames available yet.');
   });
 });

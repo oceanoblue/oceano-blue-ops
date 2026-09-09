@@ -34,6 +34,10 @@ export type PickFramesOutput = PickerResult & {
   hosts_reference_used: boolean;
   frames_considered: number;
   model: string | null;
+  /** 'video' = frames sampled from the episode mp4 (v2); 'youtube' = YouTube's auto-frames (v1 fallback) */
+  frame_source: 'video' | 'youtube';
+  /** Dropbox folder holding candidates.jpg / hosts.jpg / guest.jpg when frame_source is 'video' */
+  frames_folder: string | null;
 };
 
 /** YouTube auto-frame URLs to try, best quality first, for index 1..3. */
@@ -159,4 +163,36 @@ export async function fetchImage(url: string, timeoutMs = 10_000): Promise<Buffe
   } catch {
     return null;
   }
+}
+
+/** Assemble the route's response. A miss keeps the v1 "use your fallback" shape (nulls + a note). */
+export function buildPickOutput(args: {
+  picked: { result: PickerResult; model: string } | null;
+  frameSource: 'video' | 'youtube';
+  framesConsidered: number;
+  hostsReferenceUsed: boolean;
+  hostsUrl: string | null;
+  guestUrl: string | null;
+  framesFolder: string | null;
+  noteSuffix?: string;
+}): PickFramesOutput {
+  const base: PickerResult = args.picked
+    ? args.picked.result
+    : {
+        hosts_frame: null,
+        guest_frame: null,
+        guest_remote: false,
+        notes: args.framesConsidered === 0 ? 'No video frames available yet.' : 'Picker unavailable.',
+      };
+  return {
+    ...base,
+    notes: `${base.notes}${args.noteSuffix ?? ''}`,
+    hosts_frame_url: args.hostsUrl,
+    guest_frame_url: args.guestUrl,
+    hosts_reference_used: args.hostsReferenceUsed,
+    frames_considered: args.framesConsidered,
+    model: args.picked?.model ?? null,
+    frame_source: args.frameSource,
+    frames_folder: args.framesFolder,
+  };
 }
