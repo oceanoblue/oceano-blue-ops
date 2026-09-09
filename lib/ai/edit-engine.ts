@@ -64,3 +64,41 @@ export async function runEditEngine(
   }
   return Buffer.from(await r.arrayBuffer());
 }
+
+export interface ExtractedFrame {
+  index: number; // 1-based position in the sampled sequence (earliest = 1)
+  t: number; // seconds into the video
+  bytes: Buffer; // JPEG
+}
+
+/**
+ * Sample frames from a video URL via the engine's `/frames` endpoint (ffmpeg
+ * on the worker; the file is range-read, never fully downloaded). Used by the
+ * podcast thumbnail picker. Throws like runEditEngine; callers should check
+ * editEngineConfigured() first and treat any throw as "use the fallback".
+ */
+export async function extractFrames(
+  url: string,
+  opts: { count?: number; longEdge?: number; timeoutMs?: number } = {}
+): Promise<{ duration: number; frames: ExtractedFrame[] }> {
+  const base = process.env.EDIT_ENGINE_URL;
+  const secret = process.env.EDIT_WORKER_SECRET;
+  if (!base || !secret) throw new Error('edit_engine_not_configured');
+
+  const r = await fetch(`${base.replace(/\/$/, '')}/frames`, {
+    method: 'POST',
+    headers: { 'x-edit-secret': secret, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, count: opts.count ?? 12, long_edge: opts.longEdge ?? 1280 }),
+    // The worker caps itself at 150 s; leave headroom for a cold Fly machine.
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 170_000),
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`edit_engine_${r.status}: ${body.slice(0, 200)}`);
+  }
+  const json = (await r.json()) as { duration: number; frames?: { index: number; t: number; jpeg_b64: string }[] };
+  return {
+    duration: json.duration,
+    frames: (json.frames ?? []).map((f) => ({ index: f.index, t: f.t, bytes: Buffer.from(f.jpeg_b64, 'base64') })),
+  };
+}
