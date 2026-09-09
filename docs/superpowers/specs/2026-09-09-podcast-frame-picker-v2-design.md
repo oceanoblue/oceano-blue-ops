@@ -197,9 +197,9 @@ app (`vitest`):
 - `lib/podcasts/contact-sheet.test.ts` — `sheetLayout()` geometry; one
   end-to-end sharp render of 3 tiny frames asserting output dimensions.
 - `lib/podcasts/frame-picker.test.ts` — unchanged, still passes.
-- `app/api/automations/podcast/pick-frames` — response-merge helper extracted as
-  a pure function (`mergePickResponse`) and unit-tested for the video/youtube
-  branches and the upload-failed nulling.
+- `lib/podcasts/frame-picker.ts` — the response assembly is a pure function
+  (`buildPickOutput`) unit-tested for the video/youtube branches, the
+  upload-failed note suffix, and the v1 miss shape.
 
 ## Deployment order
 
