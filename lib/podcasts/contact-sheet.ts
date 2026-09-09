@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import type { OverlayOptions } from 'sharp';
 
 /**
  * One JPEG showing every candidate frame the picker considered, numbered, so
@@ -43,11 +44,10 @@ export async function buildContactSheet(
   const o = { ...DEFAULTS, ...opts };
   const layout = sheetLayout(frames.map((f) => f.index), o);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const composites: any[] = [];
+  const composites: OverlayOptions[] = [];
   for (let i = 0; i < frames.length; i++) {
     const { left, top } = layout.tiles[i];
-    const tile = await sharp(frames[i].bytes).resize(o.tileW, o.tileH, { fit: 'cover' }).jpeg({ quality: 85 }).toBuffer();
+    const tile = await sharp(frames[i].bytes).resize(o.tileW, o.tileH, { fit: 'cover' }).png().toBuffer();
     composites.push({ input: tile, left, top });
     composites.push({ input: numeral(frames[i].index), left: left + 6, top: top + 6 });
   }
