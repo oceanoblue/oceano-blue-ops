@@ -11,8 +11,10 @@ import subprocess
 import cv2
 import numpy as np
 import pytest
+from fastapi.testclient import TestClient
 
 import frames
+import server
 
 
 def test_frame_timestamps_spacing():
@@ -143,3 +145,59 @@ def test_default_runner_is_looked_up_at_call_time(monkeypatch):
     monkeypatch.setattr(frames, "run_subprocess", fake_run)
     out = asyncio.run(frames.extract_frames("https://x/y.mp4", count=2))  # runner=None
     assert [f["index"] for f in out["frames"]] == [1, 2]
+
+
+def test_frames_endpoint_contract(monkeypatch):
+    monkeypatch.setattr(server, "SECRET", "test-edit-secret")
+    jpeg = _jpeg()
+
+    async def fake_run(args, timeout):
+        if args[0] == "ffprobe":
+            return 0, json.dumps({"format": {"duration": "120.0"}}).encode(), b""
+        return 0, jpeg, b""
+
+    monkeypatch.setattr(frames, "run_subprocess", fake_run)
+
+    with TestClient(server.app) as client:
+        assert client.post("/frames", json={"url": "https://x/y.mp4"}).status_code == 401
+        headers = {"x-edit-secret": "test-edit-secret"}
+        assert client.post("/frames", json={"url": "file:///etc/passwd"}, headers=headers).status_code == 400
+        r = client.post("/frames", json={"url": "https://x/y.mp4", "count": 3}, headers=headers)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["duration"] == 120.0
+    assert [f["index"] for f in body["frames"]] == [1, 2, 3]
+    assert base64.b64decode(body["frames"][0]["jpeg_b64"]).startswith(b"\xff\xd8")
+
+
+def test_frames_endpoint_clamps_count(monkeypatch):
+    monkeypatch.setattr(server, "SECRET", "test-edit-secret")
+    calls = []
+
+    async def fake_run(args, timeout):
+        calls.append(args)
+        if args[0] == "ffprobe":
+            return 0, json.dumps({"format": {"duration": "60"}}).encode(), b""
+        return 0, _jpeg(), b""
+
+    monkeypatch.setattr(frames, "run_subprocess", fake_run)
+    with TestClient(server.app) as client:
+        r = client.post("/frames", json={"url": "https://x/y.mp4", "count": 999, "long_edge": 5},
+                        headers={"x-edit-secret": "test-edit-secret"})
+    assert r.status_code == 200
+    assert len(r.json()["frames"]) == 24
+    assert any("scale=320:-2" in a for a in calls if a[0] == "ffmpeg")
+
+
+def test_frames_endpoint_maps_frame_error_to_502(monkeypatch):
+    monkeypatch.setattr(server, "SECRET", "test-edit-secret")
+
+    async def fake_run(args, timeout):
+        return 1, b"", b"denied"
+
+    monkeypatch.setattr(frames, "run_subprocess", fake_run)
+    with TestClient(server.app) as client:
+        r = client.post("/frames", json={"url": "https://x/y.mp4"}, headers={"x-edit-secret": "test-edit-secret"})
+    assert r.status_code == 502
+    assert r.json()["detail"].startswith("probe_failed")

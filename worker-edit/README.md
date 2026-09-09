@@ -20,6 +20,16 @@ masked, opt-in operations.
 
 Header `x-edit-secret` must match `EDIT_WORKER_SECRET`. Returns `image/jpeg`.
 
+## Frame sampling (`POST /frames`, JSON)
+
+Used by the podcast thumbnail picker (v2). Body `{ "url": "<http(s) video url>",
+"count": 12, "long_edge": 1280 }` (count clamped 1..24, long_edge 320..1920).
+Samples `count` frames evenly across 5–95 % of the runtime with input-side
+ffmpeg seeks (range reads; the file is never fully downloaded), 4 in parallel,
+45 s per frame / 150 s total. Returns
+`{ "duration": <seconds>, "frames": [ { "index": 1.., "t": <seconds>, "jpeg_b64": "..." } ] }`;
+frames that fail are dropped, zero frames → 502. Same `x-edit-secret` header.
+
 - **fuse**: align (best-effort) → Mertens multi-scale exposure fusion (overshoot
   renormalized, not clipped — keeps window-edge highlight separation) →
   [window pull] → [straighten] → resize.

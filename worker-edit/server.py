@@ -27,7 +27,10 @@ from typing import List, Optional
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, Header, HTTPException, Response, UploadFile
+from pydantic import BaseModel
 
+import frames as frames_mod
+from frames import FrameError
 from window_pull import window_pull as pull_windows, pick_darkest
 from geometry import straighten_verticals
 from sky import replace_sky
@@ -694,3 +697,30 @@ async def edit(
     if not ok:
         raise HTTPException(status_code=500, detail="encode_failed")
     return Response(content=buf.tobytes(), media_type="image/jpeg")
+
+
+# ─── Podcast thumbnail frames (frame picker v2) ──────────────────────────────
+# Sample frames from a video URL (a Dropbox temporary link) so the app's vision
+# picker can choose hosts/guest shots from the episode itself instead of
+# YouTube's three auto-frames. ffmpeg lives in the image (Dockerfile).
+
+
+class FramesRequest(BaseModel):
+    url: str
+    count: int = 12
+    long_edge: int = 1280
+
+
+@app.post("/frames")
+async def frames_endpoint(req: FramesRequest, x_edit_secret: Optional[str] = Header(None)):
+    if not SECRET or x_edit_secret != SECRET:
+        raise HTTPException(status_code=401, detail="unauthorized")
+    if not req.url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="bad_url")
+    count = max(1, min(24, req.count))
+    long_edge = max(320, min(1920, req.long_edge))
+    try:
+        # runner=None → frames.run_subprocess looked up at call time (tests monkeypatch it)
+        return await frames_mod.extract_frames(req.url, count=count, long_edge=long_edge)
+    except FrameError as e:
+        raise HTTPException(status_code=502, detail=str(e))
