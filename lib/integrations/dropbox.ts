@@ -177,6 +177,8 @@ async function resolveTeamRootNamespace(token: string, memberHeaders: Record<str
       headers: { Authorization: `Bearer ${token}`, ...memberHeaders },
     });
     if (!res.ok) {
+      // Namespace ids are identifiers, not secrets; the body is Dropbox's error summary.
+      console.warn('[dropbox] get_current_account failed:', res.status, (await res.text().catch(() => '')).slice(0, 160));
       cachedRootNamespaceId = null;
       return null;
     }
@@ -188,8 +190,12 @@ async function resolveTeamRootNamespace(token: string, memberHeaders: Record<str
       ri?.['.tag'] === 'team' && ri.root_namespace_id && ri.root_namespace_id !== ri.home_namespace_id
         ? ri.root_namespace_id
         : null;
+    if (!cachedRootNamespaceId) {
+      console.warn('[dropbox] no team root namespace:', JSON.stringify(ri ?? null));
+    }
     return cachedRootNamespaceId;
-  } catch {
+  } catch (err) {
+    console.warn('[dropbox] get_current_account threw:', (err as Error)?.message ?? err);
     cachedRootNamespaceId = null;
     return null;
   }
@@ -236,7 +242,10 @@ async function dbxUserCall(token: string, url: string, body: unknown): Promise<R
 
   if (await isPathNotFound(res)) {
     const namespaceId = await resolveTeamRootNamespace(token, memberHeaders);
-    if (namespaceId) res = await send({ ...memberHeaders, ...pathRootHeader(namespaceId) });
+    if (namespaceId) {
+      res = await send({ ...memberHeaders, ...pathRootHeader(namespaceId) });
+      console.warn('[dropbox] team-root retry', { ns: namespaceId, selectUser: Boolean(memberHeaders['Dropbox-API-Select-User']), status: res.status });
+    }
   }
 
   return res;
@@ -276,7 +285,10 @@ async function dbxContentCall(token: string, url: string, apiArg: unknown, body:
 
   if (await isPathNotFound(res)) {
     const namespaceId = await resolveTeamRootNamespace(token, memberHeaders);
-    if (namespaceId) res = await send({ ...memberHeaders, ...pathRootHeader(namespaceId) });
+    if (namespaceId) {
+      res = await send({ ...memberHeaders, ...pathRootHeader(namespaceId) });
+      console.warn('[dropbox] team-root retry', { ns: namespaceId, selectUser: Boolean(memberHeaders['Dropbox-API-Select-User']), status: res.status });
+    }
   }
 
   return res;
