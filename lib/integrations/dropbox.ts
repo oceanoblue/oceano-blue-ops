@@ -162,25 +162,84 @@ async function resolveTeamMemberId(token: string): Promise<string | null> {
 
 const TEAM_TOKEN_400 = 'entire Dropbox Business team';
 
-/** POST a user-endpoint call; on the team-token 400, retry as the resolved member. */
+// Dropbox "team space" accounts resolve paths against the MEMBER'S HOME folder
+// unless a call carries Dropbox-API-Path-Root pointing at the team root, where
+// team folders (/Podcasts, ...) live. Learned once per process via
+// users/get_current_account (root_info.root_namespace_id); null = not a team
+// space, or unknown → no retry.
+let cachedRootNamespaceId: string | null | undefined;
+
+async function resolveTeamRootNamespace(token: string, memberHeaders: Record<string, string>): Promise<string | null> {
+  if (cachedRootNamespaceId !== undefined) return cachedRootNamespaceId;
+  try {
+    const res = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, ...memberHeaders },
+    });
+    if (!res.ok) {
+      cachedRootNamespaceId = null;
+      return null;
+    }
+    const json = (await res.json()) as {
+      root_info?: { '.tag'?: string; root_namespace_id?: string; home_namespace_id?: string };
+    };
+    const ri = json.root_info;
+    cachedRootNamespaceId =
+      ri?.['.tag'] === 'team' && ri.root_namespace_id && ri.root_namespace_id !== ri.home_namespace_id
+        ? ri.root_namespace_id
+        : null;
+    return cachedRootNamespaceId;
+  } catch {
+    cachedRootNamespaceId = null;
+    return null;
+  }
+}
+
+function pathRootHeader(namespaceId: string): Record<string, string> {
+  return { 'Dropbox-API-Path-Root': JSON.stringify({ '.tag': 'root', root: namespaceId }) };
+}
+
+async function isPathNotFound(res: Response): Promise<boolean> {
+  if (res.status !== 409) return false;
+  try {
+    return (await res.clone().text()).includes('path/not_found');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * POST a user-endpoint call: first attempt → maybe team-token (Select-User)
+ * retry on 400 → maybe team-root (Path-Root) retry on path/not_found 409.
+ */
 async function dbxUserCall(token: string, url: string, body: unknown): Promise<Response> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
-  const first = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-  if (first.status !== 400) return first;
+  const send = (extra: Record<string, string> = {}) =>
+    fetch(url, { method: 'POST', headers: { ...headers, ...extra }, body: JSON.stringify(body) });
 
-  const text = await first.clone().text();
-  if (!text.includes(TEAM_TOKEN_400)) return first;
+  let res = await send();
+  let memberHeaders: Record<string, string> = {};
 
-  const memberId = await resolveTeamMemberId(token);
-  if (!memberId) return first;
-  return fetch(url, {
-    method: 'POST',
-    headers: { ...headers, 'Dropbox-API-Select-User': memberId },
-    body: JSON.stringify(body),
-  });
+  if (res.status === 400) {
+    const text = await res.clone().text();
+    if (text.includes(TEAM_TOKEN_400)) {
+      const memberId = await resolveTeamMemberId(token);
+      if (memberId) {
+        memberHeaders = { 'Dropbox-API-Select-User': memberId };
+        res = await send(memberHeaders);
+      }
+    }
+  }
+
+  if (await isPathNotFound(res)) {
+    const namespaceId = await resolveTeamRootNamespace(token, memberHeaders);
+    if (namespaceId) res = await send({ ...memberHeaders, ...pathRootHeader(namespaceId) });
+  }
+
+  return res;
 }
 
 /** JSON for the `Dropbox-API-Arg` header, which must be pure ASCII. */
@@ -188,7 +247,10 @@ export function headerSafeJson(value: unknown): string {
   return JSON.stringify(value).replace(/[\u007f-\uffff]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
 }
 
-/** POST a content-endpoint call (binary body + Dropbox-API-Arg); same team-token retry as dbxUserCall. */
+/**
+ * POST a content-endpoint call (binary body + Dropbox-API-Arg); same
+ * team-token then team-root retry sequence as dbxUserCall.
+ */
 async function dbxContentCall(token: string, url: string, apiArg: unknown, body: Buffer): Promise<Response> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
@@ -197,15 +259,27 @@ async function dbxContentCall(token: string, url: string, apiArg: unknown, body:
   };
   const send = (extra: Record<string, string> = {}) =>
     fetch(url, { method: 'POST', headers: { ...headers, ...extra }, body: new Uint8Array(body) });
-  const first = await send();
-  if (first.status !== 400) return first;
 
-  const text = await first.clone().text();
-  if (!text.includes(TEAM_TOKEN_400)) return first;
+  let res = await send();
+  let memberHeaders: Record<string, string> = {};
 
-  const memberId = await resolveTeamMemberId(token);
-  if (!memberId) return first;
-  return send({ 'Dropbox-API-Select-User': memberId });
+  if (res.status === 400) {
+    const text = await res.clone().text();
+    if (text.includes(TEAM_TOKEN_400)) {
+      const memberId = await resolveTeamMemberId(token);
+      if (memberId) {
+        memberHeaders = { 'Dropbox-API-Select-User': memberId };
+        res = await send(memberHeaders);
+      }
+    }
+  }
+
+  if (await isPathNotFound(res)) {
+    const namespaceId = await resolveTeamRootNamespace(token, memberHeaders);
+    if (namespaceId) res = await send({ ...memberHeaders, ...pathRootHeader(namespaceId) });
+  }
+
+  return res;
 }
 
 export async function createPhotoIntakeRequest(
