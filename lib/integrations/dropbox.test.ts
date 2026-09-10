@@ -90,7 +90,8 @@ describe('team-root fallback', () => {
       if (url.includes('users/get_current_account')) {
         if (getCurrentAccountStatus !== 200) return new Response('server error', { status: getCurrentAccountStatus });
         return new Response(
-          JSON.stringify({ root_info: { '.tag': 'team', root_namespace_id: '111', home_namespace_id: '222' } }),
+          // Production shape: Dropbox tags a team-space member "user" yet reports a distinct root namespace.
+          JSON.stringify({ root_info: { '.tag': 'user', home_path: '/Member', root_namespace_id: '111', home_namespace_id: '222' } }),
           { status: 200 }
         );
       }

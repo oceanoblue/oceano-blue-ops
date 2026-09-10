@@ -186,10 +186,11 @@ async function resolveTeamRootNamespace(token: string, memberHeaders: Record<str
       root_info?: { '.tag'?: string; root_namespace_id?: string; home_namespace_id?: string };
     };
     const ri = json.root_info;
+    // Dropbox tags a team-space member's root_info "user" (not "team") while
+    // still reporting a root namespace distinct from the home one — the
+    // distinct-ids check is the real signal, so don't gate on the tag.
     cachedRootNamespaceId =
-      ri?.['.tag'] === 'team' && ri.root_namespace_id && ri.root_namespace_id !== ri.home_namespace_id
-        ? ri.root_namespace_id
-        : null;
+      ri?.root_namespace_id && ri.root_namespace_id !== ri.home_namespace_id ? ri.root_namespace_id : null;
     if (!cachedRootNamespaceId) {
       console.warn('[dropbox] no team root namespace:', JSON.stringify(ri ?? null));
     }
