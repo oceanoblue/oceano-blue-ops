@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { editEngineConfigured, extractFrames } from '@/lib/ai/edit-engine';
 import { getTemporaryLink, isDropboxConfigured, showFolderPath, uploadFile } from '@/lib/integrations/dropbox';
 import { buildContactSheet } from '@/lib/podcasts/contact-sheet';
-import { resolveEpisodeSource } from '@/lib/podcasts/episode-source';
+import { directDownloadUrl, resolveEpisodeSource } from '@/lib/podcasts/episode-source';
 import {
   buildPickOutput,
   fetchImage,
@@ -36,6 +36,11 @@ export const maxDuration = 300;
 const Body = z.object({
   show_slug: z.string().regex(/^[a-z0-9-]{1,100}$/),
   youtube_id: z.string().regex(/^[A-Za-z0-9_-]{6,20}$/),
+  hosts_reference_url: z
+    .string()
+    .url()
+    .refine((u) => u.startsWith('https:'), { message: 'hosts_reference_url must be https:' })
+    .optional(),
 });
 
 const VIDEO_FRAME_COUNT = 12;
@@ -51,8 +56,12 @@ function authorized(request: Request): boolean {
   return timingSafeEqual(a, b);
 }
 
-/** Standing identity reference: <show folder>/Thumbnails/refs/hosts.jpg */
-async function loadHostsReference(showSlug: string): Promise<Buffer | null> {
+/** Standing identity reference: <show folder>/Thumbnails/refs/hosts.jpg, or an override URL Make hands over. */
+async function loadHostsReference(showSlug: string, overrideUrl?: string): Promise<Buffer | null> {
+  if (overrideUrl) {
+    const bytes = await fetchImage(overrideUrl, 15_000);
+    if (bytes) return bytes;
+  }
   if (!isDropboxConfigured()) return null;
   try {
     const link = await getTemporaryLink(`${showFolderPath(showSlug)}/Thumbnails/refs/hosts.jpg`);
@@ -64,14 +73,18 @@ async function loadHostsReference(showSlug: string): Promise<Buffer | null> {
 
 /** v2 source: frames from the episode mp4. null = fall back to YouTube. */
 async function loadVideoFrames(youtubeId: string, admin: any): Promise<{ frames: Candidate[]; basename: string } | null> {
-  if (!isDropboxConfigured() || !editEngineConfigured()) return null;
+  if (!editEngineConfigured()) return null;
   const source = await resolveEpisodeSource(admin, youtubeId);
   if (!source) {
     console.warn('[pick-frames] no Dropbox source for', youtubeId, '— using YouTube frames');
     return null;
   }
   try {
-    const link = await getTemporaryLink(source.dropboxPath);
+    const link = (source.shareUrl && directDownloadUrl(source.shareUrl)) ?? (source.dropboxPath ? await getTemporaryLink(source.dropboxPath) : null);
+    if (!link) {
+      console.warn('[pick-frames] no video url for', youtubeId);
+      return null;
+    }
     const { frames } = await extractFrames(link, { count: VIDEO_FRAME_COUNT });
     if (frames.length === 0) return null;
     // Re-number 1..N in order so FRAME labels are contiguous even if the worker dropped some.
@@ -123,11 +136,14 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'validation_failed', issues: parsed.error.issues }, { status: 400 });
   }
-  const { show_slug, youtube_id } = parsed.data;
+  const { show_slug, youtube_id, hosts_reference_url } = parsed.data;
   const admin = createAdminClient() as any;
 
   // Inputs in parallel: the hosts reference + the episode's own frames (or YouTube's).
-  const [reference, video] = await Promise.all([loadHostsReference(show_slug), loadVideoFrames(youtube_id, admin)]);
+  const [reference, video] = await Promise.all([
+    loadHostsReference(show_slug, hosts_reference_url),
+    loadVideoFrames(youtube_id, admin),
+  ]);
   const frameSource: 'video' | 'youtube' = video ? 'video' : 'youtube';
   const frames: Candidate[] = video ? video.frames : await loadYoutubeFrames(youtube_id);
   const framesFolder = video ? `${showFolderPath(show_slug)}/Thumbnails/frames/${video.basename}` : null;

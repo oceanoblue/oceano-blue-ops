@@ -176,4 +176,47 @@ describe('team-root fallback', () => {
     expect(calls.filter((c) => c.url.includes('files/get_temporary_link'))).toHaveLength(1);
     expect(calls.filter((c) => c.url.includes('users/get_current_account'))).toHaveLength(0);
   });
+
+  it('f. sandbox (App-Folder) app: the Path-Root retry 400s, so the original 409 (path/not_found) is preserved and the retry is disabled for the rest of the process', async () => {
+    const calls: Call[] = [];
+    const fetchMock = vi.fn(async (url: string, init: RequestInit = {}) => {
+      const headers = { ...(init.headers as Record<string, string> | undefined) };
+      calls.push({ url, headers });
+
+      if (url.includes('oauth2/token')) {
+        return new Response(JSON.stringify({ access_token: 't', expires_in: 14400 }), { status: 200 });
+      }
+      if (url.includes('users/get_current_account')) {
+        return new Response(
+          JSON.stringify({ root_info: { '.tag': 'user', root_namespace_id: '111', home_namespace_id: '222' } }),
+          { status: 200 }
+        );
+      }
+      if (url.includes('files/get_temporary_link')) {
+        if (headers['Dropbox-API-Path-Root']) {
+          return new Response(
+            JSON.stringify({
+              error_summary: 'path_root/...',
+              error: { '.tag': 'path_root' },
+              error_message: 'path root is not supported for sandbox app',
+            }),
+            { status: 400 }
+          );
+        }
+        return new Response(JSON.stringify({ error_summary: 'path/not_found/...' }), { status: 409 });
+      }
+      throw new Error(`unexpected fetch url in test stub: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { getTemporaryLink } = await import('./dropbox');
+
+    await expect(getTemporaryLink('/Podcasts/x.mp4')).rejects.toThrow(/dropbox_temp_link_409: path\/not_found/);
+
+    // Second call: retry must stay disabled — no fresh get_current_account, no Path-Root request.
+    await expect(getTemporaryLink('/Podcasts/y.mp4')).rejects.toThrow(/dropbox_temp_link_409: path\/not_found/);
+
+    expect(calls.filter((c) => c.url.includes('users/get_current_account'))).toHaveLength(1);
+    expect(calls.filter((c) => c.headers['Dropbox-API-Path-Root'])).toHaveLength(1);
+    expect(calls.filter((c) => c.url.includes('files/get_temporary_link'))).toHaveLength(3);
+  });
 });

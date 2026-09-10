@@ -215,6 +215,49 @@ async function isPathNotFound(res: Response): Promise<boolean> {
   }
 }
 
+const SANDBOX_APP_400 = 'path root is not supported';
+
+// Once we learn (via a 400 on the Path-Root retry) that this app is an
+// App-Folder (sandbox) app, warn only once per process — every subsequent
+// call skips the retry entirely (cachedRootNamespaceId stays null).
+let warnedSandboxApp = false;
+
+/**
+ * Shared tail of dbxUserCall / dbxContentCall: on a path/not_found 409, retry
+ * once with the team-root Path-Root header. A sandbox (App-Folder) app can
+ * never use Path-Root and answers that retry with its own 400 ("path root is
+ * not supported for sandbox app") — detect that, disable the retry for the
+ * rest of the process, and hand back the ORIGINAL 409 so callers keep the
+ * path/not_found semantics they had before (not a misleading 400).
+ */
+async function retryWithTeamRoot(
+  res: Response,
+  token: string,
+  memberHeaders: Record<string, string>,
+  send: (extra?: Record<string, string>) => Promise<Response>
+): Promise<Response> {
+  if (!(await isPathNotFound(res))) return res;
+  const namespaceId = await resolveTeamRootNamespace(token, memberHeaders);
+  if (!namespaceId) return res;
+
+  const retried = await send({ ...memberHeaders, ...pathRootHeader(namespaceId) });
+
+  if (retried.status === 400) {
+    const text = await retried.clone().text();
+    if (text.includes(SANDBOX_APP_400)) {
+      cachedRootNamespaceId = null;
+      if (!warnedSandboxApp) {
+        warnedSandboxApp = true;
+        console.warn('[dropbox] app-folder (sandbox) app: team-root retry disabled');
+      }
+      return res;
+    }
+  }
+
+  console.warn('[dropbox] team-root retry', { ns: namespaceId, selectUser: Boolean(memberHeaders['Dropbox-API-Select-User']), status: retried.status });
+  return retried;
+}
+
 /**
  * POST a user-endpoint call: first attempt → maybe team-token (Select-User)
  * retry on 400 → maybe team-root (Path-Root) retry on path/not_found 409.
@@ -241,15 +284,7 @@ async function dbxUserCall(token: string, url: string, body: unknown): Promise<R
     }
   }
 
-  if (await isPathNotFound(res)) {
-    const namespaceId = await resolveTeamRootNamespace(token, memberHeaders);
-    if (namespaceId) {
-      res = await send({ ...memberHeaders, ...pathRootHeader(namespaceId) });
-      console.warn('[dropbox] team-root retry', { ns: namespaceId, selectUser: Boolean(memberHeaders['Dropbox-API-Select-User']), status: res.status });
-    }
-  }
-
-  return res;
+  return retryWithTeamRoot(res, token, memberHeaders, send);
 }
 
 /** JSON for the `Dropbox-API-Arg` header, which must be pure ASCII. */
@@ -284,15 +319,7 @@ async function dbxContentCall(token: string, url: string, apiArg: unknown, body:
     }
   }
 
-  if (await isPathNotFound(res)) {
-    const namespaceId = await resolveTeamRootNamespace(token, memberHeaders);
-    if (namespaceId) {
-      res = await send({ ...memberHeaders, ...pathRootHeader(namespaceId) });
-      console.warn('[dropbox] team-root retry', { ns: namespaceId, selectUser: Boolean(memberHeaders['Dropbox-API-Select-User']), status: res.status });
-    }
-  }
-
-  return res;
+  return retryWithTeamRoot(res, token, memberHeaders, send);
 }
 
 export async function createPhotoIntakeRequest(

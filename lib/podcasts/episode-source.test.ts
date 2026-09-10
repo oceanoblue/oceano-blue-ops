@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { episodeBasename, resolveEpisodeSource } from './episode-source';
+import { directDownloadUrl, episodeBasename, resolveEpisodeSource } from './episode-source';
 
 describe('episodeBasename', () => {
   it('strips folders + video extension and lower-cases (matches Make ref_base)', () => {
@@ -8,6 +8,38 @@ describe('episodeBasename', () => {
     );
     expect(episodeBasename('/Podcasts/mind-your-health/02-Edited/ep.MOV')).toBe('ep');
     expect(episodeBasename('  noext ')).toBe('noext');
+  });
+});
+
+describe('directDownloadUrl', () => {
+  it('normalises dl=0 to dl=1 on www.dropbox.com', () => {
+    expect(directDownloadUrl('https://www.dropbox.com/scl/fi/abc/x.mp4?rlkey=k&dl=0')).toBe(
+      'https://www.dropbox.com/scl/fi/abc/x.mp4?rlkey=k&dl=1'
+    );
+  });
+
+  it('adds dl=1 when the param is absent, preserving other params', () => {
+    expect(directDownloadUrl('https://dropbox.com/scl/fi/abc/x.mp4?rlkey=k')).toBe(
+      'https://dropbox.com/scl/fi/abc/x.mp4?rlkey=k&dl=1'
+    );
+  });
+
+  it('accepts *.dropboxusercontent.com', () => {
+    expect(directDownloadUrl('https://uc123.dropboxusercontent.com/cd/0/get/x')).toBe(
+      'https://uc123.dropboxusercontent.com/cd/0/get/x?dl=1'
+    );
+  });
+
+  it('rejects non-Dropbox hosts', () => {
+    expect(directDownloadUrl('https://evil.example.com/x.mp4')).toBeNull();
+  });
+
+  it('rejects http: (non-https)', () => {
+    expect(directDownloadUrl('http://www.dropbox.com/scl/fi/abc/x.mp4?dl=0')).toBeNull();
+  });
+
+  it('rejects unparseable URLs', () => {
+    expect(directDownloadUrl('not a url')).toBeNull();
   });
 });
 
@@ -36,6 +68,7 @@ describe('resolveEpisodeSource', () => {
       episodeId: 'ep1',
       jobId: 'job1',
       dropboxPath: '/Podcasts/mind-your-health/02-Edited/X_v1.mp4',
+      shareUrl: null,
       basename: 'x_v1',
     });
   });
@@ -47,6 +80,33 @@ describe('resolveEpisodeSource', () => {
       assets: { local_path: '/old/RENDERS/Y.mp4', filename: 'Y.mp4' },
     });
     expect((await resolveEpisodeSource(admin, 'abc'))?.basename).toBe('y');
+  });
+
+  it('prefers and normalises the share link from the source asset', async () => {
+    const admin = fakeAdmin({
+      external_links: { job_id: 'job1' },
+      podcast_episodes: { id: 'ep1', job_id: 'job1', metadata: { dropbox_path: '/Podcasts/mind-your-health/02-Edited/X_v1.mp4', filename: 'X_v1.mp4' } },
+      assets: { local_path: '/old/RENDERS/Y.mp4', filename: 'Y.mp4', external_url: 'https://www.dropbox.com/scl/fi/abc/x.mp4?rlkey=k&dl=0' },
+    });
+    const source = await resolveEpisodeSource(admin, 'abc');
+    expect(source?.shareUrl).toBe('https://www.dropbox.com/scl/fi/abc/x.mp4?rlkey=k&dl=0');
+    expect(source?.dropboxPath).toBe('/Podcasts/mind-your-health/02-Edited/X_v1.mp4');
+  });
+
+  it('returns a source when only external_url exists (no dropbox_path, no asset.local_path)', async () => {
+    const admin = fakeAdmin({
+      external_links: { job_id: 'job1' },
+      podcast_episodes: { id: 'ep1', job_id: 'job1', metadata: {} },
+      assets: { external_url: 'https://www.dropbox.com/scl/fi/abc/X_v1.mp4?rlkey=k&dl=0' },
+    });
+    const source = await resolveEpisodeSource(admin, 'abc');
+    expect(source).toEqual({
+      episodeId: 'ep1',
+      jobId: 'job1',
+      dropboxPath: null,
+      shareUrl: 'https://www.dropbox.com/scl/fi/abc/X_v1.mp4?rlkey=k&dl=0',
+      basename: 'x_v1',
+    });
   });
 
   it('returns null when the chain breaks', async () => {
