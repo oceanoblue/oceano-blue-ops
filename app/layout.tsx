@@ -17,10 +17,25 @@ const mono = Space_Mono({
   variable: '--font-mono',
 });
 
+const publicTitle = 'Oceano Blue Media';
+const publicDescription =
+  'Book professional photography and video services, manage your shoots, and access your finished media.';
+
 export const metadata: Metadata = {
-  title: 'Oceano Blue — Production OS',
-  description:
-    'The Oceano Blue Media operating system: bookings, AI photo and video production, podcasts, and client delivery.',
+  title: publicTitle,
+  description: publicDescription,
+  applicationName: publicTitle,
+  openGraph: {
+    title: publicTitle,
+    description: publicDescription,
+    siteName: publicTitle,
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: publicTitle,
+    description: publicDescription,
+  },
   // Installable app (realtor portal): manifest + iOS home-screen treatment.
   manifest: '/manifest.webmanifest',
   appleWebApp: {
