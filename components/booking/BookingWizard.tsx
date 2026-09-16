@@ -177,9 +177,9 @@ export function BookingWizard({
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <BrandLogo variant="dark" className="h-7 w-auto" />
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between xl:gap-6">
+          <Link href="/" className="flex shrink-0 items-center gap-3 self-start xl:self-auto">
+            <BrandLogo variant="dark" className="h-7 w-auto shrink-0" />
             {label && (
               <span className="hidden sm:inline border-l border-slate-200 pl-3 text-sm font-medium text-slate-500">
                 {label}
