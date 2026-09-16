@@ -39,7 +39,7 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <BrandLogo variant="white" className="h-7 w-auto sm:h-8" />
             <span className="hidden rounded-full bg-white/10 px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-ocean-300 ring-1 ring-white/10 sm:inline">
-              Production OS
+              Photography &amp; Video
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -236,7 +236,7 @@ export default function HomePage() {
           <div>
             <BrandLogo variant="white" className="h-6 w-auto" />
             <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-500">
-              Internal platform · Clients book a shoot above
+              Photography · Video · Client delivery
             </p>
           </div>
           <div className="flex items-center gap-6 text-sm text-ink-300">
