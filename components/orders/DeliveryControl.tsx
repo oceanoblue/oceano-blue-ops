@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Copy, ExternalLink, Eye, ImageIcon, Loader2, Mail, MessageSquare, Send, X } from 'lucide-react';
 import { galleryReadyEmail, galleryReadySms } from '@/lib/email/templates';
@@ -91,7 +92,7 @@ export function DeliveryControl({orderId}:{orderId:string}) {
    <button className="btn-primary w-full" onClick={()=>setOpen(true)}><Send className="h-4 w-4"/>Prepare delivery</button>
    {url&&<a className="inline-flex items-center gap-1 text-ocean-700 hover:underline" href={url} target="_blank" rel="noopener"><ExternalLink className="h-3 w-3"/>Open client gallery</a>}
   </>:!error&&<p className="text-slate-500">Loading delivery…</p>}
-  {open&&data&&<div className="fixed inset-0 z-50 bg-slate-950/60 p-2 backdrop-blur-sm sm:p-6 grid place-items-center">
+  {open&&data&&createPortal(<div className="fixed inset-0 z-[100] bg-slate-950/60 p-2 backdrop-blur-sm sm:p-6 grid place-items-center">
    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="delivery-title" tabIndex={-1} className="flex max-h-[94dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl outline-none">
     <div className="flex items-center justify-between gap-4 border-b px-5 py-4 sm:px-7"><div><p className="text-xs uppercase tracking-widest text-ocean-700">Client delivery</p><h2 id="delivery-title" className="text-xl font-semibold text-ocean-950">Ready for their next listing.</h2></div><button aria-label="Close delivery" disabled={busy} onClick={()=>setOpen(false)} className="rounded-lg p-2 hover:bg-slate-100"><X className="h-5 w-5"/></button></div>
     <div className="overflow-y-auto p-5 sm:p-7">
@@ -130,6 +131,6 @@ export function DeliveryControl({orderId}:{orderId:string}) {
      <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-slate-500 flex items-center gap-2"><CheckCircle2 className="h-4 w-4"/>{test?'Only the test recipients above will be notified.':'The gallery link is included automatically.'}</span><button className="btn-primary" disabled={busy||(!test&&!ready)||(!email&&!sms)||(!test&&!!latest&&!resend)} onClick={send}>{busy?<Loader2 className="h-4 w-4 animate-spin"/>:<Send className="h-4 w-4"/>}{busy?'Working…':test?'Send test delivery':'Deliver to client'}</button></div>
     </div>
    </div>
-  </div>}
+  </div>,document.body)}
  </div>;
 }
