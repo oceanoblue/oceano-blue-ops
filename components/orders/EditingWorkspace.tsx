@@ -131,7 +131,7 @@ export function EditingWorkspace({
         <p className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
           <CheckCircle2 className="h-3.5 w-3.5" />
           {finalsCount} final{finalsCount === 1 ? '' : 's'} on this
-          order — review below, then create the delivery link.
+          order — review below, then use Prepare delivery to send the client their gallery.
         </p>
       )}
 
