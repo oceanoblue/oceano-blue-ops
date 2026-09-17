@@ -261,3 +261,29 @@ export function galleryReadyEmail(p: GalleryMessage): { subject: string; html: s
 export function galleryReadySms(p: GalleryMessage): string {
   return `${p.isTest ? '[TEST] ' : ''}Oceano Blue Media: Your gallery for ${p.address} is ready! View your media${p.locked ? ' and unlock photo downloads' : ' and download your files'}: ${p.galleryUrl}\nQuestions? Reply here. Reply STOP to opt out.`;
 }
+
+export type PaymentReceivedContent = {
+  orderNumber: number; amountCents: number; paidAt: string;
+  clientName: string; address: string; orderUrl: string;
+};
+function paymentAmount(cents: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+}
+export function paymentReceivedEmail(p: PaymentReceivedContent): { subject: string; html: string } {
+  const amount = paymentAmount(p.amountCents);
+  const when = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York' }).format(new Date(p.paidAt));
+  return {
+    subject: `Payment received: ${amount} — Order #${p.orderNumber}`,
+    html: shell(`<h1 style="font-size:26px;margin:0 0 18px;">Payment received.</h1>
+      <p style="font-size:30px;font-weight:700;color:#0c8de9;">${escapeHtml(amount)}</p>
+      <p>${escapeHtml(p.clientName)} · Order #${p.orderNumber}</p>
+      <p><strong>${escapeHtml(p.address)}</strong></p>
+      <p style="color:#708698;">${escapeHtml(when)} Eastern</p>
+      <p>Stripe confirmed payment. Gallery downloads are unlocked.</p>
+      ${button(p.orderUrl, 'View paid order')}
+      <p style="font-size:12px;color:#708698;">This confirms the client payment, not a bank payout.</p>`, `Payment received: ${amount} for ${p.address}`),
+  };
+}
+export function paymentReceivedSms(p: PaymentReceivedContent): string {
+  return `Oceano Blue: ${paymentAmount(p.amountCents)} payment received for Order #${p.orderNumber} (${p.address}). Gallery downloads unlocked. ${p.orderUrl}`;
+}
