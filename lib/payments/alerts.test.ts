@@ -10,7 +10,7 @@ vi.mock('@/lib/email/resend', () => ({ sendEmail: vi.fn() }));
 vi.mock('@/lib/integrations/quo', () => ({ sendSms: vi.fn() }));
 vi.mock('@/lib/observability/report', () => ({ captureError: vi.fn() }));
 const rpc=vi.fn(),update=vi.fn(),save=vi.fn();
-const content={orderNumber:70,amountCents:35000,paidAt:'2026-09-17T12:53:07Z',clientName:'Julie',address:'58 Cobia Court'};
+const content={orderNumber:70,amountCents:35000,paidAt:'2026-09-17T12:53:07Z',clientName:'Test Client',address:'123 Sample Way'};
 const alert=(channel:string)=>({id:`alert-${channel}`,order_id:'order-70',channel,destination:channel==='email'?'owner@example.test':'+15555550100',content});
 beforeEach(()=>{
   vi.clearAllMocks();vi.stubEnv('VERCEL_ENV','production');vi.stubEnv('CRON_SECRET','test-secret');
