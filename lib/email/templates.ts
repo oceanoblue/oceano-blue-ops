@@ -234,28 +234,30 @@ export function bookingReceivedEmail(p: {
   };
 }
 
-export function galleryReadyEmail(p: {
-  recipientName?: string | null;
-  address: string;
-  cityStateZip?: string | null;
-  galleryUrl: string;
-}): { subject: string; html: string } {
+export type GalleryMessage = {
+  recipientName?: string | null; address: string; cityStateZip?: string | null;
+  galleryUrl: string; message?: string; photoCount?: number; locked?: boolean; isTest?: boolean;
+};
+
+export function galleryReadyEmail(p: GalleryMessage): { subject: string; html: string } {
   const first = (p.recipientName || '').split(' ')[0] || 'there';
   const body = `
-    <p style="font-size:16px;margin:0 0 4px;">Hi ${escapeHtml(first)},</p>
-    <p style="font-size:15px;line-height:1.5;color:#324354;margin:0 0 18px;">
-      Your gallery is ready. View, share, and download the final photos and video below.
-    </p>
-    <div style="border:1px solid #e6eaee;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
-      <div style="font-size:17px;font-weight:600;color:#0c1620;">${escapeHtml(p.address)}</div>
-      ${p.cityStateZip ? `<div style="font-size:13px;color:#708698;margin-top:3px;">${escapeHtml(p.cityStateZip)}</div>` : ''}
+    ${p.isTest ? '<p style="font-size:12px;color:#9a6700;">TEST DELIVERY · Sample gallery</p>' : ''}
+    <p style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#087cb8;font-weight:700;margin:0 0 12px;">Made for your listing</p>
+    <h1 style="font-family:Georgia,serif;font-size:32px;line-height:1.15;font-weight:400;color:#122d3c;margin:0 0 24px;">Your media is ready.</h1>
+    <p style="font-size:15px;line-height:1.7;color:#324354;">Hi ${escapeHtml(first)},<br/>Your finished media for <strong>${escapeHtml(p.address)}</strong> is ready to view.</p>
+    <div style="border:1px solid #e6eaee;border-left:3px solid #087cb8;border-radius:10px;padding:18px;margin:24px 0;">
+      <div style="font-size:18px;font-weight:600;color:#122d3c;">${escapeHtml(p.address)}</div>
+      ${p.cityStateZip ? `<div style="font-size:13px;color:#708698;margin-top:6px;">${escapeHtml(p.cityStateZip)}</div>` : ''}
+      ${p.photoCount ? `<div style="font-size:13px;color:#708698;margin-top:12px;">${p.photoCount} finished photos</div>` : ''}
     </div>
-    <div style="margin-bottom:16px;">${button(p.galleryUrl, 'View your gallery')}</div>
-    <p style="font-size:13px;color:#708698;margin:0;">
-      Or open it here: <a href="${escapeAttr(p.galleryUrl)}" style="color:#0c8de9;">${escapeHtml(p.galleryUrl)}</a>
-    </p>`;
-  return {
-    subject: `Your gallery is ready — ${p.address}`,
-    html: shell(body, `Gallery ready for ${p.address}`),
-  };
+    ${p.message ? `<p style="font-size:15px;line-height:1.7;color:#324354;white-space:pre-wrap;">${escapeHtml(p.message)}</p>` : ''}
+    <div style="margin:24px 0 20px;">${button(p.galleryUrl, 'Open your gallery →')}</div>
+    <p style="font-size:14px;line-height:1.7;color:#526573;">${p.locked ? 'Preview your media now. Complete payment in your gallery to unlock photo downloads.' : 'Download photos sized for MLS, print, or full resolution directly from your gallery.'}</p>
+    <p style="font-size:13px;line-height:1.6;color:#708698;border-top:1px solid #eef1f4;padding-top:18px;margin:24px 0 0;">Need a hand? Reply to this email and our team will help.<br/><a href="${escapeAttr(p.galleryUrl)}" style="color:#087cb8;word-break:break-all;">${escapeHtml(p.galleryUrl)}</a></p>`;
+  return { subject: `${p.isTest ? '[TEST] ' : ''}Your media is ready — ${p.address}`, html: shell(body, `Your gallery for ${p.address} is ready to view`) };
+}
+
+export function galleryReadySms(p: GalleryMessage): string {
+  return `${p.isTest ? '[TEST] ' : ''}Oceano Blue Media: Your gallery for ${p.address} is ready! View your media${p.locked ? ' and unlock photo downloads' : ' and download your files'}: ${p.galleryUrl}\nQuestions? Reply here. Reply STOP to opt out.`;
 }
