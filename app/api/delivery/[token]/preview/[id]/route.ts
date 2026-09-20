@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createAdminClient } from '@/lib/supabase/server';
 import { galleryWatermarkEnabled } from '@/lib/deliveries/watermark';
+import { isDeliverable } from '@/lib/photos/deliverable';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -46,12 +47,13 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
   // can only surface its own order's images.
   const { data: photo } = await supabase
     .from('photos')
-    .select('bucket, storage_path')
+    .select('bucket, storage_path, is_hdr, ai_provider')
     .eq('id', params.id)
     .eq('order_id', link.order_id)
     .in('kind', ['processed', 'delivered'])
+    .eq('is_selected', true)
     .maybeSingle();
-  if (!photo) return new Response('Not found', { status: 404 });
+  if (!photo || !isDeliverable(photo)) return new Response('Not found', { status: 404 });
 
   let watermarked: boolean;
   try { watermarked = await galleryWatermarkEnabled(supabase); }

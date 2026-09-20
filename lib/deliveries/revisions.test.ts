@@ -1,0 +1,42 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import { GET, POST } from '@/app/api/delivery/[token]/revisions/route';
+import { PATCH } from '@/app/api/gallery-revisions/[id]/route';
+import { galleryAccess } from './token';
+import { requireTeamMember } from '@/lib/auth/require-team-member';
+import { createClient } from '@/lib/supabase/server';
+vi.mock('./token',()=>({galleryAccess:vi.fn()}));
+vi.mock('@/lib/auth/require-team-member',()=>({requireTeamMember:vi.fn()}));
+vi.mock('@/lib/supabase/server',()=>({createClient:vi.fn()}));
+vi.mock('@/lib/security/rate-limit',()=>({enforceRateLimit:vi.fn(async()=>null)}));
+const photo='00000000-0000-4000-8000-000000000001', id='00000000-0000-4000-8000-000000000002';
+let found:any, saved:any, error:any, filters:any[],insert:any,update:any;
+beforeEach(()=>{
+  vi.clearAllMocks();found={id:photo};saved={id,photo_id:photo,note:'Brighten this photo',status:'open'};error=null;filters=[];insert=vi.fn();update=vi.fn();
+  const from=(table:string)=>{
+    const q:any={};
+    for(const method of ['select','order','limit','in'])q[method]=()=>q;
+    q.eq=(key:string,value:any)=>{filters.push([table,key,value]);return q;};
+    q.insert=(body:any)=>{insert(body);return q;};q.update=(body:any)=>{update(body);return q;};
+    q.single=q.maybeSingle=async()=>({data:table==='photos'?found:saved,error:table==='photos'?null:error});
+    q.then=(resolve:any)=>Promise.resolve({data:[saved],error}).then(resolve);return q;
+  };
+  vi.mocked(galleryAccess).mockResolvedValue({error:null,link:{id:'link',order_id:'order'},admin:{from}} as any);
+  vi.mocked(createClient).mockResolvedValue({from} as any);
+  vi.mocked(requireTeamMember).mockResolvedValue({error:null,user:{id:'staff'}} as any);
+});
+const context={params:Promise.resolve({token:'gallery'})};
+const request=(payload:any={id,photo_id:photo,note:'Brighten this photo'})=>new Request('https://example.test/api/delivery/gallery/revisions',{method:'POST',body:JSON.stringify(payload)});
+it('ties a request to a selected finished photo belonging to the token order',async()=>{
+  expect((await POST(request(),context)).status).toBe(201);
+  expect(filters).toContainEqual(['photos','order_id','order']);expect(filters).toContainEqual(['photos','is_selected',true]);
+  expect(insert).toHaveBeenCalledWith(expect.objectContaining({delivery_link_id:'link',order_id:'order',photo_id:photo}));
+});
+it('rejects a photo outside the token gallery without writing',async()=>{found=null;expect((await POST(request(),context)).status).toBe(404);expect(insert).not.toHaveBeenCalled();});
+it('rejects intermediate HDR merges',async()=>{found={id:photo,is_hdr:true,ai_provider:'oceano-enhance'};expect((await POST(request(),context)).status).toBe(404);});
+it('rejects blank or excessive notes',async()=>{for(const note of ['  ','a'.repeat(2001)])expect((await POST(request({id,photo_id:photo,note}),context)).status).toBe(400);expect(insert).not.toHaveBeenCalled();});
+it('does not accept expired gallery tokens',async()=>{vi.mocked(galleryAccess).mockResolvedValue({error:new Response('',{status:410})} as any);expect((await POST(request(),context)).status).toBe(410);expect(insert).not.toHaveBeenCalled();});
+it('retries the same request without creating a second record',async()=>{error={code:'23505'};expect((await POST(request(),context)).status).toBe(200);expect(filters).toContainEqual(['gallery_revision_requests','delivery_link_id','link']);});
+it('never treats an id collision with changed content as success',async()=>{error={code:'23505'};saved.note='Different';expect((await POST(request(),context)).status).toBe(409);});
+it('scopes request history to the current gallery link',async()=>{expect((await GET(request(),context)).status).toBe(200);expect(filters).toContainEqual(['gallery_revision_requests','delivery_link_id','link']);});
+it('requires staff authorization before updating status or replying',async()=>{vi.mocked(requireTeamMember).mockResolvedValue({error:new Response('',{status:403}),user:null} as any);expect((await PATCH(request({status:'resolved',staff_response:'Done'}),{params:Promise.resolve({id})})).status).toBe(403);expect(update).not.toHaveBeenCalled();});
+it('allows staff to save only validated status and reply fields',async()=>{expect((await PATCH(request({status:'resolved',staff_response:'Done',order_id:'other'}),{params:Promise.resolve({id})})).status).toBe(200);expect(update).toHaveBeenCalledWith({status:'resolved',staff_response:'Done'});});

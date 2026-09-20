@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { GalleryRevisionQueue } from '@/components/reviews/GalleryRevisionQueue';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,9 @@ const COLUMNS: Column<any>[] = [
 
 export default async function ReviewsPage() {
   const supabase = await createClient();
+  const revisions = await (supabase as any).from('gallery_revision_requests')
+    .select('id, order_id, note, status, staff_response, photos(filename), orders(order_number)')
+    .order('created_at', { ascending: false }).limit(100);
   const { data: reviews, error } = await supabase
     .from('review_sessions')
     .select('id, title, provider, status, external_url, created_at, jobs(title)')
@@ -40,6 +44,7 @@ export default async function ReviewsPage() {
         title="Reviews"
         subtitle="Review sessions across Frame.io, Vimeo, Pixieset, and internal review."
       />
+      <GalleryRevisionQueue rows={revisions.data ?? []} error={!!revisions.error} />
       <DataTable
         columns={COLUMNS}
         rows={reviews ?? []}

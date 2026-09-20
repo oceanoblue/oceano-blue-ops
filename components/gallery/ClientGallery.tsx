@@ -6,6 +6,7 @@ import { Download, Image as ImageIcon, ChevronDown, LayoutGrid, Rows3, X, Chevro
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { groupByRoom, roomLabel } from '@/lib/photos/rooms';
 import { MediaRoom, type DeliverableView } from '@/components/portal/MediaRoom';
+import { RevisionRequests } from '@/components/gallery/RevisionRequests';
 
 const money = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -36,7 +37,7 @@ interface Paywall {
 }
 
 export interface GalleryData {
-  order: { id: string; order_number: number };
+  order: { id: string; order_number: number; status?: string; scheduled_at?: string | null };
   listing: { address_line1: string; city: string; state: string; zip: string } | null;
   photos: GalleryPhoto[];
   deliverables?: DeliverableView[];
@@ -55,6 +56,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
   const [byRoom, setByRoom] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
+  const [revisionPhoto, setRevisionPhoto] = useState<string>();
 
   const load = useCallback(async (): Promise<GalleryData | null> => {
     if (demo) return initialData ?? null;
@@ -101,6 +103,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
     try {
       const r = await fetch(`/api/delivery/${token}/checkout`, { method: 'POST' });
       const j = await r.json();
+      if (j.paid) { await load(); setUnlocking(false); return; }
       if (j.url) {
         window.location.href = j.url;
         return;
@@ -220,7 +223,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
       <header className="bg-[#102c3b] text-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-5 py-5 sm:px-8">
           <a href="https://oceanoblue.net" aria-label="Oceano Blue Media"><BrandLogo variant="white" className="h-8 w-auto" /></a>
-          <a href="mailto:info@oceanoblue.net" className="text-xs text-white/80 hover:text-white">Need a hand?</a>
+          <div className="flex items-center gap-4"><Link href="/book" className="rounded-lg border border-white/30 px-3 py-2 text-sm hover:bg-white/10">Book another shoot</Link><a href="mailto:info@oceanoblue.net" className="text-xs text-white/80 hover:text-white">Need a hand?</a></div>
         </div>
       </header>
       <section className="relative isolate min-h-[300px] overflow-hidden bg-[#102c3b] sm:min-h-[420px]">
@@ -233,6 +236,14 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
           <div className="mt-6 flex flex-wrap gap-3 text-xs"><span className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5">{data.photos.length} photos</span>{!!data.deliverables?.length && <span className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5">{data.deliverables.length} media files</span>}<span className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5">Prepared by Oceano Blue Media</span></div>
         </div>
       </section>
+      <nav aria-label="Gallery sections" className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl gap-5 overflow-x-auto px-5 py-4 text-sm font-medium sm:px-8">
+          {data.photos.length > 0 && <a href="#gallery-photos" className="shrink-0 text-ocean-800 hover:underline">Photos ({data.photos.length})</a>}
+          {!!data.deliverables?.length && <a href="#gallery-media" className="shrink-0 text-ocean-800 hover:underline">Videos, tours & floor plans</a>}
+          <a href="#gallery-order" className="shrink-0 text-ocean-800 hover:underline">Order & payment</a>
+          {data.photos.length > 0 && <a href="#gallery-requests" className="shrink-0 text-ocean-800 hover:underline">Request changes</a>}
+        </div>
+      </nav>
       <div className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-5 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
           <div><h2 className="text-xl font-semibold text-ocean-950">Your finished collection</h2><p className="mt-1 text-xs text-slate-500">{locked ? 'Explore your previews. Unlock downloads when you’re ready.' : 'Ready for your listing, your marketing, and what comes next.'}</p></div>
@@ -295,7 +306,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
         </div>
       </div>
 
-      <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
+      <main id="gallery-photos" className="mx-auto max-w-6xl scroll-mt-24 px-5 py-8 sm:px-8">
         {checkoutError && <p role="alert" className="mb-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{checkoutError} <a className="underline" href="mailto:info@oceanoblue.net">Contact us</a></p>}
         {locked && (
           <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -347,7 +358,18 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
 
         {/* Rich-media showcase: video, 360° tours, floor plans (renders nothing
             when the listing has no published deliverables). */}
-        <MediaRoom items={data.deliverables ?? []} />
+        <div id="gallery-media" className="scroll-mt-24"><MediaRoom items={data.deliverables ?? []} /></div>
+        <section id="gallery-order" className="mt-10 scroll-mt-24 rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+          <h2 className="text-lg font-semibold">Order #{data.order.order_number}</h2>
+          <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-3">
+            <div><dt className="text-slate-500">Status</dt><dd className="mt-1 capitalize">{data.order.status?.replaceAll('_', ' ') || 'Gallery ready'}</dd></div>
+            <div><dt className="text-slate-500">Order total</dt><dd className="mt-1">{demo ? 'Sample order' : money(price)}</dd></div>
+            <div><dt className="text-slate-500">Payment</dt><dd className="mt-1">{demo ? 'Preview only' : locked ? 'Payment required' : data.paywall?.paid ? 'Paid' : 'No payment required'}</dd></div>
+          </dl>
+          {data.order.scheduled_at && <p className="mt-4 text-sm text-slate-600">Shoot: {new Date(data.order.scheduled_at).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' })} Eastern</p>}
+          <div className="mt-5 flex flex-wrap gap-3">{locked && <UnlockButton />}<Link href="/portal" className="btn-secondary">Your client portal</Link><Link href="/book" className="btn-secondary">Book another shoot</Link></div>
+        </section>
+        {data.photos.length > 0 && <RevisionRequests token={token} photos={data.photos} selectedPhoto={revisionPhoto} demo={demo} />}
       </main>
 
       <footer className="mx-auto max-w-6xl px-5 pb-10 pt-4 text-center sm:px-8"><p className="font-semibold text-ocean-950">Made with care. Ready to make an impression.</p><p className="mt-2 text-sm text-slate-500">Questions about your media? <a className="text-ocean-700 underline" href="mailto:info@oceanoblue.net">We’re here to help.</a></p><p className="mt-5 text-[11px] uppercase tracking-widest text-slate-400">Oceano Blue Media</p></footer>
@@ -372,6 +394,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
                 )}
               </span>
               <div className="flex items-center gap-2">
+                <a href="#gallery-requests" onClick={() => { setRevisionPhoto(lightbox.id); setLightbox(null); }} className="rounded-md border border-white/30 px-3 py-2 text-sm text-white hover:bg-white/10">Request changes</a>
                 {locked ? (
                   <UnlockButton />
                 ) : (
