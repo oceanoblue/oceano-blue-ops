@@ -1,0 +1,10 @@
+import {beforeEach,expect,it,vi} from 'vitest';
+import {loadInvoices} from './load';
+import {createClient} from '@/lib/supabase/server';
+vi.mock('@/lib/supabase/server',()=>({createClient:vi.fn()}));
+let ranges:number[][],scopes:string[][],failure:boolean;
+beforeEach(()=>{vi.resetAllMocks();ranges=[];scopes=[];failure=false;
+ vi.mocked(createClient).mockResolvedValue({from:()=>{let offset=0;const q:any={select:()=>q,order:()=>q,range:(start:number,end:number)=>{offset=start;ranges.push([start,end]);return q;},in:(_k:string,ids:string[])=>{scopes.push(ids);return q;},then:(resolve:any)=>Promise.resolve({data:offset===0?Array.from({length:500},()=>({created_at:'2026-09-01'})):[],error:failure?{message:'offline'}:null}).then(resolve)};return q;}} as any);
+});
+it('scopes every page to the signed-in client and reads beyond the first page',async()=>{expect(await loadInvoices(['mine'])).toHaveLength(500);expect(ranges).toEqual([[0,499],[500,999]]);expect(scopes).toEqual([['mine'],['mine']]);});
+it('never loads all invoices when client ownership is empty and never reports failed queries as empty balances',async()=>{expect(await loadInvoices([])).toEqual([]);expect(createClient).not.toHaveBeenCalled();failure=true;await expect(loadInvoices(['mine'])).rejects.toThrow('Invoices could not be loaded');});
