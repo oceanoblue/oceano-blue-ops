@@ -33,3 +33,11 @@ describe('booking follow-up delivery', () => {
     expect(sendEmail).not.toHaveBeenCalled(); expect(sendSms).not.toHaveBeenCalled();
   });
 });
+
+it('sends updated appointment details for a reschedule with the event idempotency key', async () => {
+  vi.mocked(sendEmail).mockResolvedValue({status:'sent',id:'email'} as any);
+  const event = job(); event.payload.event='rescheduled'; event.payload.previous_scheduled_at='2026-09-09T14:00:00Z';
+  await deliverFollowup(event);
+  expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({subject:'Shoot rescheduled — Test property',idempotencyKey:'request1',html:expect.stringContaining('Previous appointment:')}));
+  expect(sendSms).not.toHaveBeenCalled();
+});

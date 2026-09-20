@@ -2,11 +2,11 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { syncShootCalendar } from '@/lib/google-calendar/sync-shoot';
 import { sendEmail } from '@/lib/email/resend';
 import { sendSms } from '@/lib/integrations/quo';
-import { bookingConfirmationEmail, bookingReceivedEmail } from '@/lib/email/templates';
+import { appointmentRescheduledEmail, bookingConfirmationEmail, bookingReceivedEmail } from '@/lib/email/templates';
 import { fmtDateTimeTz } from '@/lib/utils/format';
 import type { BookingInput } from './validation';
 
-export type Followup = { id: string; order_id: string; kind: string; recipient: string; payload: BookingInput; attempts: number; lease_token: string; created_at: string };
+export type Followup = { id: string; order_id: string; kind: string; recipient: string; payload: BookingInput & { event?: 'rescheduled'; previous_scheduled_at?: string }; attempts: number; lease_token: string; created_at: string };
 
 export async function deliverFollowup(job: Followup): Promise<void> {
   if (job.kind === 'calendar') {
@@ -24,7 +24,9 @@ export async function deliverFollowup(job: Followup): Promise<void> {
   // Resend retains idempotency keys for 24 hours. Do not automatically resend
   // an old ambiguous attempt outside that window.
   if (Date.now() - Date.parse(job.created_at) > 23 * 3600000) throw new Error('email_delivery_review_required');
-  const email = job.kind === 'client_email'
+  const email = b.event === 'rescheduled'
+    ? appointmentRescheduledEmail({ clientName: b.client_name, address: b.address_line1, whenText, previousText: b.previous_scheduled_at ? fmtDateTimeTz(b.previous_scheduled_at, b.timezone) : '', office: job.kind === 'office_email' })
+    : job.kind === 'client_email'
     ? bookingConfirmationEmail({ clientName: b.client_name, address: b.address_line1, cityStateZip, whenText })
     : bookingReceivedEmail({ clientName: b.client_name, clientEmail: b.client_email, clientPhone: b.client_phone || null,
       address: b.address_line1, cityStateZip, whenText,
