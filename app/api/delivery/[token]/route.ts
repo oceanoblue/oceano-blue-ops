@@ -102,16 +102,17 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
   // File URLs are signed; external URLs get an embeddable src where possible.
   const { data: dvRows } = await supabase
     .from('listing_deliverables')
-    .select('id, kind, title, source, external_url, bucket, storage_path, filename, mime_type')
+    .select('id, order_id, kind, title, source, external_url, bucket, storage_path, filename, mime_type')
     .eq('listing_id', order.listing_id)
+    .eq('order_id', order.id)
     .eq('is_published', true)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
 
   const deliverables = await Promise.all(
     (dvRows ?? []).map(async (d: any) => {
-      let url: string | null = d.external_url ?? null;
-      if (d.source === 'file' && d.bucket && d.storage_path) {
+      let url: string | null = pay.active ? null : d.external_url ?? null;
+      if (!pay.active && d.source === 'file' && d.bucket && d.storage_path) {
         const { data } = await supabase.storage.from(d.bucket).createSignedUrl(d.storage_path, 3600);
         url = data?.signedUrl ?? null;
       }
@@ -120,8 +121,9 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
         kind: d.kind,
         title: d.title,
         source: d.source,
+        locked: pay.active,
         url,
-        embedUrl: d.source === 'url' && d.external_url ? toEmbedUrl(d.external_url) : null,
+        embedUrl: !pay.active && d.source === 'url' && d.external_url ? toEmbedUrl(d.external_url) : null,
         mime: d.mime_type,
         filename: d.filename,
       };

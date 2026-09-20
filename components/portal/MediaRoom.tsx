@@ -10,20 +10,28 @@ export type DeliverableView = {
   embedUrl: string | null; // set when a URL is embeddable (YouTube/Vimeo/Matterport)
   mime: string | null;
   filename: string | null;
+  locked?: boolean;
 };
 
 /** Client-facing "Media Room" — renders published video / 360 tour / floor-plan
  *  deliverables for a listing, each in the right viewer. Pure presentational
  *  (server-renderable); URLs are already resolved/signed by the caller. */
 export function MediaRoom({ items }: { items: DeliverableView[] }) {
-  const videos = items.filter((d) => d.kind === 'video');
-  const tours = items.filter((d) => d.kind === 'tour_360');
-  const plans = items.filter((d) => d.kind === 'floor_plan');
-  const other = items.filter((d) => d.kind === 'other');
+  const available = items.filter(d => !d.locked);
+  const locked = items.filter(d => d.locked);
+  const videos = available.filter((d) => d.kind === 'video');
+  const tours = available.filter((d) => d.kind === 'tour_360');
+  const plans = available.filter((d) => d.kind === 'floor_plan');
+  const other = available.filter((d) => d.kind === 'other');
   if (items.length === 0) return null;
 
   return (
     <div className="mt-10 space-y-10">
+      {locked.length > 0 && <section className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+        <h2 className="font-semibold">Media ready after payment</h2>
+        <p className="mt-1 text-sm text-slate-600">Complete payment above to open and download these files.</p>
+        <ul className="mt-3 space-y-1 text-sm">{locked.map(d => <li key={d.id}>{d.title || d.filename || d.kind.replaceAll('_', ' ')}</li>)}</ul>
+      </section>}
       {videos.length > 0 && (
         <Section icon={Video} title={videos.length > 1 ? 'Videos' : 'Video'}>
           <div className="grid gap-6 md:grid-cols-2">

@@ -3,6 +3,10 @@ import { paywallFor } from './gate';
 
 afterEach(() => vi.unstubAllEnvs());
 
+it.each([null, undefined])('fails closed when the order cannot be loaded (%j)', order => {
+  expect(paywallFor(order).active).toBe(true);
+});
+
 it.each(['', 'sk_test_fixture_only'])('keeps priced unpaid orders locked with Stripe key %j', key => {
   vi.stubEnv('STRIPE_SECRET_KEY', key);
   expect(paywallFor({ total_cents: 100, download_paid_at: null })).toEqual({

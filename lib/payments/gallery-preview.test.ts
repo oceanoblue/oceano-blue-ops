@@ -20,8 +20,10 @@ beforeEach(()=>{
   const from=(table:string)=>{
     const q:any={};
     for(const method of ['select','eq','in','order','update']) q[method]=()=>q;
+    let filtered=rows[table];
+    if(table==='listing_deliverables') q.eq=(key:string,value:any)=>{filtered=filtered.filter((r:any)=>r[key]===value);return q;};
     q.single=q.maybeSingle=async()=>({data:Array.isArray(rows[table])?rows[table][0]??null:rows[table],error:null});
-    q.then=(resolve:any)=>Promise.resolve({data:rows[table],error:null}).then(resolve);
+    q.then=(resolve:any)=>Promise.resolve({data:filtered,error:null}).then(resolve);
     return q;
   };
   sign.mockResolvedValue({data:[{path:'master.jpg',signedUrl:'https://storage.test/signed-master'}]});
@@ -58,6 +60,26 @@ it('returns full-resolution links once payment is recorded',async()=>{
   rows.orders.download_paid_at='2026-09-17T12:53:07Z';
   const body=await (await gallery(req,params)).json();
   expect(body.paywall.active).toBe(false);expect(body.photos[0].url).toBe('https://storage.test/signed-master');
+});
+it.each(['file','url'])('withholds unpaid %s media URLs as well as photo masters', async source => {
+  rows.listing_deliverables=[{id:'plan',order_id:'order',listing_id:'listing',is_published:true,kind:'floor_plan',source,bucket:'deliverables',storage_path:'plan.pdf',external_url:'https://example.test/original',filename:'plan.pdf'}];
+  const body=await (await gallery(req,params)).json();
+  expect(body.deliverables[0]).toMatchObject({locked:true,url:null,embedUrl:null});
+  expect(JSON.stringify(body)).not.toContain('https://example.test/original');
+  expect(sign).not.toHaveBeenCalled();
+});
+it('a paid gallery includes only published media for its own order',async()=>{
+  rows.orders.download_paid_at='2026-09-20';
+  const media={listing_id:'listing',order_id:'order',is_published:true,kind:'tour_360',source:'url',external_url:'https://example.test/own'};
+  rows.listing_deliverables=[{...media,id:'own'},{...media,id:'other',order_id:'unpaid-order'},{...media,id:'draft',is_published:false},{...media,id:'unassigned',order_id:null}];
+  const body=await(await gallery(req,params)).json();
+  expect(body.deliverables).toHaveLength(1);
+  expect(body.deliverables[0]).toMatchObject({id:'own',locked:false,url:media.external_url});
+});
+it('fails closed for direct downloads when the order lookup fails', async()=>{
+  rows.orders=null;
+  expect((await download(req,params)).status).toBe(402);
+  expect(storageDownload).not.toHaveBeenCalled();
 });
 it.each(['full','4k','print','web'])('blocks unpaid %s downloads even with a forged paid URL',async size=>{
   const response=await download(new Request(`https://example.test/api/delivery/token/download?size=${size}&paid=1`),params);
