@@ -234,6 +234,7 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
             subtitle={order.listings && fmtAddress(order.listings)}
           >
             <StatusBadge status={order.status} />
+            <Link href={`/dashboard/orders/${order.id}/website`} className="btn-secondary">Property website</Link>
             {(order as any).archived_at && (
               <span className="pill bg-slate-200 text-slate-600">Archived</span>
             )}

@@ -6,6 +6,7 @@ import { Download, Image as ImageIcon, ChevronDown, LayoutGrid, Rows3, X, Chevro
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { groupByRoom, roomLabel } from '@/lib/photos/rooms';
 import { MediaRoom, type DeliverableView } from '@/components/portal/MediaRoom';
+import { MarketingLinks } from '@/components/marketing/MarketingLinks';
 import { RevisionRequests } from '@/components/gallery/RevisionRequests';
 
 const money = (cents: number) =>
@@ -240,6 +241,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
         <div className="mx-auto flex max-w-6xl gap-5 overflow-x-auto px-5 py-4 text-sm font-medium sm:px-8">
           {data.photos.length > 0 && <a href="#gallery-photos" className="shrink-0 text-ocean-800 hover:underline">Photos ({data.photos.length})</a>}
           {!!data.deliverables?.length && <a href="#gallery-media" className="shrink-0 text-ocean-800 hover:underline">Videos, tours & floor plans</a>}
+          <a href="#gallery-marketing" className="shrink-0 text-ocean-800 hover:underline">Marketing</a>
           <a href="#gallery-order" className="shrink-0 text-ocean-800 hover:underline">Order & payment</a>
           {data.photos.length > 0 && <a href="#gallery-requests" className="shrink-0 text-ocean-800 hover:underline">Request changes</a>}
         </div>
@@ -359,6 +361,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
         {/* Rich-media showcase: video, 360° tours, floor plans (renders nothing
             when the listing has no published deliverables). */}
         <div id="gallery-media" className="scroll-mt-24"><MediaRoom items={data.deliverables ?? []} /></div>
+        <MarketingLinks token={token} locked={locked} demo={demo} />
         <section id="gallery-order" className="mt-10 scroll-mt-24 rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
           <h2 className="text-lg font-semibold">Order #{data.order.order_number}</h2>
           <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-3">
