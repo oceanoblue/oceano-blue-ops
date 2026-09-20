@@ -31,7 +31,7 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
 
   const { data: order } = await supabase
     .from('orders')
-    .select('id, order_number, listing_id, client_id, total_cents, download_paid_at')
+    .select('id, order_number, listing_id, client_id, total_cents, download_paid_at, status, scheduled_at')
     .eq('id', link.order_id)
     .single();
   if (!order) return NextResponse.json({ error: 'order_missing' }, { status: 404 });
@@ -131,7 +131,7 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
   );
 
   return NextResponse.json({
-    order: { id: order.id, order_number: order.order_number },
+    order: { id: order.id, order_number: order.order_number, status: order.status, scheduled_at: order.scheduled_at },
     listing,
     photos: signed,
     deliverables,
