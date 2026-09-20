@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { GalleryWatermarkToggle } from '@/components/settings/GalleryWatermarkToggle';
+import { RescheduleSettings } from '@/components/settings/RescheduleSettings';
 import { SettingsNav } from '@/components/layout/SettingsNav';
 
 export const dynamic = 'force-dynamic';
@@ -7,6 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPage() {
   const supabase = await createClient();
   const { data: gallerySettings, error: galleryError } = await supabase.from('business_settings').select('gallery_watermark_enabled').eq('id', true).single();
+  const { data: scheduling } = await (supabase as any).from('business_settings').select('client_rescheduling_enabled,client_reschedule_cutoff_hours').eq('id', true).single();
   const { data: team } = await supabase
     .from('team_members')
     .select('id, full_name, email, role, is_active')
@@ -23,6 +25,7 @@ export default async function SettingsPage() {
         ? <GalleryWatermarkToggle initial={gallerySettings.gallery_watermark_enabled} />
         : <p role="alert" className="text-sm text-red-700">Gallery settings could not be loaded. Refresh to try again.</p>}
 
+      {scheduling ? <RescheduleSettings enabled={scheduling.client_rescheduling_enabled} cutoff={scheduling.client_reschedule_cutoff_hours} /> : <p role="alert">Rescheduling settings could not be loaded.</p>}
       <section className="card p-6">
         <h2 className="mb-4 font-semibold text-slate-900">Team</h2>
         <table className="w-full text-sm">

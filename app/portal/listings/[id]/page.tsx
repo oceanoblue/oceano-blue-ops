@@ -1,3 +1,5 @@
+import { RescheduleAppointment } from '@/components/portal/RescheduleAppointment';
+import { rescheduleEligibility } from '@/lib/booking/reschedule';
 import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { Download, ImageOff } from 'lucide-react';
@@ -40,13 +42,14 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
 
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, status, scheduled_at, delivered_at, order_number, total_cents, download_paid_at')
+    .select('id, status, scheduled_at, delivered_at, order_number, total_cents, download_paid_at, photographer_id')
     .eq('listing_id', params.id)
     .in('client_id', clientIds)
     .order('created_at', { ascending: false });
 
   const unlockedIds = (orders ?? []).filter(o => !paywallFor(o).active).map(o => o.id);
   const admin = createAdminClient({ noStore: true });
+  const { data: scheduling } = await (admin as any).from('business_settings').select('client_rescheduling_enabled,client_reschedule_cutoff_hours,default_timezone').eq('id', true).single();
   // Read existing links only after client/listing ownership has been verified.
   const { data: links } = orders?.length ? await admin.from('delivery_links')
     .select('order_id, token, expires_at').in('order_id', orders.map(o => o.id))
@@ -138,6 +141,7 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
           {(orders ?? []).map(o => <div key={o.id} className="card flex flex-wrap items-center justify-between gap-3 p-4">
             <div><p className="font-medium">Order #{o.order_number}</p><p className="mt-1 text-sm text-slate-600">{paywallFor(o).active ? 'Payment required to unlock downloads' : o.download_paid_at ? 'Paid · Downloads unlocked' : 'No payment required'}</p></div>
             {galleryLinks.has(o.id) ? <Link href={galleryLinks.get(o.id)!} className="btn-primary">{paywallFor(o).active ? 'View gallery & pay' : 'Open gallery'}</Link> : <p className="text-sm text-slate-500">{paywallFor(o).active ? 'Contact us for your payment link.' : 'Gallery link will appear when ready.'}</p>}
+            {o.scheduled_at && ['booked','scheduled'].includes(o.status) && <RescheduleAppointment orderId={o.id} scheduledAt={o.scheduled_at} timezone={scheduling?.default_timezone || 'America/New_York'} cutoff={scheduling?.client_reschedule_cutoff_hours ?? 48} reason={scheduling ? rescheduleEligibility(o, scheduling) : 'Contact us to change your appointment.'} />}
           </div>)}
         </section>
         {signed.length > 0 ? (

@@ -287,3 +287,15 @@ export function paymentReceivedEmail(p: PaymentReceivedContent): { subject: stri
 export function paymentReceivedSms(p: PaymentReceivedContent): string {
   return `Oceano Blue: ${paymentAmount(p.amountCents)} payment received for Order #${p.orderNumber} (${p.address}). Gallery downloads unlocked. ${p.orderUrl}`;
 }
+
+export function appointmentRescheduledEmail(p: { clientName: string; address: string; whenText: string; previousText: string; office: boolean }): { subject: string; html: string } {
+  return {
+    subject: `Shoot rescheduled — ${p.address}`,
+    html: shell(`<h1 style="font-size:26px;">Appointment updated</h1>
+      <p>${escapeHtml(p.office ? p.clientName + ' changed their appointment.' : 'Your shoot has been rescheduled.')}</p>
+      <p><strong>${escapeHtml(p.address)}</strong></p>
+      <p>New appointment: <strong>${escapeHtml(p.whenText)}</strong></p>
+      <p style="color:#708698;">Previous appointment: ${escapeHtml(p.previousText)}</p>
+      <p>Questions? Reply to this email and our team will help.</p>`, `Your new appointment is ${p.whenText}`),
+  };
+}
