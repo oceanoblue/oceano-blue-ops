@@ -123,3 +123,8 @@ body {
   body:has(.invoice-sheet) .invoice-sheet { max-width: none; padding: 0; box-shadow: none; }
   body:has(.invoice-sheet) { background: white; }
 }
+
+@media print {
+ body:has(.marketing-studio) * { visibility: hidden; }
+ body:has(.marketing-studio) canvas { visibility: visible; position: absolute; top: 0; left: 0; width: 100%; max-width: 100%; height: auto; box-shadow: none; }
+}

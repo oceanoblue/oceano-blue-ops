@@ -7,7 +7,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // redirect must not apply to them — otherwise a server POST gets 307-redirected
 // to /login and fails with 405.
 const PUBLIC_PATHS = [
-  '/', '/book', '/login', '/gallery', '/portal',
+  '/', '/book', '/login', '/gallery', '/portal', '/property',
   '/auth',             // magic-link / OAuth code-exchange callback — must be
                        // reachable BEFORE a session exists, or login can't complete.
   '/quote',            // shareable client quote pages (SSR, token-gated)
