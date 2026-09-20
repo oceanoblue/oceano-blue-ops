@@ -1,10 +1,12 @@
 import { createClient } from '@/lib/supabase/server';
+import { GalleryWatermarkToggle } from '@/components/settings/GalleryWatermarkToggle';
 import { SettingsNav } from '@/components/layout/SettingsNav';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {
   const supabase = await createClient();
+  const { data: gallerySettings, error: galleryError } = await supabase.from('business_settings').select('gallery_watermark_enabled').eq('id', true).single();
   const { data: team } = await supabase
     .from('team_members')
     .select('id, full_name, email, role, is_active')
@@ -14,9 +16,12 @@ export default async function SettingsPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-ocean-950">Settings</h1>
-        <p className="text-sm text-slate-600">Team, AI providers, and integrations.</p>
+        <p className="text-sm text-slate-600">Client galleries, team, AI providers, and integrations.</p>
       </div>
       <SettingsNav />
+      {!galleryError && gallerySettings
+        ? <GalleryWatermarkToggle initial={gallerySettings.gallery_watermark_enabled} />
+        : <p role="alert" className="text-sm text-red-700">Gallery settings could not be loaded. Refresh to try again.</p>}
 
       <section className="card p-6">
         <h2 className="mb-4 font-semibold text-slate-900">Team</h2>

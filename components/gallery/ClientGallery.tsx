@@ -28,6 +28,7 @@ interface GalleryPhoto {
 }
 
 interface Paywall {
+  watermarked?: boolean;
   active: boolean;
   paid: boolean;
   price_cents: number;
@@ -303,9 +304,9 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
                 <Lock className="h-4 w-4" />
               </span>
               <div>
-                <div className="font-medium text-ocean-950">These are watermarked previews</div>
+                <div className="font-medium text-ocean-950">{data.paywall?.watermarked ? 'These are watermarked previews' : 'Your gallery is ready to view'}</div>
                 <p className="text-sm text-slate-600">
-                  Unlock to download the full-resolution, watermark-free files for this listing.
+                  Complete payment to unlock downloads of the full-resolution files.
                 </p>
               </div>
             </div>
