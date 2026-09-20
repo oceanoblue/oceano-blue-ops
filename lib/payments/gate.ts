@@ -24,6 +24,7 @@ export type PaywallState = {
 export function paywallFor(order: PaywallOrder | null | undefined): PaywallState {
   const priceCents = order?.total_cents ?? 0;
   const paid = !!order?.download_paid_at;
-  const active = priceCents > 0 && !paid;
+  // Missing orders must never be interpreted as a free order.
+  const active = !order || (priceCents > 0 && !paid);
   return { active, paid, priceCents, currency: 'usd' };
 }

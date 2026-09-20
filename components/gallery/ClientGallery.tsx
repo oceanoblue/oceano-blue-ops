@@ -249,7 +249,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
               </button>
             )}
             {locked ? (
-              data.photos.length > 0 && <UnlockButton />
+              <UnlockButton />
             ) : data.photos.length > 0 ? (
               <>
                 {/* Resolution selector — clients pick full / print / web */}
@@ -297,7 +297,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
 
       <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
         {checkoutError && <p role="alert" className="mb-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{checkoutError} <a className="underline" href="mailto:info@oceanoblue.net">Contact us</a></p>}
-        {locked && data.photos.length > 0 && (
+        {locked && (
           <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-700">

@@ -11,6 +11,8 @@ import { NotAClient } from '@/components/portal/NotAClient';
 import { requireClientIds } from '@/lib/portal/require-client';
 import { MediaRoom, type DeliverableView } from '@/components/portal/MediaRoom';
 import { toEmbedUrl } from '@/lib/deliverables/embed';
+import { paywallFor } from '@/lib/payments/gate';
+import { isDeliverable } from '@/lib/photos/deliverable';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,25 +40,35 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
 
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, status, scheduled_at, delivered_at, order_number')
+    .select('id, status, scheduled_at, delivered_at, order_number, total_cents, download_paid_at')
     .eq('listing_id', params.id)
     .in('client_id', clientIds)
     .order('created_at', { ascending: false });
 
-  const { data: photos } = await supabase
+  const unlockedIds = (orders ?? []).filter(o => !paywallFor(o).active).map(o => o.id);
+  const admin = createAdminClient({ noStore: true });
+  // Read existing links only after client/listing ownership has been verified.
+  const { data: links } = orders?.length ? await admin.from('delivery_links')
+    .select('order_id, token, expires_at').in('order_id', orders.map(o => o.id))
+    .order('created_at', { ascending: false }) : { data: [] };
+  const galleryLinks = new Map<string, string>();
+  for (const link of links ?? []) {
+    if ((!link.expires_at || new Date(link.expires_at) > new Date()) && !galleryLinks.has(link.order_id)) {
+      galleryLinks.set(link.order_id, `/gallery/${encodeURIComponent(link.token)}`);
+    }
+  }
+
+  const { data: photos } = unlockedIds.length ? await supabase
     .from('photos')
-    .select('id, filename, bucket, storage_path, width, height, sort_order')
-    .in(
-      'order_id',
-      (orders ?? []).map((o: any) => o.id)
-    )
+    .select('id, filename, bucket, storage_path, width, height, sort_order, is_hdr, ai_provider')
+    .in('order_id', unlockedIds)
     .in('kind', ['processed', 'delivered'])
     .eq('is_selected', true)
-    .order('sort_order', { ascending: true });
+    .order('sort_order', { ascending: true }) : { data: [] };
 
   // Sign URLs server-side (private bucket)
   const signed = await Promise.all(
-    (photos ?? []).map(async (p: any) => {
+    (photos ?? []).filter(isDeliverable).map(async (p: any) => {
       const { data } = await supabase.storage.from(p.bucket).createSignedUrl(p.storage_path, 3600);
       return { id: p.id, filename: p.filename, width: p.width, height: p.height, url: data?.signedUrl ?? null };
     })
@@ -65,14 +77,15 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
   // Published non-photo deliverables (video / 360 tour / floor plan). RLS
   // returns only PUBLISHED items for listings this client owns; file URLs are
   // signed via the admin client after that ownership check.
-  const { data: dvRows } = await supabase
+  const { data: dvRows } = unlockedIds.length ? await supabase
     .from('listing_deliverables')
     .select('id, kind, title, source, external_url, bucket, storage_path, filename, mime_type')
     .eq('listing_id', params.id)
+    .in('order_id', unlockedIds)
+    .eq('is_published', true)
     .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true }) : { data: [] };
 
-  const admin = createAdminClient();
   const deliverables: DeliverableView[] = await Promise.all(
     (dvRows ?? []).map(async (d: any) => {
       let url: string | null = d.external_url ?? null;
@@ -120,6 +133,13 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
       </PortalHero>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
+        <section className="mb-8 space-y-3" aria-label="Your orders">
+          <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Your orders</h2><Link className="btn-secondary" href="/book">Book another shoot</Link></div>
+          {(orders ?? []).map(o => <div key={o.id} className="card flex flex-wrap items-center justify-between gap-3 p-4">
+            <div><p className="font-medium">Order #{o.order_number}</p><p className="mt-1 text-sm text-slate-600">{paywallFor(o).active ? 'Payment required to unlock downloads' : o.download_paid_at ? 'Paid · Downloads unlocked' : 'No payment required'}</p></div>
+            {galleryLinks.has(o.id) ? <Link href={galleryLinks.get(o.id)!} className="btn-primary">{paywallFor(o).active ? 'View gallery & pay' : 'Open gallery'}</Link> : <p className="text-sm text-slate-500">{paywallFor(o).active ? 'Contact us for your payment link.' : 'Gallery link will appear when ready.'}</p>}
+          </div>)}
+        </section>
         {signed.length > 0 ? (
           <>
             <div className="mb-4 text-sm text-slate-600">
@@ -131,10 +151,10 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
           <div className="card">
             <EmptyState
               icon={ImageOff}
-              title="Photos in progress"
+              title={(orders ?? []).some(o => paywallFor(o).active) ? 'Downloads locked until payment' : 'Photos in progress'}
               description={
                 <>
-                  We&apos;ll email you the moment your gallery is ready. Current status:{' '}
+                  {(orders ?? []).some(o => paywallFor(o).active) ? 'Open your order gallery above to preview and pay. Current status: ' : "We'll email you the moment your gallery is ready. Current status: "}
                   <strong>{latest ? STATUS_LABEL[latest.status] : 'no orders yet'}</strong>.
                 </>
               }

@@ -8,6 +8,7 @@ import { PortalHero } from '@/components/portal/PortalHero';
 import { NotAClient } from '@/components/portal/NotAClient';
 import { requireClientIds } from '@/lib/portal/require-client';
 import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
+import { paywallFor } from '@/lib/payments/gate';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,7 +60,7 @@ export default async function ClientReelDetail(props: { params: Promise<{ id: st
   const { data: order } = await supabase
     .from('orders')
     .select(
-      `id, order_number, status, created_at, delivered_at, order_kind,
+      `id, order_number, status, created_at, delivered_at, order_kind, total_cents, download_paid_at,
        reel_briefs(reel_type, aspect, subject_name, subject_title, length_target_s, captions, music, lower_third),
        order_footage(id, filename, byte_size, duration_seconds, role)`
     )
@@ -79,7 +80,8 @@ export default async function ClientReelDetail(props: { params: Promise<{ id: st
   // The finished reel is revealed only once the order is delivered (the team
   // reviews the render at the 'ready' gate first). Sign the latest done render.
   let reel: { url: string; filename: string; durationSeconds: number | null } | null = null;
-  if (isDelivered) {
+  const paymentLocked = paywallFor(o).active;
+  if (isDelivered && !paymentLocked) {
     const { data: ej } = await supabase
       .from('edit_jobs')
       .select('result_bucket, result_path, result_filename, result_duration_seconds')
@@ -176,7 +178,7 @@ export default async function ClientReelDetail(props: { params: Promise<{ id: st
                 {isCancelled ? <XCircle className="h-7 w-7" /> : <Film className="h-7 w-7" />}
               </div>
               <h2 className="mt-4 font-display text-xl font-semibold text-ocean-950">
-                {isCancelled
+                {isDelivered && paymentLocked ? 'Payment required to unlock your reel' : isCancelled
                   ? 'This reel was cancelled'
                   : rank >= 3
                   ? 'Final review in progress'
@@ -185,7 +187,7 @@ export default async function ClientReelDetail(props: { params: Promise<{ id: st
                   : 'Footage received'}
               </h2>
               <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
-                {isCancelled
+                {isDelivered && paymentLocked ? <a className="underline" href="mailto:info@oceanoblue.net">Contact us for your payment link. Your reel will be available here after payment.</a> : isCancelled
                   ? 'Reach out if you have any questions about this order.'
                   : rank >= 3
                   ? "We're giving your reel a final look. You'll be able to watch and download it here the moment it's approved."
