@@ -793,6 +793,7 @@ export type Database = {
       }
       business_settings: {
         Row: {
+          gallery_watermark_enabled: boolean
           ai_editing_enabled: boolean
           auto_enhance_on_upload: boolean
           auto_scene_fixes: boolean
@@ -808,6 +809,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          gallery_watermark_enabled?: boolean
           ai_editing_enabled?: boolean
           auto_enhance_on_upload?: boolean
           auto_scene_fixes?: boolean
@@ -823,6 +825,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          gallery_watermark_enabled?: boolean
           ai_editing_enabled?: boolean
           auto_enhance_on_upload?: boolean
           auto_scene_fixes?: boolean

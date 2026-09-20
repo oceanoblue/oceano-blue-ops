@@ -3,11 +3,12 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { isDeliverable } from '@/lib/photos/deliverable';
 import { toEmbedUrl } from '@/lib/deliverables/embed';
 import { paywallFor } from '@/lib/payments/gate';
+import { galleryWatermarkEnabled } from '@/lib/deliveries/watermark';
 
 /** Returns gallery metadata + signed URLs for the token. Public endpoint. */
 export async function GET(_req: Request, props: { params: Promise<{ token: string }> }) {
   const params = await props.params;
-  const supabase = createAdminClient();
+  const supabase = createAdminClient({ noStore: true });
 
   const { data: link, error } = await supabase
     .from('delivery_links')
@@ -35,9 +36,14 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
     .single();
   if (!order) return NextResponse.json({ error: 'order_missing' }, { status: 404 });
 
-  // Locked orders (priced + unpaid) show watermarked previews only;
-  // the clean masters are never signed until payment unlocks the order.
+  // Locked orders (priced + unpaid) show downscaled viewing previews only;
+  // the full-resolution masters are never signed until payment unlocks the order.
   const pay = paywallFor(order as any);
+  let watermarked = false;
+  if (pay.active) {
+    try { watermarked = await galleryWatermarkEnabled(supabase); }
+    catch { return NextResponse.json({ error: 'gallery_settings_unavailable' }, { status: 503 }); }
+  }
 
   const { data: listing } = await supabase
     .from('listings')
@@ -65,7 +71,7 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
   }
   const urlByPath = new Map<string, string>();
   if (!pay.active) {
-    // Only sign the clean masters when the order is unlocked (or the paywall is
+    // Only sign the full-resolution masters when the order is unlocked (or the paywall is
     // off). Locked orders never produce a signed original.
     await Promise.all(
       Array.from(byBucket.entries()).map(async ([bucket, ps]) => {
@@ -86,7 +92,7 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
     height: p.height,
     room_type: p.room_type ?? null,
     url: pay.active
-      ? `/api/delivery/${params.token}/preview/${p.id}`
+      ? `/api/delivery/${params.token}/preview/${p.id}?v=3&watermark=${watermarked ? 1 : 0}`
       : urlByPath.get(p.storage_path) ?? null,
   }));
 
@@ -129,6 +135,7 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
     deliverables,
     paywall: {
       active: pay.active,
+      watermarked,
       paid: pay.paid,
       price_cents: pay.priceCents,
       currency: pay.currency,

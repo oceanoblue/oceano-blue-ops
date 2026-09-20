@@ -2,16 +2,13 @@ import sharp from 'sharp';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createAdminClient } from '@/lib/supabase/server';
+import { galleryWatermarkEnabled } from '@/lib/deliveries/watermark';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-/**
- * Watermarked, downscaled preview of a single delivered photo. This is what the
- * gallery shows while an order is LOCKED (unpaid): the full-resolution master
- * never leaves the server, and every pixel that does is stamped with a tiled
- * "OCEANO BLUE" watermark — so screenshots carry the mark and the clean file is
- * only obtainable after payment.
+/** Downscaled gallery preview; the business-wide setting controls the overlay.
+ * The full-resolution master stays behind the separate payment/download gate.
  */
 async function watermarkSvg(w: number, h: number): Promise<string> {
   // Bundle the existing wordmark: serverless hosts may have no system fonts,
@@ -33,7 +30,7 @@ async function watermarkSvg(w: number, h: number): Promise<string> {
 
 export async function GET(_req: Request, props: { params: Promise<{ token: string; id: string }> }) {
   const params = await props.params;
-  const supabase = createAdminClient();
+  const supabase = createAdminClient({ noStore: true });
 
   const { data: link } = await supabase
     .from('delivery_links')
@@ -56,6 +53,10 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
     .maybeSingle();
   if (!photo) return new Response('Not found', { status: 404 });
 
+  let watermarked: boolean;
+  try { watermarked = await galleryWatermarkEnabled(supabase); }
+  catch { return new Response('Gallery settings unavailable', { status: 503 }); }
+
   const { data: file } = await supabase.storage.from((photo as any).bucket).download((photo as any).storage_path);
   if (!file) return new Response('Not found', { status: 404 });
 
@@ -68,15 +69,16 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
     const meta = await sharp(base).metadata();
     const w = meta.width ?? 1400;
     const h = meta.height ?? 1400;
-    const out = await sharp(base)
-      .composite([{ input: Buffer.from(await watermarkSvg(w, h)), top: 0, left: 0 }])
+    const output = sharp(base);
+    if (watermarked) output.composite([{ input: Buffer.from(await watermarkSvg(w, h)), top: 0, left: 0 }]);
+    const out = await output
       .jpeg({ quality: 78, mozjpeg: true })
       .toBuffer();
 
     return new Response(new Uint8Array(out), {
       headers: {
         'content-type': 'image/jpeg',
-        'cache-control': 'private, max-age=3600',
+        'cache-control': 'private, no-store',
       },
     });
   } catch {
