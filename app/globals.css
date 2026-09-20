@@ -117,3 +117,9 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+@media print {
+  body:has(.invoice-sheet) aside, body:has(.invoice-sheet) nav, body:has(.invoice-sheet) header { display: none !important; }
+  body:has(.invoice-sheet) .invoice-sheet { max-width: none; padding: 0; box-shadow: none; }
+  body:has(.invoice-sheet) { background: white; }
+}

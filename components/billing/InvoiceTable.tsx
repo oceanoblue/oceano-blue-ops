@@ -1,0 +1,11 @@
+'use client';
+import Link from 'next/link';
+import { useState } from 'react';
+import { invoiceStatus, money, balance, type InvoiceOrder } from '@/lib/billing/ledger';
+export function InvoiceTable({ orders, today, staff=false }: { orders: InvoiceOrder[]; today: string; staff?: boolean }) {
+  const [query,setQuery]=useState(''); const [status,setStatus]=useState('All');
+  const rows=orders.filter(o=>(status==='All'||invoiceStatus(o,today)===status) && `${o.order_number} ${o.clients?.full_name} ${o.listings?.address_line1}`.toLowerCase().includes(query.toLowerCase()));
+  return <div className="space-y-4"><div className="flex flex-wrap gap-3"><label className="text-sm">Search<input className="input mt-1 block" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Order, client, or address" /></label><label className="text-sm">Status<select className="input mt-1 block" value={status} onChange={e=>setStatus(e.target.value)}>{['All','Unpaid','Overdue','Paid','No charge','Unpriced','Draft','Cancelled'].map(s=><option key={s}>{s}</option>)}</select></label></div>
+    <div className="card overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50"><tr>{['Invoice','Client / property','Status','Created','Due','Total','Balance'].map(h=><th className="px-4 py-3" key={h}>{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{rows.map(o=><tr key={o.id}><td className="px-4 py-3"><Link className="font-medium text-ocean-700 underline" href={`${staff?'/dashboard':'/portal'}/invoices/${o.id}`}>#{o.order_number}</Link></td><td className="px-4 py-3"><p>{o.clients?.full_name}</p><p className="text-slate-500">{o.listings?.address_line1}</p></td><td className="px-4 py-3">{invoiceStatus(o,today)}</td><td className="px-4 py-3 whitespace-nowrap">{o.created_at.slice(0,10)}</td><td className="px-4 py-3 whitespace-nowrap">{o.invoice_due_date||'Not set'}</td><td className="px-4 py-3 whitespace-nowrap">{money(o.total_cents)}</td><td className="px-4 py-3 whitespace-nowrap">{o.total_cents===null&&!o.download_paid_at?'Not priced':money(balance(o))}</td></tr>)}</tbody></table>{!rows.length&&<p className="p-8 text-center text-slate-500">No invoices match your filters.</p>}</div>
+  </div>;
+}
