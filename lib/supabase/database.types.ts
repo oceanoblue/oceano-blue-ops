@@ -2289,6 +2289,7 @@ export type Database = {
           delivered_at: string | null
           download_paid_at: string | null
           download_paid_cents: number | null
+          services_revision: number
           download_stripe_session_id: string | null
           dropbox_archived_at: string | null
           dropbox_intake_path: string | null
@@ -2330,6 +2331,7 @@ export type Database = {
           delivered_at?: string | null
           download_paid_at?: string | null
           download_paid_cents?: number | null
+          services_revision?: number
           download_stripe_session_id?: string | null
           dropbox_archived_at?: string | null
           dropbox_intake_path?: string | null
@@ -2371,6 +2373,7 @@ export type Database = {
           delivered_at?: string | null
           download_paid_at?: string | null
           download_paid_cents?: number | null
+          services_revision?: number
           download_stripe_session_id?: string | null
           dropbox_archived_at?: string | null
           dropbox_intake_path?: string | null

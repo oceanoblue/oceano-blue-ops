@@ -15,6 +15,7 @@ export async function AttentionQueue() {
     client.from('team_calendar_connections').select('team_member_id, is_active, scope'),
     (client as any).from('booking_followups').select('id, order_id, kind, status, created_at')
       .neq('status', 'complete').lt('created_at', new Date(now - 300000).toISOString()).order('created_at').limit(20),
+    (client as any).from('order_payment_reviews').select('session_id,order_id,created_at').is('resolved_at', null).order('created_at').limit(20),
   ]);
   const rows: Attention[] = [];
   for (const job of results[0].data || []) rows.push({ key: job.id, title: job.title,
@@ -28,6 +29,9 @@ export async function AttentionQueue() {
     reason: job.status === 'needs_review' ? 'Delivery is uncertain. Check the provider before resending.'
       : job.status === 'failed' ? 'Automatic retries exhausted. Review the order and integration.' : 'Follow-up is delayed; automatic delivery is pending.',
     href: `/dashboard/orders/${job.order_id}`, at: job.created_at });
+  for (const payment of results[4].data || []) rows.push({ key: payment.session_id, title: 'Payment needs review',
+    reason: 'A payment arrived from an earlier or duplicate checkout. Reconcile it before requesting another payment.',
+    href: `/dashboard/orders/${payment.order_id}`, at: payment.created_at });
   const unavailable = results.some(result => result.error);
   if (!rows.length && !unavailable) return null;
   return <section className="card p-4 sm:p-6 space-y-3">

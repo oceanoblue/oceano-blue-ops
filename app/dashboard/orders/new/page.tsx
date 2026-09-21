@@ -33,7 +33,7 @@ export default async function NewShootPage() {
         .order('full_name'),
       supabase
         .from('products')
-        .select('id, name, kind, is_addon, base_price_cents, sort_order')
+        .select('id, name, kind, is_addon, base_price_cents, sort_order, pricing_tiers(min_sqft,max_sqft,price_cents)')
         .eq('is_active', true)
         .order('sort_order'),
     ]);
