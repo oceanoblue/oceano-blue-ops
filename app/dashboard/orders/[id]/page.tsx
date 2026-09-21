@@ -382,7 +382,7 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
               <OrderProcessingProgress orderId={order.id}/>
             </section>
           </div>
-          <details className="card p-5 sm:p-6"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Upload or browse originals in the app <span className="ml-2 font-normal text-slate-500">{originalsCount} files</span></summary>
+          <details className="card p-5 sm:p-6"><summary className="cursor-pointer text-sm font-semibold text-slate-700">{aiEditingEnabled ? 'Enhance photos in-house · upload, merge & edit' : 'Upload or browse originals in the app'} <span className="ml-2 font-normal text-slate-500">{originalsCount} files</span></summary>
             <div className="mt-5"><PhotoManager orderId={order.id} view="originals" autoEnhanceOnUpload={autoEnhanceOnUpload} aiEditingEnabled={aiEditingEnabled} externalFinalsCount={finalsCount}/></div>
           </details>
         </div>}

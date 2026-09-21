@@ -1346,8 +1346,7 @@ function Stage2({
         <div>
           <h2 className="text-lg font-semibold text-ocean-900">AI Enhance</h2>
           <p className="text-sm text-slate-500">
-            Run the luxury real estate prompt on your merged photos. Auto-detect chains
-            sky and window fixes when needed.
+            Choose a photographic finish for your originals or merged photos, then review the new versions.
           </p>
         </div>
         <button onClick={onBack} className="text-xs text-slate-500 hover:text-slate-700">
@@ -1393,8 +1392,8 @@ function Stage2({
                 <div>
                   <div className="text-sm font-semibold text-slate-800">Auto-enhancing these photos</div>
                   <p className="text-xs text-slate-500 mt-0.5 max-w-prose">
-                    Auto-enhance on upload is on, so each base runs the signature enhance (plus
-                    scene fixes) automatically — no Run AI needed. Photos move to Review as they
+                    Auto-enhance on upload is on, so each base uses your saved Auto / mixed finish
+                    automatically. Photos move to Review as they
                     finish. Turn this off in Settings → Enhance to enhance manually.
                   </p>
                 </div>

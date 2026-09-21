@@ -46,9 +46,8 @@ export function AutoEnhanceToggle({ initial }: { initial: boolean }) {
           <div>
             <div className="font-semibold text-ocean-950">Auto-enhance on upload</div>
             <p className="text-sm text-slate-600 mt-0.5 max-w-prose">
-              When on, every merged HDR base and standalone JPEG runs the signature enhance
-              automatically once it&apos;s ready — no manual <em>Run AI</em> click. Each photo is
-              enhanced once. Turn off to enhance only when you press Run AI.
+              When on, each merged HDR base and standalone JPEG uses your saved Auto / mixed finish
+              automatically once it&apos;s ready. Turn off to start enhancements manually.
             </p>
             {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
           </div>
