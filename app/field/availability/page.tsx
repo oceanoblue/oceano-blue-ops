@@ -13,7 +13,7 @@ export default async function FieldAvailability({searchParams}:{searchParams:Pro
  const admin=createAdminClient() as any;
  const [hours,blocks,connection]=await Promise.all([
   admin.from('team_availability').select('*').eq('team_member_id',user.id),
-  admin.from('schedule_blocks').select('id,starts_at,ends_at,reason').eq('team_member_id',user.id).eq('is_available',false).gte('ends_at',new Date().toISOString()).order('starts_at'),
+  admin.from('schedule_blocks').select('id,starts_at,ends_at,reason').eq('team_member_id',user.id).eq('is_available',false).or('reason.is.null,reason.not.like.sync:%').gte('ends_at',new Date().toISOString()).order('starts_at'),
   admin.from('team_calendar_connections').select('is_active,scope').eq('team_member_id',user.id).eq('provider','google').maybeSingle(),
  ]);
  const search=await searchParams;const status=!connection.data?'Not connected':calendarNeedsReconnect(connection.data)?'Reconnect required':'Connected';

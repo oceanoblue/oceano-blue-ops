@@ -42,7 +42,7 @@ export default async function AvailabilitySettingsPage() {
   const [profiles,products,blocks,connections]=await Promise.all([
     admin.from('photographer_routing').select('*').in('team_member_id',visible.map(m=>m.id)),
     admin.from('products').select('id,name').eq('is_active',true).order('name'),
-    admin.from('schedule_blocks').select('id,team_member_id,starts_at,ends_at,reason').in('team_member_id',visible.map(m=>m.id)).eq('is_available',false).gte('ends_at',new Date().toISOString()).order('starts_at'),
+    admin.from('schedule_blocks').select('id,team_member_id,starts_at,ends_at,reason').in('team_member_id',visible.map(m=>m.id)).eq('is_available',false).or('reason.is.null,reason.not.like.sync:%').gte('ends_at',new Date().toISOString()).order('starts_at'),
     admin.from('team_calendar_connections').select('team_member_id,is_active,scope').in('team_member_id',visible.map(m=>m.id)).eq('provider','google'),
   ]);
   return (

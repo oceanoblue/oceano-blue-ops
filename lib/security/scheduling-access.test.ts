@@ -3,7 +3,7 @@ import {PUT} from '@/app/api/scheduling/hours/route';
 import {POST as block,DELETE as unblock} from '@/app/api/scheduling/time-off/route';
 import {POST as profile} from '@/app/api/scheduling/profiles/route';
 const {state,rpc,writes,filters}=vi.hoisted(()=>({state:{user:null as any,staff:null as any},rpc:vi.fn(),writes:vi.fn(),filters:[] as any[]}));
-vi.mock('@/lib/supabase/server',()=>({createClient:async()=>({auth:{getUser:async()=>({data:{user:state.user}})}}),createAdminClient:()=>({rpc,from:(table:string)=>{const q:any={then:(r:any)=>Promise.resolve({data:state.staff,error:null}).then(r)};q.eq=(key:string,val:any)=>{filters.push([table,key,val]);return q;};for(const k of ['select','single'])q[k]=()=>q;for(const k of ['insert','delete','upsert'])q[k]=(...args:any[])=>{writes(table,k,...args);return q;};return q;}})}));
+vi.mock('@/lib/supabase/server',()=>({createClient:async()=>({auth:{getUser:async()=>({data:{user:state.user}})}}),createAdminClient:()=>({rpc,from:(table:string)=>{const q:any={then:(r:any)=>Promise.resolve({data:state.staff,error:null}).then(r)};q.eq=(key:string,val:any)=>{filters.push([table,key,val]);return q;};for(const k of ['select','single','or'])q[k]=()=>q;for(const k of ['insert','delete','upsert'])q[k]=(...args:any[])=>{writes(table,k,...args);return q;};return q;}})}));
 const own='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
 const req=(body:any)=>new Request('https://example.test/api/scheduling/hours',{method:'PUT',body:JSON.stringify(body)});
 beforeEach(()=>{vi.resetAllMocks();filters.length=0;state.user={id:own};state.staff={id:own,role:'photographer',is_active:true};rpc.mockResolvedValue({error:null});});
