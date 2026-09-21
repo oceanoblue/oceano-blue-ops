@@ -35,3 +35,17 @@ describe('wbGains (white-balance gains from a bright-neutral sample)', () => {
     expect(wbGains(0, 200, 200)).toMatchObject({ rGain: 1 });
   });
 });
+
+import sharp from 'sharp';
+import { enhanceSingle } from './pipeline';
+it('highlight recovery darkens highlights while preserving shadows in an adjustment', async () => {
+  const pixels = Buffer.alloc(128 * 64 * 3);
+  for (let y=0;y<64;y++) for (let x=0;x<128;x++) for(let c=0;c<3;c++) pixels[(y*128+x)*3+c]=x<64?80:235;
+  const input=await sharp(pixels,{raw:{width:128,height:64,channels:3}}).png().toBuffer();
+  const out=await enhanceSingle(input,{highlights:0.8,sharpening:0},'adjustment');
+  const pixelsOut = await sharp(out.bytes).raw().toBuffer();
+  const dark = pixelsOut[(16 * 128 + 16) * 3];
+  const light = pixelsOut[(16 * 128 + 96) * 3];
+  expect(dark).toBeGreaterThan(77); expect(dark).toBeLessThan(83);
+  expect(light).toBeLessThan(215);
+});

@@ -1,154 +1,59 @@
 import OpenAI from 'openai';
 import sharp from 'sharp';
+import { createHash } from 'node:crypto';
 import type { AiProvider, AiRequest, AiResponse } from './types';
 import { buildPrompt } from './prompts';
+import { IMAGE_MODEL, imageEditSize } from './finishing';
+import { recipeFromParams } from './recipe';
 
-// Output sizes, raised from the old 1536x1024 so house numbers and fine text
-// stay legible. gpt-image-2 accepts custom sizes (multiples of 16, longest
-// edge <= 3840, aspect <= 3:1) and always processes inputs at high fidelity.
-// Orientation-matched so portraits aren't squeezed into a landscape canvas.
-// Override all of them with OPENAI_IMAGE_SIZE (e.g. 3072x2048 ~6MP 3:2, or
-// 3840x2160 for 4K 16:9).
-const SIZE_LANDSCAPE = '2304x1536'; // 3:2, ~3.5MP
-const SIZE_PORTRAIT = '1536x2304';
-const SIZE_SQUARE = '2048x2048';
-const SIZE_FALLBACK = '1536x1024'; // known-good if a custom size is ever rejected
-
-async function pickOutputSize(firstInput: Buffer): Promise<string> {
-  const override = process.env.OPENAI_IMAGE_SIZE;
-  if (override) return override;
-  try {
-    const meta = await sharp(firstInput).metadata();
-    const w = meta.width ?? 0;
-    const h = meta.height ?? 0;
-    if (h > w * 1.1) return SIZE_PORTRAIT;
-    if (w > h * 1.1) return SIZE_LANDSCAPE;
-    return SIZE_SQUARE;
-  } catch {
-    return SIZE_LANDSCAPE;
-  }
-}
-
-/**
- * OpenAI GPT Image provider.
- *
- * Uses `images.edit` for single-image enhancement and HDR merge (passes the
- * brightest exposure as the primary input plus the rest as reference images).
- * The OpenAI image API accepts PNG/JPEG up to a few MB, so we expect Sharp to
- * pre-encode inputs before calling this.
- */
 export const openaiGptImage: AiProvider = {
   id: 'openai-gpt-image',
-  displayName: 'OpenAI GPT Image',
-  supports: [
-    'enhance_single',
-    'hdr_merge',
-    'sky_replace',
-    'window_pull',
-    'lawn_enhance',
-    'declutter',
-    'twilight_convert',
-    'virtual_stage',
-  ],
-
-  isConfigured() {
-    return Boolean(process.env.OPENAI_API_KEY);
-  },
-
-  estimatedCostCents(req) {
-    // gpt-image-2 native 2K ≈ $0.12/image; 4K upscale ≈ $0.24/image.
-    // We default to 2K — editors can re-run a final select set at 4K.
-    return 12;
-  },
-
+  displayName: 'Oceano AI · GPT Image 2.5 Sunburst',
+  supports: ['enhance_single', 'hdr_merge', 'sky_replace', 'window_pull', 'lawn_enhance', 'declutter', 'twilight_convert', 'virtual_stage'],
+  isConfigured: () => Boolean(process.env.OPENAI_API_KEY),
+  // Budget estimate only. Token usage is recorded separately in provenance.
+  estimatedCostCents: () => 25,
   async process(req: AiRequest): Promise<AiResponse> {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error('OPENAI_API_KEY is not set');
-
-    const client = new OpenAI({ apiKey });
-    const prompt = req.prompt ?? buildPrompt(req.jobType);
-    const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
-
-    if (req.inputs.length === 0) {
-      throw new Error('At least one input image is required');
-    }
-
-    // Build buffers + File objects from the source images.
-    const buffers = await Promise.all(
-      req.inputs.map(async (src) => {
-        const bytes = src.bytes ?? (await (await fetch(src.url!)).arrayBuffer());
-        return Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
-      })
-    );
-    const imageFiles = buffers.map(
-      (buf, i) =>
-        new File([new Uint8Array(buf)], req.inputs[i].filename ?? `input-${i}.png`, {
-          type: req.inputs[i].mimeType ?? 'image/png',
-        })
-    );
-
-    const size = await pickOutputSize(buffers[0]);
-    const image = imageFiles.length === 1 ? imageFiles[0] : imageFiles;
-
-    // input_fidelity:'high' is THE key to faithful edits: it tells gpt-image to
-    // preserve the input's structure, fixtures, windows, faces and fine detail
-    // and only change what the prompt asks (e.g. add furniture for staging).
-    // Without it the model drifts — altering walls/fixtures — which is exactly the
-    // gap between the consistent chat results and earlier API output. Override with
-    // OPENAI_INPUT_FIDELITY=low to disable.
-    const inputFidelity = (process.env.OPENAI_INPUT_FIDELITY || 'high').toLowerCase();
-
-    // gpt-image-2 accepts custom sizes; if a size is ever rejected, fall back to
-    // the known-good landscape size so the enhance still succeeds. Likewise if
-    // input_fidelity is ever rejected (older model), retry without it.
-    async function edit(outSize: string, withFidelity: boolean) {
-      const body: Record<string, unknown> = {
-        model,
-        image, // OpenAI SDK accepts File | File[] at runtime
-        prompt,
-        size: outSize,
-        n: 1,
-      };
-      if (withFidelity && inputFidelity !== 'low') body.input_fidelity = inputFidelity;
-      return client.images.edit(body as never);
-    }
-    let result;
-    try {
-      result = await edit(size, true);
-    } catch (e: any) {
-      const msg = e?.message ?? '';
-      if (/input_fidelity|unknown.*param|unexpected.*param/i.test(msg)) {
-        // Param unsupported by this model — retry honoring only the size fallback.
-        try {
-          result = await edit(size, false);
-        } catch (e2: any) {
-          if (size !== SIZE_FALLBACK && /size|dimension|invalid|unsupported/i.test(e2?.message ?? '')) {
-            result = await edit(SIZE_FALLBACK, false);
-          } else {
-            throw e2;
-          }
-        }
-      } else if (size !== SIZE_FALLBACK && /size|dimension|invalid|unsupported/i.test(msg)) {
-        result = await edit(SIZE_FALLBACK, true);
-      } else {
-        throw e;
-      }
-    }
-
+    if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
+    if (!req.inputs.length) throw new Error('At least one input image is required');
+    const recipe = recipeFromParams(req.params);
+    const model = recipe?.model ?? process.env.OPENAI_IMAGE_MODEL ?? IMAGE_MODEL;
+    const quality = recipe?.finish?.quality ?? 'high';
+    // Ambiguous network failures must not silently trigger another paid render.
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 0, timeout: 240_000 });
+    const buffers = await Promise.all(req.inputs.map(async (src) => {
+      if (src.bytes) return src.bytes;
+      if (!src.url) throw new Error('missing_image_source');
+      const response = await fetch(src.url);
+      if (!response.ok) throw new Error(`image_download_failed: ${response.status}`);
+      return Buffer.from(await response.arrayBuffer());
+    }));
+    const source = await sharp(buffers[0]).metadata();
+    const size = imageEditSize(source.width ?? 0, source.height ?? 0);
+    const prompt = req.prompt ?? recipe?.prompt ?? buildPrompt(req.jobType);
+    const images = buffers.map((bytes, i) => new File([new Uint8Array(bytes)], req.inputs[i].filename || `input-${i}.jpg`, { type: req.inputs[i].mimeType ?? 'image/jpeg' }));
+    const result = await client.images.edit({
+      model, image: images.length === 1 ? images[0] : images,
+      prompt, size, quality, output_format: 'jpeg', n: 1,
+    } as never);
     const b64 = result.data?.[0]?.b64_json;
     if (!b64) throw new Error('OpenAI returned no image data');
-
+    const bytes = Buffer.from(b64, 'base64');
+    const output = await sharp(bytes, { limitInputPixels: 20_000_000 }).metadata();
+    if (!output.width || !output.height || Math.abs((output.width / output.height) / (source.width! / source.height!) - 1) > 0.03) {
+      throw new Error('image_edit_changed_aspect_ratio');
+    }
+    if (!['jpeg', 'png', 'webp'].includes(output.format ?? '')) throw new Error('invalid_image_output');
+    const mimeType = output.format === 'jpeg' ? 'image/jpeg' : `image/${output.format}`;
     return {
-      outputs: [
-        {
-          bytes: Buffer.from(b64, 'base64'),
-          mimeType: 'image/png',
-          filename: `${req.jobType}-${Date.now()}.png`,
-        },
-      ],
-      model,
-      costCents: openaiGptImage.estimatedCostCents(req),
-      rawPromptUsed: prompt,
+      outputs: [{ bytes, mimeType, filename: `${req.jobType}-${Date.now()}.${output.format === 'jpeg' ? 'jpg' : output.format}` }],
+      model, costCents: openaiGptImage.estimatedCostCents(req), rawPromptUsed: prompt,
+      provenance: {
+        model, quality, requestedSize: size, width: output.width, height: output.height,
+        inputSha256: buffers.map(b => createHash('sha256').update(b).digest('hex')),
+        usage: (result as unknown as { usage?: unknown }).usage ?? null,
+        costIsEstimate: true, reviewRequired: true, fidelityGuaranteed: false,
+      },
     };
   },
 };

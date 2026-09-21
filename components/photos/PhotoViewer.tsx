@@ -60,7 +60,7 @@ const PRESETS: Record<string, Partial<AdjustOptions>> = {
 
 const ZERO: AdjustOptions = {
   exposure: 0, contrast: 0, temp: 0, tint: 0, saturation: 0,
-  highlights: 0, shadows: 0, whites: 0, blacks: 0, sharpening: 0.25,
+  highlights: 0, shadows: 0, whites: 0, blacks: 0, sharpening: 0,
 };
 
 interface PhotoViewerProps {
@@ -209,7 +209,6 @@ export function PhotoViewer({
   // ── Debounced live preview ────────────────────────────────────────────────
   // Whenever the slider state changes (and isn't all zeros), fire the preview
   // 450ms after the last edit. Empty/zero state shows the original.
-  const adjustKey = useMemo(() => JSON.stringify(adjust), [adjust]);
   const debouncedRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!photo) return;
@@ -218,9 +217,12 @@ export function PhotoViewer({
     const hasAny = Object.values(adjust).some((v) => Math.abs(v) > 0.005);
     if (!hasAny) {
       setPreviewB64(null);
+      setPreviewing(false);
       return;
     }
 
+    let cancelled = false;
+    setPreviewB64(null);
     debouncedRef.current = setTimeout(async () => {
       setPreviewing(true);
       try {
@@ -231,18 +233,19 @@ export function PhotoViewer({
         });
         if (r.ok) {
           const data = await r.json();
-          setPreviewB64(data.preview_b64);
+          if (!cancelled) setPreviewB64(data.preview_b64);
         }
       } catch {
         // best-effort
       } finally {
-        setPreviewing(false);
+        if (!cancelled) setPreviewing(false);
       }
     }, 450);
     return () => {
+      cancelled = true;
       if (debouncedRef.current) clearTimeout(debouncedRef.current);
     };
-  }, [photo, adjustKey]);
+  }, [photo, adjust]);
 
   function setSlider<K extends keyof AdjustOptions>(key: K, value: AdjustOptions[K]) {
     setAdjust((prev) => ({ ...prev, [key]: value }));
@@ -322,7 +325,8 @@ export function PhotoViewer({
           order_id: photo.order_id,
           job_type: 'enhance_single',
           provider: 'openai-gpt-image',
-          photo_ids: [photo.parent_photo_id ?? photo.id],
+          photo_ids: [photo.id],
+          refinement: true,
           prompt_extra: aiPrompt.trim(),
         }),
       });
@@ -375,7 +379,7 @@ export function PhotoViewer({
             <button
               onClick={() => setShowBefore((s) => !s)}
               disabled={!parentUrl}
-              title={parentFetching ? 'Loading original…' : 'Toggle before / after (Space)'}
+              title={parentFetching ? 'Loading previous version…' : 'Toggle before / after (Space)'}
               className={`p-1.5 rounded text-sm transition ${
                 showBefore ? 'bg-white text-neutral-900' : 'hover:bg-white/10 text-neutral-300'
               } disabled:opacity-40`}
@@ -387,7 +391,7 @@ export function PhotoViewer({
             <button
               onClick={() => setSplit((s) => !s)}
               disabled={!parentUrl}
-              title="Split compare — drag the divider (original left, enhanced right)"
+              title="Split compare — drag the divider (previous version left, current version right)"
               className={`p-1.5 rounded text-sm transition ${
                 split ? 'bg-white text-neutral-900' : 'hover:bg-white/10 text-neutral-300'
               } disabled:opacity-40`}

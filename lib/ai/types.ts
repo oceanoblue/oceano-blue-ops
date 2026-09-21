@@ -48,6 +48,7 @@ export interface AiResponse {
   rawPromptUsed?: string;
   /** Free-form notes from the provider for the audit log. */
   notes?: string;
+  provenance?: Record<string, unknown>;
 }
 
 export interface AiProvider {

@@ -1,6 +1,7 @@
 import type { AiJobType } from '@/lib/supabase/database.types';
 import type { AiProviderId } from './types';
-import type { EnhanceDirectives } from './prompts';
+import { composeEnhanceDirections, type EnhanceDirectives } from './prompts';
+import { DEFAULT_FINISH, IMAGE_MODEL, FINISH_PROMPT_VERSION, finishDirections, type Finish } from './finishing';
 
 /**
  * The reproducible "recipe" for an AI edit — everything needed to re-run it,
@@ -16,6 +17,13 @@ import type { EnhanceDirectives } from './prompts';
  * edits couldn't be reproduced or adjusted.
  */
 export interface EnhanceRecipe {
+  version?: 2;
+  model?: string;
+  finish?: Finish;
+  prompt_version?: string;
+  refinement?: boolean;
+  source_photo_id?: string;
+  provenance?: Record<string, unknown>;
   job_type: AiJobType;
   provider: AiProviderId | string;
   /** Structured enhance toggles, when the job used them (null for plain prompts). */
@@ -44,7 +52,7 @@ export function recipeFromParams(params: unknown): EnhanceRecipe | null {
 
 /** A short, human-readable one-liner describing a recipe (for tooltips/UI). */
 export function describeRecipe(recipe: EnhanceRecipe | null | undefined): string {
-  if (!recipe) return '';
+  if (!recipe || !isEnhanceRecipe(recipe)) return '';
   const d = recipe.directives;
   const parts: string[] = [];
   const jobLabel: Partial<Record<AiJobType, string>> = {
@@ -58,11 +66,24 @@ export function describeRecipe(recipe: EnhanceRecipe | null | undefined): string
     virtual_stage: 'Staging',
   };
   parts.push(jobLabel[recipe.job_type] ?? recipe.job_type);
-  if (d?.enhancementStyle) parts.push(d.enhancementStyle === 'natural' ? 'Natural' : 'Signature');
+  if (recipe.finish) parts.push(recipe.finish.style.replaceAll('_', ' '), `${recipe.finish.windows} windows`);
+  else if (d?.enhancementStyle) parts.push(d.enhancementStyle === 'natural' ? 'Natural' : 'Signature');
   if (d?.skyStyle && d.skyStyle !== 'original') parts.push('sky');
   if (d?.windowPull) parts.push('windows');
   if (d?.perspectiveCorrection) parts.push('perspective');
   if (d?.removeReflections) parts.push('reflections');
   if (d?.blurFaces) parts.push('faces');
   return parts.join(' · ');
+}
+
+/** One recipe constructor for manual, automatic and repeat edits. */
+export function createEnhanceRecipe(provider: string, directives: EnhanceDirectives = {}, finish: Finish = DEFAULT_FINISH): EnhanceRecipe {
+  const extra = directives.extra?.trim();
+  return {
+    version: 2, job_type: 'enhance_single', provider,
+    model: provider === 'openai-gpt-image' ? IMAGE_MODEL : undefined,
+    finish, prompt_version: FINISH_PROMPT_VERSION, directives,
+    prompt_extra: extra || null,
+    prompt: finishDirections(finish) + '\n\n' + composeEnhanceDirections({ ...directives, enhancementStyle: undefined, windowPull: false }) ,
+  };
 }

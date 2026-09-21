@@ -11,6 +11,7 @@ import { enhanceSingle } from '@/lib/ai/oceano-enhance/pipeline';
  */
 const Body = z.object({
   photo_id: z.string().uuid(),
+  mode: z.enum(['basic', 'adjustment']).default('adjustment'),
   options: z.object({
     targetLongEdge: z.number().int().min(800).max(6000).optional(),
     jpegQuality: z.number().int().min(60).max(100).optional(),
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
   }
 
   const buf = Buffer.from(await file.arrayBuffer());
-  const result = await enhanceSingle(buf, parsed.data.options);
+  const result = await enhanceSingle(buf, parsed.data.options, parsed.data.mode);
   // Smaller preview to keep response payloads sane.
   const preview = await (await import('sharp'))
     .default(result.bytes)

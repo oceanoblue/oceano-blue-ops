@@ -337,22 +337,19 @@ async function applySaturation(buf: Buffer, amount: number): Promise<Buffer> {
   return sharp(buf).modulate({ saturation }).toBuffer();
 }
 
-/**
- * Highlights: positive amount darkens highlights (recovery).
- * We use gamma to compress the top of the curve.
- */
+/** Local highlight adjustment: affect bright regions without changing shadows.
+ * A standalone Sharp gamma operation cancels itself on encode; use luminance
+ * weights instead. This changes tone only, never reconstructs clipped detail. */
 async function applyHighlights(buf: Buffer, amount: number): Promise<Buffer> {
   if (Math.abs(amount) < 0.01) return buf;
-  // Positive = pull highlights back: gamma > 1.0
-  // Negative = brighten highlights: not supported directly by sharp.gamma (which needs >= 1.0)
-  if (amount > 0) {
-    const gamma = Math.min(3.0, 1 + amount * 0.6);
-    return sharp(buf).gamma(gamma).toBuffer();
+  const { data, info } = await sharp(buf).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  for (let i = 0; i < data.length; i += info.channels) {
+    const luma = (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255;
+    const t = Math.max(0, Math.min(1, (luma - 0.5) / 0.5));
+    const gain = 1 - amount * 0.22 * t * t * (3 - 2 * t);
+    for (let c = 0; c < info.channels; c++) data[i + c] = Math.max(0, Math.min(255, Math.round(data[i + c] * gain)));
   }
-  // For negative highlights (boost), use linear gain biased to bright values
-  const gain = 1 + Math.abs(amount) * 0.15;
-  const bias = -(gain - 1) * 128;
-  return sharp(buf).linear(gain, bias).toBuffer();
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } }).png().toBuffer();
 }
 
 /**
@@ -408,18 +405,19 @@ async function applySharpening(buf: Buffer, amount: number): Promise<Buffer> {
 /** Run the full single-image pipeline. */
 export async function enhanceSingle(
   inputBuf: Buffer,
-  options?: EnhanceOptions
+  options?: EnhanceOptions,
+  mode: 'basic' | 'adjustment' = 'basic'
 ): Promise<{ bytes: Buffer; width: number; height: number }> {
-  const opts = normalizeOptions(options ?? {});
+  const opts = normalizeOptions({ ...(mode === 'adjustment' ? { sharpening: 0 } : {}), ...options });
 
   // 1. Decode + orient + resize
   let img = sharp(inputBuf, { failOn: 'none' }).rotate().toColorspace('srgb');
   img = await resize(img, opts);
-  let buf: Buffer = await img.toBuffer();
+  let buf: Buffer = await img.png().toBuffer();
 
   // 2. Auto white balance (grey world) — always run as a baseline so the
   // photo starts neutral. Subsequent temp/tint sliders shift from there.
-  buf = await whiteBalance(buf);
+  if (mode === 'basic') buf = await whiteBalance(buf);
 
   // 3. Exposure (global brightness in stops)
   buf = await applyExposure(buf, opts.exposure);
@@ -523,7 +521,8 @@ export const ENHANCE_PRESETS: Record<string, Partial<EnhanceOptions>> = {
  */
 export async function mergeBrackets(
   brackets: Array<{ bytes: Buffer; bracketIndex?: number }>,
-  options?: EnhanceOptions
+  options?: EnhanceOptions,
+  mode: 'basic' | 'adjustment' = 'basic'
 ): Promise<{ bytes: Buffer; width: number; height: number }> {
   if (brackets.length === 0) throw new Error('No brackets provided');
   if (brackets.length === 1) return enhanceSingle(brackets[0].bytes, options);

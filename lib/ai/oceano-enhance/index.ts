@@ -1,7 +1,6 @@
 import type { AiProvider, AiRequest, AiResponse, SourceImage } from '../types';
 import { enhanceSingle, mergeBrackets } from './pipeline';
 import { loadEnhanceSettings } from './settings';
-import { smartEnhance } from './smart-enhance';
 import { geminiBananaPro } from '../gemini-banana-pro';
 import { openaiGptImage } from '../openai-gpt-image';
 import { editEngineConfigured, runEditEngine } from '../edit-engine';
@@ -98,76 +97,18 @@ export const oceanoEnhance: AiProvider = {
     switch (req.jobType) {
       case 'enhance_single': {
         const src = req.inputs[0];
-        const buf = await bufFromSource(src);
-        // Preferred path: the deterministic Python edit engine applies the
-        // faithful finishing grade (auto WB, denoise, local contrast, tone /
-        // black point, gentle saturation, edge-aware sharpen). No hallucination.
-        if (editEngineConfigured()) {
-          try {
-            const bytes = await runEditEngine([{ bytes: buf, filename: src.filename }], {
-              mode: 'grade',
-              targetLongEdge: opts.targetLongEdge ?? 0, // 0 = keep native (no downscale)
-              quality: opts.jpegQuality ?? 95,
-              style: req.gradeStyle, // 'sober' for architectural/interior profiles
-            });
-            return {
-              outputs: [{ bytes, mimeType: 'image/jpeg', filename: `enhance_single-${Date.now()}.jpg` }],
-              model: 'oceano-edit-engine/grade-v1',
-              costCents: 0,
-              rawPromptUsed: '(deterministic edit engine: grade)',
-            };
-          } catch (e) {
-            // RAW inputs can ONLY be decoded by the engine (libraw). Sharp can't,
-            // so falling back would throw a cryptic "unsupported image format"
-            // that hides the real engine failure (e.g. a 401 secret mismatch).
-            // Surface it for RAW; keep the legacy fallback for JPEG/PNG.
-            const isRaw =
-              src.mimeType === 'image/x-raw' ||
-              /\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(src.filename || '');
-            if (isRaw) {
-              throw new Error(`edit_engine_grade_failed (RAW needs the engine): ${e instanceof Error ? e.message : String(e)}`);
-            }
-            console.error('[oceano-enhance] edit engine grade failed, falling back:', e);
-          }
+        let buf = await bufFromSource(src);
+        const isRaw = src.mimeType === 'image/x-raw' || /\.(arw|cr2|cr3|nef|nrw|dng|raf|orf|rw2|pef|srw|sr2)$/i.test(src.filename);
+        if (isRaw) {
+          // RAW preparation remains worker-owned. Never send RAW to image APIs.
+          buf = await runEditEngine([{ bytes: buf, filename: src.filename }], { mode: 'grade', targetLongEdge: opts.targetLongEdge ?? 4000, quality: 96, style: 'sober' });
         }
-        // Fallback (engine not configured or unreachable): legacy JS smart-enhance.
-        const result = await smartEnhance(buf, src.filename, opts);
-        const editLog = result.editsApplied.length
-          ? `applied: ${result.editsApplied.join(' → ')}`
-          : 'deterministic only';
-        return {
-          outputs: [
-            {
-              bytes: result.bytes,
-              mimeType: 'image/jpeg',
-              filename: `enhance_single-${Date.now()}.jpg`,
-            },
-          ],
-          model: 'oceano-enhance/smart-v1',
-          costCents: result.costCents,
-          rawPromptUsed: result.analysis?.notes ?? '(no analyzer)',
-          notes: editLog,
-        };
-      }
-
-      case 'lawn_enhance':
-      case 'declutter': {
-        const src = req.inputs[0];
-        const buf = await bufFromSource(src);
         const result = await enhanceSingle(buf, opts);
-        return {
-          outputs: [
-            {
-              bytes: result.bytes,
-              mimeType: 'image/jpeg',
-              filename: `${req.jobType}-${Date.now()}.jpg`,
-            },
-          ],
-          model: 'oceano-enhance/sharp-v1',
-          costCents: 0,
-          rawPromptUsed: '(deterministic pipeline)',
-        };
+        return { outputs: [{ bytes: result.bytes, mimeType: 'image/jpeg', filename: `enhance_single-${Date.now()}.jpg` }], model: 'oceano-enhance/basic-v2', costCents: 0, rawPromptUsed: JSON.stringify(opts) };
       }
+      case 'lawn_enhance':
+      case 'declutter':
+        return openaiGptImage.process(req);
 
       case 'hdr_merge': {
         const brackets = await Promise.all(
@@ -193,7 +134,7 @@ export const oceanoEnhance: AiProvider = {
               //
               // windowPull: the AutoHDR-style flagship — recover blown windows from
               // the darkest bracket so they hold their view (no-op for single frames).
-              { mode: 'fuse', targetLongEdge: FUSE_MAX_EDGE, quality: 95, windowPull: true }
+              { mode: 'fuse', targetLongEdge: FUSE_MAX_EDGE, quality: 95, windowPull: false }
             );
             return {
               outputs: [{ bytes, mimeType: 'image/jpeg', filename: `hdr_merge-${Date.now()}.jpg` }],

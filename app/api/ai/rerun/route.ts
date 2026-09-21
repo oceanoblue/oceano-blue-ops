@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { resolveRerun, withCorrection } from '@/lib/ai/rerun-resolve';
+import { IMAGE_MODEL } from '@/lib/ai/finishing';
 import { getProvider } from '@/lib/ai';
 
 /**
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
   }
 
   let recipe = correction ? withCorrection(resolved.recipe, correction) : resolved.recipe;
-  if (providerOverride) recipe = { ...recipe, provider: providerOverride };
+  if (providerOverride) recipe = { ...recipe, provider: providerOverride, model: providerOverride === 'openai-gpt-image' ? IMAGE_MODEL : undefined };
 
   // Validate the provider still has its key before enqueuing.
   const provider = getProvider((recipe.provider as any) ?? 'auto', recipe.job_type);
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
       order_id: resolved.orderId,
       job_type: recipe.job_type,
       provider: provider.id,
-      input_photo_ids: resolved.inputs,
+      input_photo_ids: correction && recipe.version === 2 ? [photo_id] : resolved.inputs,
       prompt: recipe.prompt,
       status: 'pending' as const,
       created_by: user.id,
