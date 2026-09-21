@@ -20,7 +20,7 @@ export default async function TeamAssignmentPage({params}: {params:Promise<{id:s
     .eq('id',id).eq('photographer_id',user.id).is('contractor_id',null).is('archived_at',null).maybeSingle();
   if (!order) notFound();
   const listing = order.listings || {};
-  const live = order.assignment_round>0 && ['booked','scheduled'].includes(order.status) && ['awaiting_response','confirmed'].includes(order.assignment_state);
+  const live = order.assignment_round>0 && order.assignment_confirmation_mode!=='legacy' && ['booked','scheduled'].includes(order.status) && ['awaiting_response','confirmed'].includes(order.assignment_state);
   return <div className="min-h-screen bg-slate-50">
     <PortalHero eyebrow="Your assignment" title={listing.address_line1 || 'Shoot'} subtitle={[listing.city,listing.state,listing.zip].filter(Boolean).join(', ')} />
     <main className="mx-auto max-w-lg space-y-5 px-4 py-6">

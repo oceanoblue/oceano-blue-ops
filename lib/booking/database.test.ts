@@ -43,6 +43,7 @@ beforeAll(async () => {
   await db.exec(readFileSync('supabase/migrations/20260920230259_client_rescheduling.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20260921155310_photographer_dispatch.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20260921165524_booking_auto_confirmation.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260921170607_booking_confirmation_workflow.sql','utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
