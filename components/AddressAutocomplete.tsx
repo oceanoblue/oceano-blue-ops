@@ -31,12 +31,14 @@ export function AddressAutocomplete({
   onPick,
   placeholder = 'Search property address…',
   autoFocus,
+  id,
 }: {
   value: string;
   onTextChange: (v: string) => void;
   onPick: (a: PickedAddress) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  id?: string;
 }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -103,6 +105,7 @@ export function AddressAutocomplete({
     <div className="relative">
       <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
       <input
+        id={id}
         className="input pl-9"
         value={value}
         onChange={(e) => onTextChange(e.target.value)}

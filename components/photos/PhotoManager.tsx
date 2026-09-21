@@ -47,6 +47,7 @@ import { compressImageFile } from '@/lib/photos/compress-image';
 import { extractRawForUpload } from '@/lib/photos/raw-preview';
 import { groupByRoom } from '@/lib/photos/rooms';
 import { useInView } from '@/lib/hooks/use-in-view';
+import { useOrderAreaActive } from '@/components/orders/OrderWorkspace';
 import { EmptyState } from '@/components/ui/EmptyState';
 
 interface JobView {
@@ -113,6 +114,7 @@ export function PhotoManager({
   autoEnhanceOnUpload = true,
   aiEditingEnabled = true,
   externalFinalsCount = 0,
+  view = 'all',
 }: {
   orderId: string;
   autoEnhanceOnUpload?: boolean;
@@ -122,8 +124,10 @@ export function PhotoManager({
   aiEditingEnabled?: boolean;
   /** Refetch when the adjacent finished-photo uploader refreshes server counts. */
   externalFinalsCount?: number;
+  view?: 'all' | 'originals' | 'review';
 }) {
   const router = useRouter();
+  const active = useOrderAreaActive(view === 'review' ? 'review' : 'upload');
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -184,8 +188,8 @@ export function PhotoManager({
   }, [orderId]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh, externalFinalsCount]);
+    if (active) refresh();
+  }, [refresh, externalFinalsCount, active]);
 
   // Poll while anything is running.
   useEffect(() => {
@@ -276,7 +280,7 @@ export function PhotoManager({
   const bgRunning = useRef(false);
 
   useEffect(() => {
-    if (uploading || bgRunning.current) return;
+    if (!aiEditingEnabled || !active || view === 'review' || uploading || bgRunning.current) return;
     // rawPhotos already excludes ARWs that have a converted JPEG sibling.
     const targets = rawPhotos.filter(
       (p) => isRawFilename(p.filename) && !bgAttempted.current.has(p.id)
@@ -313,7 +317,7 @@ export function PhotoManager({
       setBgConvert(null);
       refresh();
     });
-  }, [rawPhotos, uploading, refresh]);
+  }, [rawPhotos, uploading, refresh, aiEditingEnabled, active, view]);
 
   // EXIF cache for filename-only bracket detection fallback.
   const [exifByPhoto, setExifByPhoto] = useState<Record<string, ExifSnapshot>>({});
@@ -827,6 +831,7 @@ export function PhotoManager({
   return (
     <div className="space-y-6">
       {/* Upload zone */}
+      {view !== 'review' && <>
       <div
         {...getRootProps()}
         className={`rounded-lg border-2 border-dashed p-6 text-center transition cursor-pointer ${
@@ -838,12 +843,12 @@ export function PhotoManager({
         <p className="mt-2 text-sm text-slate-700">
           {uploading
             ? `Uploading ${uploadProgress?.done ?? 0}/${uploadProgress?.total ?? 0}…`
-            : 'Drop photos here, or click to choose files'}
+            : 'Drop original photos here, or choose files'}
         </p>
         <p className="text-xs text-slate-500">
           {aiEditingEnabled
             ? 'JPEG / PNG / TIFF / WebP run through AI directly. ARW / CR2 / NEF auto-convert via the worker.'
-            : 'Originals are archived here. Finished photos go in the Editing panel above so they land in Review & delivery.'}
+            : 'These are your source files. Use Upload finished photos for images that are ready for the client.'}
         </p>
       </div>
 
@@ -866,6 +871,8 @@ export function PhotoManager({
           </span>
         </span>
       </label>
+
+      </>}
 
       {/* Stepper (hidden while AI editing is disabled — Review is the only stage) */}
       {aiEditingEnabled && (
@@ -947,7 +954,7 @@ export function PhotoManager({
 
       {/* Originals archive (editing-disabled mode): originals stay viewable
           even though the merge/enhance stages are hidden. */}
-      {!aiEditingEnabled && rawPhotos.length > 0 && (
+      {view !== 'review' && !aiEditingEnabled && rawPhotos.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium text-slate-700">
             Originals ({rawPhotos.length})
@@ -1022,7 +1029,7 @@ export function PhotoManager({
         />
       )}
 
-      {(stage === 3 || !aiEditingEnabled) && (
+      {(view !== 'originals' || aiEditingEnabled) && (stage === 3 || !aiEditingEnabled) && (
         <Stage3
           orderId={orderId}
           photos={stage3Photos}
@@ -1032,9 +1039,7 @@ export function PhotoManager({
           setPhotoUrls={setPhotoUrls}
           openViewer={(idx) => setViewer({ list: 'processed', index: idx })}
           onChange={refresh}
-          onBack={() => {
-            if (aiEditingEnabled) setStage(2);
-          }}
+          onBack={aiEditingEnabled ? () => setStage(2) : undefined}
         />
       )}
 
@@ -1045,12 +1050,12 @@ export function PhotoManager({
       )}
 
       {/* Empty state */}
-      {brackets.length === 0 &&
+      {view !== 'review' && brackets.length === 0 &&
         singles.length === 0 &&
         stage2Inputs.length === 0 &&
         stage3Photos.length === 0 && (
           <div className="card p-8 text-center text-sm text-slate-500">
-            No photos yet. Drop your shoot above to begin.
+            No originals uploaded yet.
           </div>
         )}
 
@@ -1654,7 +1659,7 @@ function Stage3({
   setPhotoUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
   openViewer: (idx: number) => void;
   onChange: () => void;
-  onBack: () => void;
+  onBack?: () => void;
 }) {
   const [organizing, setOrganizing] = useState(false);
   const [organizeError, setOrganizeError] = useState<string | null>(null);
@@ -1762,10 +1767,10 @@ function Stage3({
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-ocean-900">
-            Review & Edit
+            Review photos
             {processingJobs.length > 0 && (
               <span className="ml-2 inline-flex items-center gap-1.5 align-middle rounded-full bg-ocean-50 px-2.5 py-0.5 text-xs font-medium text-ocean-800 ring-1 ring-ocean-200">
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -1774,12 +1779,11 @@ function Stage3({
             )}
           </h2>
           <p className="text-sm text-slate-500">
-            Approve your final picks. Hover any photo for extra edits like sky, window,
-            twilight, virtual furniture, or object removal.
+            Choose the photos the client will receive. Open a photo to inspect it at full size.
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2">
+        <details className="group max-w-full rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-medium text-slate-600">Photo tools</summary><div className="mt-3 flex flex-col items-end gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {(archivedPhotos.length > 0 || showArchived) && (
               <button
                 onClick={() => setShowArchived((v) => !v)}
@@ -1858,10 +1862,10 @@ function Stage3({
               )}
             </button>
           </div>
-          <button onClick={onBack} className="text-xs text-slate-500 hover:text-slate-700">
+          {onBack && <button onClick={onBack} className="text-xs text-slate-500 hover:text-slate-700">
             ← Back to AI Enhance
-          </button>
-        </div>
+          </button>}
+        </div></details>
       </header>
 
       {organizeError && (
@@ -1961,7 +1965,7 @@ function Stage3({
                 compact
                 icon={Sparkles}
                 title="Nothing to review yet"
-                description="Enhanced photos will show up here as they finish."
+                description="Upload finished photos in Upload & edit, then return here to choose the final selection."
               />
             )}
           </div>

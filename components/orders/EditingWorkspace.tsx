@@ -97,23 +97,18 @@ export function EditingWorkspace({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <a
-          href={`/api/photos/export-originals?order_id=${orderId}`}
-          className={`btn-primary inline-flex items-center gap-1.5 ${originalsCount === 0 ? 'pointer-events-none opacity-50' : ''}`}
-          title={originalsCount === 0 ? 'No originals uploaded yet' : ''}
-        >
-          <Download className="h-4 w-4" /> Download originals ({originalsCount})
-        </a>
+        {originalsCount > 0 ? <a href={`/api/photos/export-originals?order_id=${orderId}`} className="btn-secondary min-h-11"><Download className="h-4 w-4"/>Download originals ({originalsCount})</a>
+          : <p className="text-sm text-slate-500">Originals collected through Dropbox are available in the property’s Dropbox folder.</p>}
       </div>
 
       <div
         {...getRootProps()}
-        className={`cursor-pointer rounded-xl border-2 border-dashed p-6 text-center text-sm transition-colors ${
-          isDragActive ? 'border-ocean-400 bg-ocean-50' : 'border-slate-200 hover:border-slate-300'
+        className={`cursor-pointer rounded-2xl border-2 border-dashed px-5 py-12 text-center text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ocean-500 ${
+          isDragActive ? 'border-ocean-500 bg-ocean-100' : 'border-ocean-200 bg-ocean-50/40 hover:border-ocean-400 hover:bg-ocean-50'
         }`}
       >
         <input {...getInputProps()} />
-        <UploadCloud className="mx-auto mb-2 h-5 w-5 text-slate-400" />
+        <UploadCloud className="mx-auto mb-4 h-9 w-9 text-ocean-600" />
         {busy ? (
           <span className="inline-flex items-center gap-2 text-slate-600">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -121,8 +116,7 @@ export function EditingWorkspace({
           </span>
         ) : (
           <span className="text-slate-600">
-            Drop the <strong>finished photos</strong> here — they go straight to Review &amp;
-            delivery.
+            <strong className="block text-base text-ink-950">Drop finished photos here</strong><span className="mt-2 block text-sm text-slate-500">or click to choose files · JPEG, PNG, TIFF, WebP</span>
           </span>
         )}
       </div>
@@ -131,11 +125,11 @@ export function EditingWorkspace({
         <p className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
           <CheckCircle2 className="h-3.5 w-3.5" />
           {finalsCount} final{finalsCount === 1 ? '' : 's'} on this
-          order — review below, then use Prepare delivery to send the client their gallery.
+          order — open Review to choose the client’s final selection.
         </p>
       )}
 
-      {error && <p className="text-xs text-rose-600">{error}</p>}
+      {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
     </div>
   );
 }

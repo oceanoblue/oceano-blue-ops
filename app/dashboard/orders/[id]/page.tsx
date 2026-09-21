@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ClipboardList } from 'lucide-react';
+import { ArrowLeft, CalendarDays, UserRound, Receipt, MapPin, Globe, Settings2 } from 'lucide-react';
+import { OrderWorkspace, OrderWorkspacePanel, OrderWorkspaceLink } from '@/components/orders/OrderWorkspace';
+import { isDeliverable } from '@/lib/photos/deliverable';
 import { createClient } from '@/lib/supabase/server';
 import { fmtDateTime, fmtDateTimeTz, fmtAddress, fmtCents } from '@/lib/utils/format';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { OrderServicesEditor } from '@/components/orders/OrderServicesEditor';
 import { OrderStatusControl } from '@/components/orders/OrderStatusControl';
@@ -156,18 +157,14 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
       .in('kind', ['raw', 'bracket_member'])
       .eq('is_selected', true);
     originalsCount = oc ?? 0;
-    const { count: fc } = await supabase
-      .from('photos')
-      .select('id', { count: 'exact', head: true })
-      .eq('order_id', params.id)
-      .eq('kind', 'processed')
-      .eq('ai_provider', 'fotello');
-    finalsCount = fc ?? 0;
+    const { data: finished } = await supabase.from('photos').select('id,is_hdr,ai_provider')
+      .eq('order_id', params.id).in('kind', ['processed','delivered']).eq('is_selected', true);
+    finalsCount = (finished ?? []).filter(isDeliverable).length;
   }
 
   // Non-photo deliverables (video / 360 tour / floor plan) for this listing.
   let deliverables: DeliverableRow[] = [];
-  if (!isReel) {
+  {
     const { data: dv } = await supabase
       .from('listing_deliverables')
       .select('id, kind, title, source, external_url, filename, is_published')
@@ -227,37 +224,98 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
       .map((p) => ({ key: `team:${p.id}`, kind: 'team' as const, id: p.id, name: p.full_name })),
   ];
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <Link href="/dashboard/orders" className="text-sm text-slate-500 hover:underline">← Orders</Link>
-        <div className="mt-1">
-          <PageHeader
-            eyebrow="Order"
-            icon={ClipboardList}
-            title={`#${order.order_number}`}
-            subtitle={order.listings && fmtAddress(order.listings)}
-          >
-            <StatusBadge status={order.status} />
-            <Link href={`/dashboard/orders/${order.id}/website`} className="btn-secondary">Property website</Link>
-            {(order as any).archived_at && (
-              <span className="pill bg-slate-200 text-slate-600">Archived</span>
-            )}
-            <ArchiveOrderControl orderId={order.id} archivedAt={(order as any).archived_at ?? null} />
-          </PageHeader>
+  const serviceItems = (order.order_items?.length ? order.order_items : order.order_services) ?? [];
+  const facts = { status: order.status, archived: !!order.archived_at, scheduled: !!order.scheduled_at,
+    assigned: !!(order.contractor_id || order.photographer_id), originals: originalsCount,
+    finals: finalsCount, media: deliverables.filter(d => d.is_published).length, services: serviceItems.length };
+
+  return <div className="order-workflow mx-auto max-w-[1440px] space-y-6">
+    <Link href="/dashboard/orders" className="inline-flex min-h-10 items-center gap-2 text-sm text-slate-500 hover:text-ocean-700"><ArrowLeft className="h-4 w-4"/>All orders</Link>
+    <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-6 sm:px-7">
+        <div className="min-w-0"><div className="mb-2 flex items-center gap-3 text-xs font-medium uppercase tracking-[0.16em] text-slate-500"><span>Order #{order.order_number}</span><StatusBadge status={order.status}/>{order.archived_at && <span>Archived</span>}</div>
+          <h1 className="text-3xl leading-tight text-ink-950 sm:text-4xl">{order.listings?.address_line1 || `Order #${order.order_number}`}</h1>
+          <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500"><MapPin className="h-4 w-4"/>{[order.listings?.address_line2, order.listings?.city, order.listings?.state, order.listings?.zip].filter(Boolean).join(', ')}</p>
         </div>
+        <div className="min-w-0 break-words text-right"><p className="text-xs text-slate-500">Order total</p><p className="mt-1 text-2xl font-semibold tracking-tight text-ink-950">{fmtCents(order.total_cents)}</p><p className={`mt-1 text-xs font-medium ${order.download_paid_at?'text-emerald-700':'text-slate-500'}`}>{order.download_paid_at?'Paid':'Payment pending'}</p></div>
       </div>
+      <div className="grid divide-y border-t border-slate-100 bg-slate-50/70 text-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <SummaryItem icon={<UserRound className="h-4 w-4"/>} label="Client" value={order.clients?.full_name || 'No client'}/>
+        <SummaryItem icon={<CalendarDays className="h-4 w-4"/>} label="Appointment" value={order.scheduled_at ? fmtDateTimeTz(order.scheduled_at,order.timezone) : 'Not scheduled'}/>
+        <SummaryItem icon={<Receipt className="h-4 w-4"/>} label="Booked services" value={`${serviceItems.length} service${serviceItems.length===1?'':'s'} · ${order.duration_minutes} min`}/>
+      </div>
+    </header>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          <section className="card p-6">
-            <h2 className="font-semibold mb-4">Status</h2>
-            <OrderStatusControl orderId={order.id} status={order.status} />
-          </section>
+    <OrderWorkspace facts={facts}>
+      <OrderWorkspacePanel id="overview">
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,1fr)]">
+          <div className="min-w-0 space-y-6">
+          {paymentReviews?.length > 0 && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <strong>Payment needs review</strong>
+            {paymentReviews.map((review: { session_id: string; amount_cents: number }) => <p key={review.session_id}>
+              {fmtCents(review.amount_cents)} was received from an earlier or duplicate checkout. Reconcile this payment in Stripe before requesting another payment. Session: {review.session_id}
+            </p>)}
+          </div>}
+          <OrderServicesEditor orderId={order.id} updatedAt={order.updated_at} sqft={order.listings?.sqft ?? null}
+            paid={!!order.download_paid_at} total={order.total_cents ?? 0}
+            items={(order.order_items?.length ? order.order_items : order.order_services) ?? []}
+            products={serviceProducts ?? []} />
+            <section className="card p-5 sm:p-6"><h2 className="mb-4 text-xl font-semibold">Shoot notes & access</h2>
+              {(order.internal_notes || order.client_notes || order.listings?.access_notes || order.listings?.access_method) ? <div className="space-y-4">
+                {order.internal_notes && <Block label="Shoot instructions">{order.internal_notes}</Block>}
+                {order.client_notes && <Block label="Client notes">{order.client_notes}</Block>}
+                {(order.listings?.access_notes || order.listings?.access_method) && <Block label="Property access">{order.listings.access_notes || order.listings.access_method}</Block>}
+              </div> : <p className="text-sm text-slate-500">No special instructions on this order.</p>}
+            </section>
+            <details className="card group p-5 sm:p-6"><summary className="flex min-h-8 cursor-pointer list-none items-center gap-2 text-sm font-medium text-slate-600"><Settings2 className="h-4 w-4"/>Order settings<span className="ml-auto text-slate-400 group-open:rotate-45">+</span></summary>
+              <div className="mt-5 space-y-6 border-t pt-5">
+                <OrderStatusControl key={order.status} orderId={order.id} status={order.status}/>
+                {!isReel && <details className="rounded-xl border p-4"><summary className="cursor-pointer text-sm font-medium">Advanced photo settings</summary><div className="mt-4"><ProjectTypeControl orderId={order.id} projectType={order.project_type}/><CaptureChecklist orderId={order.id} projectType={order.project_type}/></div></details>}
+                <CostSummary jobs={(order.ai_jobs ?? []) as any[]}/>
+                <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-medium">Archive order</p><p className="text-xs text-slate-500">Remove it from active work. You can restore it later.</p></div><ArchiveOrderControl orderId={order.id} archivedAt={order.archived_at ?? null}/></div>
+                {order.status==='delivered' && rawOriginalsCount>0 && <RawCleanupControl orderId={order.id} rawCount={rawOriginalsCount}/>}
+                <details className="border-t border-rose-100 pt-4"><summary className="cursor-pointer text-sm text-rose-700">Delete order permanently</summary><p className="my-3 text-sm text-slate-500">Deletes the order and its files. Use Archive to hide an order without losing it.</p><DeleteOrderControl orderId={order.id}/></details>
+              </div>
+            </details>
+          </div>
+          <div className="min-w-0 space-y-6">
+            <section className="card p-5 sm:p-6"><h2 className="mb-4 text-xl font-semibold">Schedule & team</h2>
+            <dl className="text-sm space-y-2">
+              <Row label="Scheduled">{fmtDateTimeTz(order.scheduled_at, (order as any).timezone)}</Row>
+              <Row label="Duration">{order.duration_minutes} min</Row>
+            </dl>
+            <div className="mt-3">
+              <RescheduleControl orderId={order.id} scheduledAt={order.scheduled_at} />
+            </div>
+            <div className="mt-4 space-y-3">
+              <AssignShooterControl
+                orderId={order.id}
+                currentContractorId={(order as any).contractor_id ?? null}
+                currentPhotographerId={order.photographer_id}
+                shooters={shooters}
+              />
+              <AssignTeamControl
+                orderId={order.id}
+                editorId={order.editor_id}
+                editors={editors}
+              />
+              <ContractorResponseNotice
+                response={(order as any).contractor_response ?? null}
+                respondedAt={(order as any).contractor_responded_at ?? null}
+                note={(order as any).contractor_response_note ?? null}
+                contractorName={contractors.find((c) => c.id === (order as any).contractor_id)?.full_name ?? null}
+              />
+            </div>
+            </section>
+            <section className="card p-5 sm:p-6"><h2 className="mb-4 text-xl font-semibold">Client details</h2><dl className="space-y-3 text-sm">
+              <Row label="Name">{order.clients?.full_name || '—'}</Row><Row label="Email">{order.clients?.email || '—'}</Row><Row label="Phone">{order.clients?.phone || '—'}</Row>{order.clients?.brokerage && <Row label="Brokerage">{order.clients.brokerage}</Row>}
+            </dl><Link className="mt-4 inline-flex min-h-10 items-center text-sm font-medium text-ocean-700 hover:underline" href={`/dashboard/clients/${order.client_id}`}>Open client record →</Link></section>
+          </div>
+        </div>
+      </OrderWorkspacePanel>
 
-          {isReel ? (
-            <>
-              <section className="card p-6">
+      <OrderWorkspacePanel id="upload">
+        {isReel ? <div className="space-y-6">              <section className="card p-6">
                 <h2 className="font-semibold mb-4">Reel brief</h2>
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                   <Row label="Type">{REEL_TYPES.find((t) => t.value === brief?.reel_type)?.label ?? '—'}</Row>
@@ -308,162 +366,53 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
                   job={editJobView}
                 />
               </section>
-            </>
-          ) : (
-            <>
-              <section className="card p-6">
-                <h2 className="font-semibold mb-1">Photographer upload</h2>
-                <p className="mb-4 text-xs text-slate-500">
-                  Send the contractor a one-click Dropbox link for the RAW files — no account
-                  needed on their side.
-                </p>
-                <RawIntakeControl
-                  orderId={order.id}
-                  intakeUrl={(order as any).dropbox_intake_url ?? null}
-                  intakePath={(order as any).dropbox_intake_path ?? null}
-                />
-                <ProcessFromDropboxControl
-                  orderId={order.id}
-                  hasIntake={!!(order as any).dropbox_intake_path}
-                />
-                <OrderProcessingProgress orderId={order.id} />
-              </section>
-
-              <section className="card p-6">
-                <h2 className="font-semibold mb-1">Editing</h2>
-                <p className="mb-4 text-xs text-slate-500">
-                  Download the originals, edit them in your editor of choice, then drop the
-                  finished photos back here for review and delivery.
-                </p>
-                <EditingWorkspace
-                  orderId={order.id}
-                  originalsCount={originalsCount}
-                  finalsCount={finalsCount}
-                />
-              </section>
-
-              <section className="card p-6">
-                <h2 className="font-semibold mb-4">Photos</h2>
-                <ProjectTypeControl orderId={order.id} projectType={order.project_type} />
-                <QcVerdictSummary summary={(latestQc as any)?.summary} createdAt={(latestQc as any)?.created_at} />
-                <CaptureChecklist orderId={order.id} projectType={order.project_type} />
-                <PhotoManager
-                  orderId={order.id}
-                  autoEnhanceOnUpload={autoEnhanceOnUpload}
-                  aiEditingEnabled={aiEditingEnabled}
-                  externalFinalsCount={finalsCount}
-                />
-              </section>
-
-              <section className="card p-6">
-                <h2 className="font-semibold mb-1">Video, tours &amp; floor plans</h2>
-                <p className="mb-4 text-xs text-slate-500">
-                  Add the property&rsquo;s other media — a walkthrough video, a Matterport/360 tour, a
-                  floor plan — by link or upload. Published items appear in the client&rsquo;s portal
-                  alongside their photos.
-                </p>
-                <DeliverablesManager
-                  orderId={order.id}
-                  listingId={order.listing_id}
-                  initial={deliverables}
-                />
-              </section>
-            </>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <section className="card p-6">
-            <h2 className="font-semibold mb-4">Client</h2>
-            <dl className="text-sm space-y-2">
-              <Row label="Name">{order.clients?.full_name}</Row>
-              <Row label="Email">{order.clients?.email}</Row>
-              <Row label="Phone">{order.clients?.phone ?? '—'}</Row>
-              <Row label="Brokerage">{order.clients?.brokerage ?? '—'}</Row>
-            </dl>
-          </section>
-
-          <section className="card p-6">
-            <h2 className="font-semibold mb-4">Schedule + team</h2>
-            <dl className="text-sm space-y-2">
-              <Row label="Scheduled">{fmtDateTimeTz(order.scheduled_at, (order as any).timezone)}</Row>
-              <Row label="Duration">{order.duration_minutes} min</Row>
-            </dl>
-            <div className="mt-3">
-              <RescheduleControl orderId={order.id} scheduledAt={order.scheduled_at} />
-            </div>
-            <div className="mt-4 space-y-3">
-              <AssignShooterControl
-                orderId={order.id}
-                currentContractorId={(order as any).contractor_id ?? null}
-                currentPhotographerId={order.photographer_id}
-                shooters={shooters}
-              />
-              <AssignTeamControl
-                orderId={order.id}
-                editorId={order.editor_id}
-                editors={editors}
-              />
-              <ContractorResponseNotice
-                response={(order as any).contractor_response ?? null}
-                respondedAt={(order as any).contractor_responded_at ?? null}
-                note={(order as any).contractor_response_note ?? null}
-                contractorName={contractors.find((c) => c.id === (order as any).contractor_id)?.full_name ?? null}
-              />
-            </div>
-          </section>
-
-          {paymentReviews?.length > 0 && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-            <strong>Payment needs review</strong>
-            {paymentReviews.map((review: { session_id: string; amount_cents: number }) => <p key={review.session_id}>
-              {fmtCents(review.amount_cents)} was received from an earlier or duplicate checkout. Reconcile this payment in Stripe before requesting another payment. Session: {review.session_id}
-            </p>)}
-          </div>}
-          <OrderServicesEditor orderId={order.id} updatedAt={order.updated_at} sqft={order.listings?.sqft ?? null}
-            paid={!!order.download_paid_at} total={order.total_cents ?? 0}
-            items={(order.order_items?.length ? order.order_items : order.order_services) ?? []}
-            products={serviceProducts ?? []} />
-
-          <CostSummary jobs={(order.ai_jobs ?? []) as any[]} />
-
-          <section className="card p-6">
-            <h2 className="font-semibold mb-4">Delivery</h2>
-            <DeliveryControl orderId={order.id} />
-            {order.status === 'delivered' && rawOriginalsCount > 0 && (
-              <div className="mt-4 border-t pt-4">
-                <RawCleanupControl orderId={order.id} rawCount={rawOriginalsCount} />
-                <p className="mt-1 text-xs text-slate-500">
-                  Removes ARW / CR2 / NEF originals. Converted JPEGs and processed photos stay.
-                </p>
-              </div>
-            )}
-          </section>
-
-          {order.client_notes && (
-            <section className="card p-6">
-              <h2 className="font-semibold mb-2">Client notes</h2>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">{order.client_notes}</p>
+</div> : <div className="space-y-6">
+          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)]">
+            <section className="card p-5 sm:p-7"><p className="mb-2 text-xs font-medium uppercase tracking-widest text-ocean-700">Finished work</p><h2 className="text-2xl font-semibold">Upload the finished photos</h2><p className="mb-6 mt-2 max-w-xl text-sm leading-relaxed text-slate-500">Edited in Fotello, Lightroom, or by your editor? Bring the final files here. They’ll be ready for review and client delivery.</p>
+              <EditingWorkspace orderId={order.id} originalsCount={originalsCount} finalsCount={finalsCount}/>
+              <div className="mt-6 border-t pt-5"><OrderWorkspaceLink area="review">Continue to review</OrderWorkspaceLink></div>
             </section>
-          )}
+            <section className="card p-5 sm:p-6"><p className="mb-2 text-xs font-medium uppercase tracking-widest text-slate-500">Original files</p><h2 className="text-xl font-semibold">Collect from the photographer</h2><p className="mb-5 mt-2 text-sm text-slate-500">Share the upload link so your photographer can send the shoot’s originals.</p>
+              <RawIntakeControl orderId={order.id} intakeUrl={order.dropbox_intake_url ?? null} intakePath={order.dropbox_intake_path ?? null}/>
+              {aiEditingEnabled && <details className="mt-5 border-t pt-4"><summary className="cursor-pointer text-sm font-medium">Automatic processing</summary><ProcessFromDropboxControl orderId={order.id} hasIntake={!!order.dropbox_intake_path}/></details>}
+              <OrderProcessingProgress orderId={order.id}/>
+            </section>
+          </div>
+          <details className="card p-5 sm:p-6"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Upload or browse originals in the app <span className="ml-2 font-normal text-slate-500">{originalsCount} files</span></summary>
+            <div className="mt-5"><PhotoManager orderId={order.id} view="originals" autoEnhanceOnUpload={autoEnhanceOnUpload} aiEditingEnabled={aiEditingEnabled} externalFinalsCount={finalsCount}/></div>
+          </details>
+        </div>}
+      </OrderWorkspacePanel>
 
-          <section className="card border-rose-200 p-6">
-            <h2 className="mb-1 font-semibold text-rose-800">Danger zone</h2>
-            <p className="mb-3 text-xs text-slate-500">
-              Deletes the whole order and every file it owns (originals, JPEGs, processed). For duplicates and test shoots.
-            </p>
-            <DeleteOrderControl orderId={order.id} />
-          </section>
+      <OrderWorkspacePanel id="review">
+        <div className="space-y-6">
+          {!isReel && <section className="card p-5 sm:p-7"><QcVerdictSummary summary={(latestQc as any)?.summary} createdAt={(latestQc as any)?.created_at}/><PhotoManager orderId={order.id} view="review" autoEnhanceOnUpload={false} aiEditingEnabled={false} externalFinalsCount={finalsCount}/></section>}
+          <section className="card p-5 sm:p-7"><h2 className="text-xl font-semibold">{isReel?'Finished media':'Video, tours & floor plans'}</h2><p className="mb-5 mt-2 text-sm text-slate-500">Add links or files to include alongside the photos. Publish each item when it’s ready for the client.</p><DeliverablesManager orderId={order.id} listingId={order.listing_id} initial={deliverables}/></section>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-5 ring-1 ring-slate-200"><p className="text-sm text-slate-600">Happy with the finished work? Preview the client experience next.</p><OrderWorkspaceLink area="delivery">Continue to delivery</OrderWorkspaceLink></div>
         </div>
-      </div>
-    </div>
-  );
+      </OrderWorkspacePanel>
+
+      <OrderWorkspacePanel id="delivery">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
+          <section className="card p-5 sm:p-7"><p className="mb-2 text-xs font-medium uppercase tracking-widest text-ocean-700">The client experience</p><h2 className="text-2xl font-semibold">Preview. Personalize. Deliver.</h2><p className="mb-6 mt-2 text-sm leading-relaxed text-slate-500">Review the gallery, choose email or text, and add a personal note. You’ll see the recipients and message before sending.</p><DeliveryControl orderId={order.id}/></section>
+          <div className="space-y-6"><section className="card p-6"><Globe className="mb-4 h-6 w-6 text-ocean-700"/><h2 className="text-xl font-semibold">Property marketing</h2><p className="mb-5 mt-2 text-sm leading-relaxed text-slate-500">Create the listing’s property website and marketing materials after the media is ready.</p><Link href={`/dashboard/orders/${order.id}/website`} className="btn-secondary min-h-11">Open property website</Link></section>
+            <div className="rounded-xl border border-slate-200 p-5 text-sm text-slate-600"><p className="font-medium text-ink-950">A final check</p><ul className="mt-3 space-y-2"><li>Selected photos are the ones the client receives.</li><li>Published videos and tours join the gallery.</li><li>Payment settings control download access.</li><li>Previewing a gallery does not send a message.</li></ul></div>
+          </div>
+        </div>
+      </OrderWorkspacePanel>
+    </OrderWorkspace>
+  </div>;
+}
+
+function SummaryItem({icon,label,value}:{icon:React.ReactNode;label:string;value:string}) {
+  return <div className="flex min-w-0 items-center gap-3 px-5 py-4 sm:px-7"><span className="text-slate-400">{icon}</span><div className="min-w-0"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 break-words font-medium text-ink-900">{value}</p></div></div>;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-3">
       <dt className="text-slate-500">{label}</dt>
-      <dd className="text-right">{children}</dd>
+      <dd className="min-w-0 break-words text-right">{children}</dd>
     </div>
   );
 }

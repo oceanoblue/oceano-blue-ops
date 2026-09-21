@@ -128,3 +128,28 @@ body {
  body:has(.marketing-studio) * { visibility: hidden; }
  body:has(.marketing-studio) canvas { visibility: visible; position: absolute; top: 0; left: 0; width: 100%; max-width: 100%; height: auto; box-shadow: none; }
 }
+
+/* Order workspaces: comfortable controls, consistent hierarchy, no overflow. */
+.order-workflow .input, .order-create .input {
+  min-height: 44px;
+  border-width: 1px;
+  padding: 0.65rem 0.8rem;
+}
+.order-workflow textarea.input, .order-create textarea.input { min-height: 96px; }
+.order-workflow .label, .order-create .label {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.8125rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #475569;
+}
+.order-workflow button, .order-create button { touch-action: manipulation; }
+.order-workflow [role="tabpanel"][hidden] { display: none; }
+.order-workflow summary:focus-visible, .order-create summary:focus-visible {
+  outline: 2px solid #006fc7;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.order-workflow details > summary::marker, .order-create details > summary::marker { color: #64748b; }
+
+.order-create #shoot-address { padding-left: 2.5rem; }

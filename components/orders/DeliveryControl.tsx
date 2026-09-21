@@ -1,5 +1,6 @@
 'use client';
 
+import { useOrderAreaActive } from '@/components/orders/OrderWorkspace';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
@@ -20,6 +21,7 @@ const statusLabel=(status:string)=>({sent:'Sent to providers',partial:'Partially
 
 export function DeliveryControl({orderId}:{orderId:string}) {
  const router=useRouter();
+ const active=useOrderAreaActive('delivery');
  const [data,setData]=useState<Context|null>(null);
  const [error,setError]=useState('');const [notice,setNotice]=useState('');
  const [open,setOpen]=useState(false);const [busy,setBusy]=useState(false);
@@ -36,7 +38,7 @@ export function DeliveryControl({orderId}:{orderId:string}) {
   setData(j);
   if(!initialized.current){setEmail(j.channels.email&&Boolean(j.client?.email));setSms(j.channels.sms&&Boolean(j.phone));initialized.current=true;}
  },[orderId]);
- useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
+ useEffect(()=>{if(active)void load().catch(e=>setError(e.message));},[load,active]);
  useEffect(()=>{
   if(!open)return;
   const previous=document.activeElement as HTMLElement|null;

@@ -43,7 +43,7 @@ export default async function NewShootPage() {
     .map((t) => ({ id: t.id, full_name: t.full_name }));
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="mx-auto max-w-[1440px] space-y-6">
       <div>
         <Link href="/dashboard/orders" className="inline-flex items-center gap-1 text-sm text-ocean-700 hover:underline">
           <ArrowLeft className="h-4 w-4" /> Back to orders
@@ -55,7 +55,7 @@ export default async function NewShootPage() {
           <div>
             <h1 className="text-2xl font-semibold text-ocean-950">New shoot</h1>
             <p className="text-sm text-slate-600">
-              Client, property, photographer and upload link — all in one step.
+              Book the property, choose the services, and make the plan.
             </p>
           </div>
         </div>
