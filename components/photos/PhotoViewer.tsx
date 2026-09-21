@@ -16,7 +16,7 @@ import {
   Camera,
   Send,
 } from 'lucide-react';
-import { CEILING_REPAIR, DEFAULT_FINISH, IMAGE_MODEL, IMAGE_MODELS, ImageModelSchema, type ImageModel } from '@/lib/ai/finishing';
+import { ARTIFACT_REPAIR, DEFAULT_FINISH, IMAGE_MODEL, IMAGE_MODELS, ImageModelSchema, type ImageModel } from '@/lib/ai/finishing';
 import type { Photo } from '@/lib/supabase/database.types';
 
 // Pipeline option shape — kept narrow so the viewer doesn't import server code.
@@ -590,8 +590,8 @@ export function PhotoViewer({
                   {Object.entries(IMAGE_MODELS).map(([id,m]) => <option value={id} key={id}>{m.label} · {m.version}</option>)}
                 </select>
               </label>
-              <button type="button" disabled={!!busy} onClick={() => { setAiPrompt(CEILING_REPAIR); setAiNotice('Ceiling cleanup is prepared. Review the instruction below the photo, then send to create a draft.'); }} className="min-h-10 w-full rounded-lg bg-teal-100 px-3 py-2 text-xs font-semibold text-teal-950 hover:bg-white disabled:opacity-50">Prepare ceiling cleanup</button>
-              <p className="text-[11px] leading-relaxed text-neutral-400">Targets artificial patches while retaining plaster texture and fixture shadows. AI revisions use Extra high quality; time and cost vary.</p>
+              <button type="button" disabled={!!busy} onClick={() => { setAiPrompt(ARTIFACT_REPAIR); setAiNotice('Artifact cleanup is prepared. Review the instruction below the photo, then send to create a draft.'); }} className="min-h-10 w-full rounded-lg bg-teal-100 px-3 py-2 text-xs font-semibold text-teal-950 hover:bg-white disabled:opacity-50">Prepare artifact cleanup</button>
+              <p className="text-[11px] leading-relaxed text-neutral-400">Targets artificial patches and texture artifacts anywhere in the photo while preserving real details. AI revisions use Extra high quality; time and cost vary.</p>
               {aiNotice && <p role="status" className="text-xs leading-relaxed text-teal-200">{aiNotice}</p>}
             </section>
             {/* Presets */}
