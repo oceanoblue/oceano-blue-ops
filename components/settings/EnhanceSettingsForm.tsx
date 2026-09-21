@@ -171,7 +171,7 @@ export function EnhanceSettingsForm({
         <div className="mt-6 space-y-4">
           <Slider label="Exposure" help="Overall brightness (airy lift)." min={-1} max={1}
             value={s.exposure} onChange={(v) => set('exposure', v)} />
-          <Slider label="Highlights" help="+ recovers blown windows/exteriors." min={-1} max={1}
+          <Slider label="Highlights" help="+ softens bright tones; fully clipped detail cannot be recovered." min={-1} max={1}
             value={s.highlights} onChange={(v) => set('highlights', v)} />
           <Slider label="Shadows" help="+ opens dark corners (airy)." min={-1} max={1}
             value={s.shadows} onChange={(v) => set('shadows', v)} />
