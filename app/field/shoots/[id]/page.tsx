@@ -1,6 +1,6 @@
 import { redirect, notFound } from 'next/navigation';
 import { MapPin } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { fmtDateTime } from '@/lib/utils/format';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PortalHero } from '@/components/portal/PortalHero';
@@ -26,6 +26,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
     .maybeSingle();
   if (!shoot) notFound();
 
+  const {data:version}=await createAdminClient().from('orders').select('assignment_round').eq('id',shoot.id).single();
   const l = (shoot.listing ?? {}) as any;
 
   return (
@@ -46,6 +47,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
             <h2 className="mb-3 font-semibold">This assignment</h2>
             <RespondControl
               orderId={shoot.id}
+              round={version?.assignment_round ?? 0}
               response={shoot.contractor_response ?? null}
               note={shoot.contractor_response_note ?? null}
             />

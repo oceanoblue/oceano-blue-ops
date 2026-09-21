@@ -1,0 +1,1 @@
+create index assignment_dispatch_events_member_idx on public.assignment_dispatch_events(team_member_id);

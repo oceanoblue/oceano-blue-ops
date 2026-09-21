@@ -38,11 +38,15 @@ beforeAll(async () => {
   await db.exec(readFileSync('supabase/migrations/20260908141709_idempotent_order_pricing.sql','utf8'));
   const search = readFileSync('supabase/migrations/20260908140411_operations_search_and_health.sql','utf8').split('-- Cache the per-request')[0];
   await db.exec(search + 'commit;');
+  await db.exec(`alter table orders add column contractor_response text, add column contractor_responded_at timestamptz, add column contractor_response_note text, add column updated_at timestamptz;
+    alter table contractors add column full_name text, add column email text, add column phone text;`);
+  await db.exec(readFileSync('supabase/migrations/20260920230259_client_rescheduling.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260921155310_photographer_dispatch.sql','utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
   await db.exec(`truncate booking_followups,booking_requests,orders,order_items,order_services,listings,clients,activity_log,products,business_settings,team_members,team_availability,schedule_blocks,contractors cascade;
-    insert into business_settings values(true,30,4,30,'America/New_York');
+    insert into business_settings(id,buffer_minutes,min_notice_hours,max_notice_days,default_timezone) values(true,30,4,30,'America/New_York');
     insert into team_members values('${photographer}',true,'admin','office@example.test','+12025550123');
     insert into products values('${product}','Photo',60,true,array['real_estate']);
     insert into team_availability select '${photographer}',true,d,'09:00','17:00','America/New_York' from generate_series(0,6) d;`);
@@ -136,5 +140,109 @@ describe('public booking transaction', () => {
     expect(first.rows).toHaveLength(3);
     expect(second.rows).toHaveLength(1);
     expect(new Set([...first.rows,...second.rows].map(r=>r.id)).size).toBe(4);
+  });
+});
+
+const backup='55555555-5555-4555-8555-555555555555';
+const contractor='66666666-6666-4666-8666-666666666666';
+async function enableDispatch(){
+  await db.exec(`update business_settings set scheduling_dispatch_enabled=true;
+    insert into photographer_routing(team_member_id,enabled,priority,product_ids) values('${photographer}',true,10,array['${product}'::uuid]);
+    insert into contractors(id,team_member_id,is_active,pay_rate_cents,full_name,email,phone) values('${contractor}','${photographer}',true,6000,'Photographer','photographer@example.test','+12025550124');
+    insert into team_members values('${backup}',true,'photographer','backup@example.test',null);
+    insert into photographer_routing(team_member_id,enabled,priority) values('${backup}',true,100);
+    insert into team_availability select '${backup}',true,d,'09:00','17:00','America/New_York' from generate_series(0,6) d;`);
+}
+describe('photographer dispatch transaction',()=>{
+  it('reserves contractor bookings and queues independent acceptance requests',async()=>{
+    await enableDispatch();const id=(await book()).rows[0].id;
+    const row=(await db.query<any>('select assignment_state,assignment_round,auto_dispatch from orders where id=$1',[id])).rows[0];
+    expect(row).toEqual({assignment_state:'awaiting_response',assignment_round:1,auto_dispatch:true});
+    const jobs=(await db.query<any>('select kind,payload from booking_followups')).rows;
+    expect(jobs.map(x=>x.kind)).toContain('assignment_email');expect(jobs.map(x=>x.kind)).toContain('assignment_sms');
+    expect(jobs.find(x=>x.kind==='client_email').payload.event).toBe('assignment_pending');
+    await book();expect((await db.query('select * from orders')).rows).toHaveLength(1);
+  });
+  it('confirms exactly once and sends a later decline back through dispatch',async()=>{
+    await enableDispatch();const id=(await book()).rows[0].id;
+    await db.query("update orders set contractor_response='accepted' where id=$1",[id]);
+    await db.query("update orders set contractor_response='accepted' where id=$1",[id]);
+    expect((await db.query<any>('select assignment_state from orders')).rows[0].assignment_state).toBe('confirmed');
+    expect((await db.query("select * from booking_followups where payload->>'event'='assignment_confirmed'")).rows).toHaveLength(1);
+    await db.query("update orders set contractor_response='declined' where id=$1",[id]);
+    expect((await db.query<any>('select assignment_state from orders')).rows[0].assignment_state).toBe('rerouting');
+    await expect(db.query("update orders set contractor_response='accepted' where id=$1",[id])).rejects.toThrow('assignment_expired');
+  });
+  it('routes a decline to an available backup and makes stale workers harmless',async()=>{
+    await enableDispatch();const id=(await book()).rows[0].id;
+    await db.query("update orders set contractor_response='declined' where id=$1",[id]);
+    expect((await db.query<any>('select advance_photographer_assignment($1,1,$2) as ok',[id,backup])).rows[0].ok).toBe(true);
+    expect((await db.query<any>('select photographer_id,assignment_state,assignment_round from orders')).rows[0]).toEqual({photographer_id:backup,assignment_state:'confirmed',assignment_round:2});
+    expect((await db.query<any>('select advance_photographer_assignment($1,1,null) as ok',[id])).rows[0].ok).toBe(false);
+    expect((await db.query("select * from booking_followups where kind='office_attention'")).rows).toHaveLength(2);
+  });
+  it('holds pending offers, rejects expired acceptance, and escalates when nobody can cover',async()=>{
+    await enableDispatch();const id=(await book()).rows[0].id;
+    expect((await db.query<any>('select advance_photographer_assignment($1,1,$2) as ok',[id,backup])).rows[0].ok).toBe(false);
+    await db.query("update orders set assignment_due_at=now()-interval '1 minute' where id=$1",[id]);
+    await expect(db.query("update orders set contractor_response='accepted' where id=$1",[id])).rejects.toThrow('assignment_expired');
+    await db.query('select advance_photographer_assignment($1,1,null)',[id]);
+    expect((await db.query<any>('select assignment_state,photographer_id from orders')).rows[0]).toEqual({assignment_state:'needs_attention',photographer_id:null});
+  });
+  it('rechecks eligibility, time off, and overlapping bookings before backup assignment',async()=>{
+    await enableDispatch();const id=(await book()).rows[0].id;await db.query("update orders set contractor_response='declined' where id=$1",[id]);
+    await db.exec(`update photographer_routing set enabled=false where team_member_id='${backup}'`);
+    await expect(db.query('select advance_photographer_assignment($1,1,$2)',[id,backup])).rejects.toThrow('not eligible');
+    await db.exec(`update photographer_routing set enabled=true where team_member_id='${backup}'`);
+    await db.query(`insert into schedule_blocks values($1,false,$2::timestamptz,$2::timestamptz+interval '2 hours')`,[backup,payload.scheduled_at]);
+    await expect(db.query('select advance_photographer_assignment($1,1,$2)',[id,backup])).rejects.toThrow('time off');
+    await db.exec('delete from schedule_blocks');
+    await db.query(`insert into orders(photographer_id,status,scheduled_at,duration_minutes) values($1,'booked',$2,60)`,[backup,payload.scheduled_at]);
+    await expect(db.query('select advance_photographer_assignment($1,1,$2)',[id,backup])).rejects.toThrow('travel conflict');
+  });
+  it('enforces service permissions, ZIP coverage and cross-ZIP travel gaps at commit',async()=>{
+    await enableDispatch();await db.exec(`update photographer_routing set product_ids='{}' where team_member_id='${photographer}'`);
+    await expect(book()).rejects.toThrow('not eligible');
+    await db.exec(`update photographer_routing set product_ids=null,service_zips=array['99999'] where team_member_id='${photographer}'`);
+    await expect(book()).rejects.toThrow('not eligible');
+    await db.exec(`update photographer_routing set service_zips='{}',cross_zip_minutes=90 where team_member_id='${photographer}'`);
+    await book();const next=new Date(Date.parse(String(payload.scheduled_at))+120*60000).toISOString();
+    await expect(book({...payload,scheduled_at:next,zip:'29928'},'77777777-7777-4777-8777-777777777777')).rejects.toThrow('travel conflict');
+  });
+  it('invalidates acceptance and disables automatic routing when the office reassigns',async()=>{
+    await enableDispatch();const id=(await book()).rows[0].id;
+    await db.query('update orders set photographer_id=$2,contractor_id=null where id=$1',[id,backup]);
+    expect((await db.query<any>('select assignment_round,auto_dispatch,assignment_state from orders')).rows[0]).toEqual({assignment_round:2,auto_dispatch:false,assignment_state:'confirmed'});
+  });
+  it('restricts dispatch mutation and routing configuration to server roles',async()=>{
+    const r=(await db.query<any>(`select has_function_privilege('authenticated','advance_photographer_assignment(uuid,integer,uuid)','EXECUTE') as mutate,
+      has_function_privilege('anon','queue_assignment_events()','EXECUTE') as trigger,
+      has_table_privilege('authenticated','photographer_routing','UPDATE') as config`)).rows[0];expect(r).toEqual({mutate:false,trigger:false,config:false});
+  });
+});
+
+describe('dispatch rescheduling and hours',()=>{
+  it('requires fresh acceptance after a client changes the time, with one calendar job and safe replay',async()=>{
+    await enableDispatch();const id=(await book()).rows[0].id;
+    await db.exec("update business_settings set client_reschedule_cutoff_hours=0");
+    await db.query("update orders set contractor_response='accepted' where id=$1",[id]);
+    const client=(await db.query<any>('select client_id from orders where id=$1',[id])).rows[0].client_id;
+    const next=new Date(Date.parse(String(payload.scheduled_at))+86400000).toISOString();
+    const args=['88888888-8888-4888-8888-888888888888',id,[client],payload.scheduled_at,next,photographer,60];
+    await db.query('select commit_client_reschedule($1,$2,$3::uuid[],$4,$5,$6,$7)',args);
+    expect((await db.query<any>('select assignment_state,assignment_round,contractor_response from orders')).rows[0]).toEqual({assignment_state:'awaiting_response',assignment_round:2,contractor_response:null});
+    const jobs=(await db.query<any>("select kind,payload from booking_followups where event_key=$1",[args[0]])).rows;
+    expect(jobs.find(j=>j.kind==='client_email').payload.pending).toBe(true);
+    expect(jobs.find(j=>j.kind==='calendar')).toBeUndefined();
+    await db.query('select commit_client_reschedule($1,$2,$3::uuid[],$4,$5,$6,$7)',args);
+    expect((await db.query('select * from client_reschedule_requests')).rows).toHaveLength(1);
+    await expect(db.query('select commit_client_reschedule($1,$2,$3::uuid[],$4,$5,$6,$7)',['99999999-9999-4999-8999-999999999999',id,[client],next,payload.scheduled_at,photographer,60])).rejects.toThrow('assignment_not_confirmed');
+  });
+  it('rolls back the entire hours replacement if one row is invalid',async()=>{
+    const before=(await db.query('select * from team_availability')).rows;
+    await expect(db.query('select replace_photographer_hours($1,$2::jsonb)',[photographer,JSON.stringify([{day_of_week:1,start_local:'bad',end_local:'17:00',timezone:'America/New_York'}])])).rejects.toThrow();
+    expect((await db.query('select * from team_availability')).rows).toEqual(before);
+    await db.query('select replace_photographer_hours($1,$2::jsonb)',[photographer,'[]']);
+    expect((await db.query('select * from team_availability')).rows).toHaveLength(0);
   });
 });

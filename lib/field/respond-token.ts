@@ -12,6 +12,7 @@ export interface RespondTokenPayload {
   o: string; // order id
   c: string; // contractor id
   exp: number; // unix seconds
+  r?: number; // assignment version; old links remain valid for legacy records only
 }
 
 const DEFAULT_TTL_DAYS = 60;
@@ -40,11 +41,12 @@ export function respondTokenExpiry(scheduledAt: string | Date | null | undefined
 export function signRespondToken(
   orderId: string,
   contractorId: string,
-  exp: number = Math.floor(Date.now() / 1000) + DEFAULT_TTL_DAYS * 86_400
+  exp: number = Math.floor(Date.now() / 1000) + DEFAULT_TTL_DAYS * 86_400,
+  round?: number
 ): string | null {
   const key = secret();
   if (!key) return null;
-  const payload: RespondTokenPayload = { o: orderId, c: contractorId, exp };
+  const payload: RespondTokenPayload = { o: orderId, c: contractorId, exp, ...(round === undefined ? {} : {r:round}) };
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${body}.${sign(body, key)}`;
 }

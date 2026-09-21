@@ -10,11 +10,15 @@ import { fmtTimeInTz } from '@/lib/utils/timezone';
 export function ScheduleStep({
   schedule,
   totalDuration,
+  productIds,
+  zip,
   onBack,
   onComplete,
 }: {
   schedule: ScheduleData;
   totalDuration: number;
+  productIds: string;
+  zip: string;
   onBack: () => void;
   onComplete: (s: ScheduleData) => void;
 }) {
@@ -54,7 +58,7 @@ export function ScheduleStep({
     setS(previous => ({ ...previous, scheduled_at: null, photographer_id: null }));
     setError(false);
     // The chosen calendar cell is a date, independent of browser timezone.
-    fetch(`/api/availability?date=${format(selectedDay, 'yyyy-MM-dd')}&duration=${s.duration_minutes}`, { signal: controller.signal })
+    fetch(`/api/availability?date=${format(selectedDay, 'yyyy-MM-dd')}&duration=${s.duration_minutes}&products=${encodeURIComponent(productIds)}&zip=${encodeURIComponent(zip)}`, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`status_${r.status}`);
         return r.json();
@@ -67,7 +71,7 @@ export function ScheduleStep({
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
   // re-run when the date changes, the picked duration, or the timezone changes
-  }, [selectedDay, s.duration_minutes]);
+  }, [selectedDay, s.duration_minutes, productIds, zip]);
 
   useEffect(() => {
     loadSlots();

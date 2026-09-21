@@ -16,13 +16,14 @@ async function access(context:Context) {
   const {data:clientIds,error:identityError}=await client.rpc('current_client_ids');
   if(identityError)return {error:new Response('Access unavailable',{status:503})} as const;
   if(!clientIds?.length)return {error:new Response('Forbidden',{status:403})} as const;
-  const {data:order,error}=await client.from('orders').select('id,status,scheduled_at,photographer_id,duration_minutes').eq('id',id).in('client_id',clientIds).maybeSingle();
+  const {data:order,error}=await client.from('orders').select('id,status,scheduled_at,photographer_id,duration_minutes,assignment_state,contractor_id,listings(zip),order_items(product_id)').eq('id',id).in('client_id',clientIds).maybeSingle();
   if(error)return {error:new Response('Order unavailable',{status:503})} as const;
   if(!order)return {error:new Response('Not found',{status:404})} as const;
   const admin=createAdminClient({noStore:true}) as any;
   const {data:settings,error:settingsError}=await admin.from('business_settings').select('client_rescheduling_enabled,client_reschedule_cutoff_hours,default_timezone').eq('id',true).single();
   if(settingsError||!settings)return {error:new Response('Settings unavailable',{status:503})} as const;
-  return {error:null,order,settings,admin,clientIds} as const;
+  const routing={productIds:(order.order_items||[]).map(i=>i.product_id).filter((id):id is string=>!!id),zip:order.listings?.zip||undefined};
+  return {error:null,order,settings,admin,clientIds,routing} as const;
 }
 export async function GET(request:Request,context:Context){
   const a=await access(context);if(a.error)return a.error;
@@ -31,7 +32,7 @@ export async function GET(request:Request,context:Context){
   const date=new URL(request.url).searchParams.get('date')||'';
   if(!validDate(date))return NextResponse.json({error:'Choose a date.'},{status:400});
   try {
-    const available=await getAvailability(date,a.order.duration_minutes??60,a.order.photographer_id!);
+    const available=await getAvailability(date,a.order.duration_minutes??60,a.order.photographer_id!,a.routing);
     return NextResponse.json({...available,timezone:a.settings.default_timezone,previous:a.order.scheduled_at},{headers:{'Cache-Control':'private, no-store'}});
   }catch{return NextResponse.json({error:'We cannot verify the calendar. Please try again or contact us.'},{status:503});}
 }
@@ -46,15 +47,16 @@ export async function POST(request:Request,context:Context){
   if(priorError)return NextResponse.json({error:'Unable to verify the request. Please retry.'},{status:503});
   if(prior){
     if(prior.order_id!==a.order.id||Date.parse(prior.scheduled_at)!==Date.parse(b.scheduled_at)||Date.parse(prior.previous_scheduled_at)!==Date.parse(b.previous))return NextResponse.json({error:'This request changed. Please refresh.'},{status:409});
-    return NextResponse.json({scheduled_at:prior.scheduled_at});
+    return NextResponse.json({scheduled_at:prior.scheduled_at,pending:a.order.assignment_state==='awaiting_response'});
   }
   const reason=rescheduleEligibility(a.order,a.settings);
   if(reason)return NextResponse.json({error:reason},{status:409});
   try{
-    const available=await getAvailability(fmtDateInTz(b.scheduled_at,a.settings.default_timezone||'America/New_York','iso'),a.order.duration_minutes??60,a.order.photographer_id!);
+    const available=await getAvailability(fmtDateInTz(b.scheduled_at,a.settings.default_timezone||'America/New_York','iso'),a.order.duration_minutes??60,a.order.photographer_id!,a.routing);
     if(!available.slots.some(s=>Date.parse(s.iso)===Date.parse(b.scheduled_at)))return NextResponse.json({error:available.calendarDegraded?'We cannot verify the calendar. Try again later.':'That time is no longer available. Choose another time.'},{status:available.calendarDegraded?503:409});
     const {data,error}=await a.admin.rpc('commit_client_reschedule',{p_request_id:b.request_id,p_order_id:a.order.id,p_client_ids:a.clientIds,p_previous:b.previous,p_scheduled_at:b.scheduled_at,p_photographer_id:a.order.photographer_id,p_duration:a.order.duration_minutes??60});
     if(error)return NextResponse.json({error:'The appointment changed or this time is unavailable. Refresh and choose another time.'},{status:409});
-    return NextResponse.json({scheduled_at:data});
+    const {data:updated}=await a.admin.from('orders').select('assignment_state').eq('id',a.order.id).single();
+    return NextResponse.json({scheduled_at:data,pending:updated?.assignment_state==='awaiting_response'});
   }catch{return NextResponse.json({error:'Unable to confirm the change. Please retry with the same selection.'},{status:503});}
 }

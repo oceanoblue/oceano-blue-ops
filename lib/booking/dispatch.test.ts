@@ -1,0 +1,12 @@
+import {beforeEach,expect,it,vi} from 'vitest';
+import {runAssignmentDispatch} from './dispatch';
+const {rpc,availability,tables}=vi.hoisted(()=>({rpc:vi.fn(),availability:vi.fn(),tables:{} as Record<string,any>}));
+vi.mock('@/lib/supabase/server',()=>({createAdminClient:()=>({rpc,from:(table:string)=>{let update=false;const q:any={then:(resolve:any)=>Promise.resolve({data:update?null:tables[table],error:null}).then(resolve)};q.update=()=>{update=true;return q;};for(const k of ['select','eq','is','in','or','order','limit','lte','single'])q[k]=()=>q;return q;}})}));
+vi.mock('./availability',()=>({getAvailability:availability}));
+vi.mock('@/lib/observability/report',()=>({captureError:vi.fn()}));
+const at=new Date(Date.now()+86400000).toISOString();
+beforeEach(()=>{vi.resetAllMocks();tables.business_settings={scheduling_dispatch_enabled:true,default_timezone:'UTC'};tables.orders=[{id:'order',scheduled_at:at,duration_minutes:60,assignment_round:1,assignment_attempted_ids:['karen'],listings:{zip:'29910'},order_items:[{product_id:'photo'}]}];rpc.mockResolvedValue({data:true,error:null});availability.mockResolvedValue({slots:[{iso:at,photographer_id:'karen'},{iso:at,photographer_id:'gustavo'}]});});
+it('rechecks pooled calendars and offers only an untried available candidate',async()=>{await runAssignmentDispatch();expect(availability).toHaveBeenCalledWith(expect.any(String),60,undefined,{productIds:['photo'],zip:'29910',allCandidates:true,ignoreNotice:true});expect(rpc).toHaveBeenCalledExactlyOnceWith('advance_photographer_assignment',{p_order:'order',p_round:1,p_member:'gustavo'});});
+it('escalates without inventing capacity when nobody can cover',async()=>{availability.mockResolvedValue({slots:[]});await runAssignmentDispatch();expect(rpc).toHaveBeenCalledWith('advance_photographer_assignment',{p_order:'order',p_round:1,p_member:null});});
+it('tries another verified candidate if a simultaneous booking takes the first',async()=>{availability.mockResolvedValue({slots:[{iso:at,photographer_id:'gustavo'},{iso:at,photographer_id:'other'}]});rpc.mockResolvedValueOnce({error:{code:'23P01'}}).mockResolvedValueOnce({data:true});await runAssignmentDispatch();expect(rpc).toHaveBeenLastCalledWith('advance_photographer_assignment',{p_order:'order',p_round:1,p_member:'other'});});
+it('retries later after a database or calendar lookup failure',async()=>{availability.mockRejectedValue(new Error('temporary'));expect(await runAssignmentDispatch()).toEqual([{id:'order',error:true}]);expect(rpc).not.toHaveBeenCalled();});

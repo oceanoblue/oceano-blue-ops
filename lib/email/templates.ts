@@ -175,12 +175,13 @@ export function bookingConfirmationEmail(p: {
   address: string;
   cityStateZip?: string | null;
   whenText: string;
+  pending?: boolean;
 }): { subject: string; html: string } {
   const first = (p.clientName || '').split(' ')[0] || 'there';
   const body = `
     <p style="font-size:16px;margin:0 0 4px;">Hi ${escapeHtml(first)},</p>
     <p style="font-size:15px;line-height:1.5;color:#324354;margin:0 0 18px;">
-      Your shoot is booked — we've got you on the schedule. Here are the details:
+      ${p.pending ? 'Your requested time is reserved while we confirm your photographer. We’ll send a final confirmation after they accept.' : "Your shoot is booked — we've got you on the schedule. Here are the details:"}
     </p>
     <div style="border:1px solid #e6eaee;border-left:4px solid #0c8de9;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
       <div style="font-size:17px;font-weight:600;color:#0c1620;">${escapeHtml(p.address)}</div>
@@ -193,8 +194,8 @@ export function bookingConfirmationEmail(p: {
       We'll be in touch if anything changes. Questions? Just reply to this email.
     </p>`;
   return {
-    subject: `Shoot booked — ${p.address}`,
-    html: shell(body, `Your shoot at ${p.address} is booked for ${p.whenText}`),
+    subject: `${p.pending ? 'Time reserved' : 'Shoot booked'} — ${p.address}`,
+    html: shell(body, `Your shoot at ${p.address}: ${p.whenText}`),
   };
 }
 
@@ -288,14 +289,29 @@ export function paymentReceivedSms(p: PaymentReceivedContent): string {
   return `Oceano Blue: ${paymentAmount(p.amountCents)} payment received for Order #${p.orderNumber} (${p.address}). Gallery downloads unlocked. ${p.orderUrl}`;
 }
 
-export function appointmentRescheduledEmail(p: { clientName: string; address: string; whenText: string; previousText: string; office: boolean }): { subject: string; html: string } {
+export function appointmentRescheduledEmail(p: { clientName: string; address: string; whenText: string; previousText: string; office: boolean; pending?: boolean }): { subject: string; html: string } {
   return {
-    subject: `Shoot rescheduled — ${p.address}`,
+    subject: `${p.pending ? 'New time reserved' : 'Shoot rescheduled'} — ${p.address}`,
     html: shell(`<h1 style="font-size:26px;">Appointment updated</h1>
-      <p>${escapeHtml(p.office ? p.clientName + ' changed their appointment.' : 'Your shoot has been rescheduled.')}</p>
+      <p>${escapeHtml(p.office ? p.clientName + ' changed their appointment.' : p.pending ? 'Your new time is reserved. We will confirm once your photographer accepts the change.' : 'Your shoot has been rescheduled.')}</p>
       <p><strong>${escapeHtml(p.address)}</strong></p>
       <p>New appointment: <strong>${escapeHtml(p.whenText)}</strong></p>
       <p style="color:#708698;">Previous appointment: ${escapeHtml(p.previousText)}</p>
       <p>Questions? Reply to this email and our team will help.</p>`, `Your new appointment is ${p.whenText}`),
   };
+}
+
+export function assignmentRequestEmail(p: {name:string;address:string;when:string;deadline:string;services:string;respondUrl:string;portalUrl:string;pay:string}) {
+  return {subject:`Shoot request — ${p.address}`,html:shell(`
+    <p>Hi ${escapeHtml(p.name)},</p><p>Can you take this shoot?</p>
+    <p><strong>${escapeHtml(p.address)}</strong><br/>${escapeHtml(p.when)}</p>
+    <p>${escapeHtml(p.services)}</p>${p.pay?`<p>Your pay: ${escapeHtml(p.pay)}</p>`:''}
+    <p>Please respond by ${escapeHtml(p.deadline)}. If you decline or the offer expires, we’ll look for another photographer.</p>
+    ${button(p.respondUrl,'Accept or decline')}
+    <p><a href="${escapeHtml(p.portalUrl)}">Open your shoot details</a></p>`, `Photographer response requested for ${p.address}`)};
+}
+
+export function assignmentOfficeEmail(p:{address:string;when:string;url:string;confirmed:boolean}) {
+  const title=p.confirmed?'Backup photographer assigned':'Photographer needed';
+  return {subject:`${title} — ${p.address}`,html:shell(`<p><strong>${title}</strong></p><p>${escapeHtml(p.address)}<br/>${escapeHtml(p.when)}</p><p>${p.confirmed?'The original offer was declined or expired. An available backup has been assigned.':'No eligible backup could be confirmed. Review the order and arrange coverage or contact the client.'}</p>${button(p.url,'Review assignment')}`,title)};
 }

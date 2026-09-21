@@ -14,7 +14,7 @@ export default async function SchedulingSettingsPage() {
 
   const { data: settings } = await supabase
     .from('business_settings')
-    .select('buffer_minutes, min_notice_hours, max_notice_days, default_timezone, business_name, raw_retention_days')
+    .select('buffer_minutes, min_notice_hours, max_notice_days, default_timezone, business_name, raw_retention_days, assignment_timeout_minutes')
     .eq('id', true)
     .maybeSingle();
 

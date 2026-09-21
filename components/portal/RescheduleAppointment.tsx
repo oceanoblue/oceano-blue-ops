@@ -34,7 +34,7 @@ export function RescheduleAppointment({ orderId, scheduledAt, timezone, reason, 
       const response = await fetch(`/api/portal/orders/${orderId}/reschedule`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: id, previous, scheduled_at: selected }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Unable to confirm. Please retry with the same selection.');
-      setMessage(`Appointment changed to ${fmtDateTimeTz(data.scheduled_at, timezone)}. Confirmation and calendar updates are on their way.`);
+      setMessage(`Appointment changed to ${fmtDateTimeTz(data.scheduled_at, timezone)}. ${data.pending ? 'Your new time is reserved while your photographer confirms.' : 'Confirmation and calendar updates are on their way.'}`);
       setOpen(false); setSlots([]); setSelected(''); setRequestId(''); router.refresh();
     } catch (e) { setError(e instanceof Error ? e.message : 'Unable to confirm. Please retry.'); }
     finally { setBusy(false); }

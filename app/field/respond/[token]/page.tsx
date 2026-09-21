@@ -46,7 +46,7 @@ export default async function RespondPage(
     admin
       .from('orders')
       .select(
-        'id, status, archived_at, scheduled_at, timezone, contractor_id, contractor_response, contractor_response_note, dropbox_intake_url, listings(address_line1, city, state, zip, sqft)'
+        'id, status, archived_at, scheduled_at, timezone, contractor_id, assignment_round, contractor_response, contractor_response_note, dropbox_intake_url, listings(address_line1, city, state, zip, sqft)'
       )
       .eq('id', payload.o)
       .maybeSingle(),
@@ -56,6 +56,7 @@ export default async function RespondPage(
   const live =
     order &&
     order.contractor_id === payload.c &&
+    (order.assignment_round ?? 0) === (payload.r ?? 0) &&
     !order.archived_at &&
     !['cancelled', 'draft'].includes(order.status);
 

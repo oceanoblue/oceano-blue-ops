@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { exchangeCodeForTokens, emailFromIdToken } from '@/lib/google-calendar/oauth';
 
 export const dynamic = 'force-dynamic';
@@ -11,13 +12,19 @@ export async function GET(request: Request) {
   const err = url.searchParams.get('error');
 
   const base = process.env.NEXT_PUBLIC_APP_URL || url.origin;
-  const back = `${base}/dashboard/settings/integrations`;
+  const client=await createClient();
+  const {data:{user}}=await client.auth.getUser();
+  const {data:member}=user?await client.from('team_members').select('role,is_active').eq('id',user.id).maybeSingle():{data:null};
+  const back = `${base}${member?.role==='photographer'?'/field/availability':'/dashboard/settings/integrations'}`;
 
   if (err || !code || !state) {
     return NextResponse.redirect(`${back}?gcal_error=${encodeURIComponent(err || 'missing_code')}`);
   }
+  const cookieStore=await cookies();
+  const expected=cookieStore.get('google_calendar_state')?.value;
+  cookieStore.delete({name:'google_calendar_state',path:'/api/auth/google'});
   const teamMemberId = state.split('.')[0];
-  if (!teamMemberId) {
+  if (!expected || state!==expected || !user || !member?.is_active || teamMemberId!==user.id) {
     return NextResponse.redirect(`${back}?gcal_error=bad_state`);
   }
 
@@ -39,6 +46,7 @@ export async function GET(request: Request) {
     .from('team_members')
     .select('id')
     .eq('id', teamMemberId)
+    .eq('is_active',true)
     .maybeSingle();
   if (!tmCheck) {
     return NextResponse.redirect(`${back}?gcal_error=not_team_member`);

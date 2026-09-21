@@ -40,6 +40,7 @@ export async function POST(request: Request, props: { params: Promise<{ token: s
   const result = await recordContractorResponse({
     orderId: payload.o,
     contractorId: payload.c,
+    round: payload.r ?? 0,
     response: parsed.data.response,
     note: parsed.data.note ?? null,
   });

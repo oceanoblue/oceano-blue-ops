@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Camera, CalendarDays, DollarSign } from 'lucide-react';
+import { Camera, CalendarDays, DollarSign, Clock } from 'lucide-react';
 
 /** Shared tab bar for the photographer portal, dropped into each page's hero.
  *  Highlights the active section by pathname. */
 const TABS = [
   { href: '/field/shoots', label: 'My shoots', icon: Camera },
+  { href: '/field/availability', label: 'Availability', icon: Clock },
   { href: '/field/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/field/pay', label: 'Get paid', icon: DollarSign },
 ];

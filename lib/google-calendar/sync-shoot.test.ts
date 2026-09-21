@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sameEvent } from './sync-shoot';
+import { sameEvent, carryForwardRsvps } from './sync-shoot';
 import type { ExistingEvent, EventPayload } from './api';
 
 const existing: ExistingEvent = {
@@ -61,3 +61,11 @@ describe('sameEvent', () => {
     expect(sameEvent({ ...existing, status: 'cancelled' }, payload)).toBe(false);
   });
 });
+
+ describe('assignment RSVP version',()=>{
+  it('resets an old acceptance when the assignment version changes',()=>{
+    const current={...existing,description:'Assignment version: 1',attendees:[{email:'karenmcdonnell24@gmail.com',responseStatus:'accepted' as const}]};
+    expect(carryForwardRsvps({...payload,description:'Assignment version: 2'},current).attendees?.[0].responseStatus).toBe('needsAction');
+    expect(carryForwardRsvps({...payload,description:'Assignment version: 1'},current).attendees?.[0].responseStatus).toBe('accepted');
+  });
+ });
