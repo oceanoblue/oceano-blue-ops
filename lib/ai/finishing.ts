@@ -6,8 +6,8 @@ export const IMAGE_MODELS = {
 } as const;
 export const ImageModelSchema = z.enum(['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare']);
 export type ImageModel = z.infer<typeof ImageModelSchema>;
-export const SURFACE_DIRECTIONS = 'SURFACE FIDELITY: Keep the original fine plaster, stipple, paint and material texture. Ceilings and plain walls must have coherent, continuous lighting gradients without synthesized mottled patches, cloudy stains, repeated texture, tile seams, checkerboarding, waxy denoising or sharpening halos. Do not exaggerate microcontrast on broad surfaces. Preserve real surface defects and the natural shadows cast by fixtures; do not repaint or smooth away genuine texture.';
-export const CEILING_REPAIR = 'Correct ONLY artificial-looking mottled patches and inconsistent synthesized texture on the ceiling. Preserve its real fine plaster/stipple texture, existing paint tone and continuous natural lighting gradient. Retain the fan, light fixture, ceiling detector, molding, and physically plausible fixture shadows exactly. Do not turn the ceiling into a smooth plastic surface or remove real cracks, stains or other property defects. Keep every wall, window view, doorway, object, furniture item, floor and rug unchanged. No broad enhancement, staging, decluttering, relighting or crop. If uncertain whether a mark is a real defect, preserve it.';
+export const SURFACE_DIRECTIONS = 'SURFACE FIDELITY: Apply artifact prevention across the entire interior or exterior photograph. Preserve authentic texture and patterns in ceilings, walls, floors, wood, stone, fabrics, glass, foliage and sky. Keep coherent lighting gradients without synthesized mottled patches, cloudy stains, repeated or smeared texture, tile seams, checkerboarding, banding, waxy denoising or sharpening halos. Preserve real repeating patterns, grain, seams, reflections, shadows and property defects; do not mistake these for artifacts. Avoid exaggerated microcontrast and plastic smoothing. Inspect the whole image for introduced artifacts before returning the result; correct only synthesized inconsistencies without changing authentic detail. If uncertain whether a mark or pattern is real, preserve it.';
+export const ARTIFACT_REPAIR = 'Inspect the entire photograph and correct ONLY clearly artificial rendering artifacts wherever present: unnatural blotches, inconsistent or smeared textures, false repeated patterns, banding, checkerboarding and edge halos. Make minimal local corrections while preserving real material texture, natural patterns, grain, seams, reflections, lighting gradients and shadows. Keep the current exposure, color, window views, architecture, objects, furnishings, landscaping and framing unchanged. Do not smooth or repaint surfaces, remove genuine cracks or stains, invent missing detail, stage, declutter, relight or crop. If uncertain whether a detail is an artifact or a real property feature, preserve it. Leave unaffected areas unchanged; if no clear artifact is present, return the photograph unchanged.';
 
 export const FINISH_STYLES = {
   bright_listing: { label: 'Bright Listing', description: 'Luminous rooms, clean whites and clear window views.', direction: 'Substantially improve the photograph: luminous neutral whites, selectively opened shadows, crisp material texture and rich dark surfaces. Retain directional light and depth; no flat gray shadows or bleached surfaces.' },
@@ -26,7 +26,7 @@ export const FinishSchema = z.object({
 export type Finish = z.infer<typeof FinishSchema>;
 export const DEFAULT_FINISH: Finish = FinishSchema.parse({});
 export const IMAGE_MODEL = 'gpt-image-2.5-sunburst';
-export const FINISH_PROMPT_VERSION = 'oceano-studio-v3';
+export const FINISH_PROMPT_VERSION = 'oceano-studio-v4';
 export const FinishDefaultsSchema = z.object({
   auto: FinishSchema.default({}),
   interior: FinishSchema.default({ scene: 'interior' }),

@@ -101,7 +101,7 @@ export function FinishControls({ value, onChange, disabled = false, showModels =
           <label className="text-xs font-medium text-[#c6d9db]">Render quality
             <select aria-label="Render quality" disabled={disabled} className={selectClass} value={value.quality} onChange={e => change({ ...value, quality: e.target.value as Finish['quality'] })}><option value="high">High</option><option value="xhigh">Extra high · more time and cost</option></select>
           </label>
-          <div className="flex items-start gap-3 rounded-xl bg-white/5 p-3.5 sm:col-span-2 lg:col-span-1"><ScanLine className="mt-0.5 h-4 w-4 shrink-0 text-[#a5e4d5]" /><p className="text-xs leading-relaxed text-[#c6d9db]"><span className="font-semibold text-white">Natural surface detail</span><br />Edits preserve real texture and avoid artificial ceiling and wall blotches. Inspect every result.</p></div>
+          <div className="flex items-start gap-3 rounded-xl bg-white/5 p-3.5 sm:col-span-2 lg:col-span-1"><ScanLine className="mt-0.5 h-4 w-4 shrink-0 text-[#a5e4d5]" /><p className="text-xs leading-relaxed text-[#c6d9db]"><span className="font-semibold text-white">Natural surface detail</span><br />Every AI edit includes instructions to protect real detail and prevent artifacts throughout the photo. Inspect every result.</p></div>
         </div>
       </div>
       <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 bg-black/10 px-5 py-4 sm:px-8">

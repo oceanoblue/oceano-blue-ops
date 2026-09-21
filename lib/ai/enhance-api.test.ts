@@ -5,7 +5,7 @@ vi.mock('@/lib/ai',()=>({getProvider:()=>({id:'openai-gpt-image',isConfigured:mo
 vi.mock('./runner',()=>({runAiJob:mocks.run}));
 import { POST } from '@/app/api/ai/process/route';
 import { PUT as defaultsPut } from '@/app/api/enhance/defaults/route';
-import { DEFAULT_FINISH_DEFAULTS } from './finishing';
+import { ARTIFACT_REPAIR, DEFAULT_FINISH_DEFAULTS } from './finishing';
 const order='11111111-1111-4111-8111-111111111111',photo='22222222-2222-4222-8222-222222222222';
 let written:any[];
 beforeEach(()=>{
@@ -54,8 +54,8 @@ it('saved defaults affect only the defaults row, never existing photos',async()=
   expect(written[0].table).toBe('oceano_enhance_settings');
 });
 
-it('snapshots the chosen model for a targeted ceiling revision without reapplying the finish',async()=>{
-  const result = await POST(request({order_id:order,job_type:'enhance_single',photo_ids:[photo],refinement:true,prompt_extra:'Correct only artificial ceiling patches',finish:{model:'gpt-image-2.5-flare',quality:'xhigh',windows:'off'}}));
+it('snapshots the chosen model for a general artifact revision without reapplying the finish',async()=>{
+  const result = await POST(request({order_id:order,job_type:'enhance_single',photo_ids:[photo],refinement:true,prompt_extra:ARTIFACT_REPAIR,finish:{model:'gpt-image-2.5-flare',quality:'xhigh',windows:'off'}}));
   expect(result.status).toBe(200);
   const row=written.find(w=>w.table==='ai_jobs').value[0];
   expect(row.params.recipe).toMatchObject({model:'gpt-image-2.5-flare',refinement:true,source_photo_id:photo,finish:{windows:'off',quality:'xhigh'}});
