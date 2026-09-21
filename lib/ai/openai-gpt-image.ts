@@ -3,7 +3,7 @@ import sharp from 'sharp';
 import { createHash } from 'node:crypto';
 import type { AiProvider, AiRequest, AiResponse } from './types';
 import { buildPrompt } from './prompts';
-import { IMAGE_MODEL, imageEditSize } from './finishing';
+import { IMAGE_MODEL, SURFACE_DIRECTIONS, imageEditSize } from './finishing';
 import { recipeFromParams } from './recipe';
 
 export const openaiGptImage: AiProvider = {
@@ -30,11 +30,12 @@ export const openaiGptImage: AiProvider = {
     }));
     const source = await sharp(buffers[0]).metadata();
     const size = imageEditSize(source.width ?? 0, source.height ?? 0);
-    const prompt = req.prompt ?? recipe?.prompt ?? buildPrompt(req.jobType);
+    const basePrompt = req.prompt ?? recipe?.prompt ?? buildPrompt(req.jobType);
+    const prompt = basePrompt.includes('SURFACE FIDELITY:') ? basePrompt : basePrompt + '\n' + SURFACE_DIRECTIONS;
     const images = buffers.map((bytes, i) => new File([new Uint8Array(bytes)], req.inputs[i].filename || `input-${i}.jpg`, { type: req.inputs[i].mimeType ?? 'image/jpeg' }));
     const result = await client.images.edit({
       model, image: images.length === 1 ? images[0] : images,
-      prompt, size, quality, output_format: 'jpeg', n: 1,
+      prompt, size, quality, output_format: 'png', n: 1,
     } as never);
     const b64 = result.data?.[0]?.b64_json;
     if (!b64) throw new Error('OpenAI returned no image data');
@@ -49,7 +50,7 @@ export const openaiGptImage: AiProvider = {
       outputs: [{ bytes, mimeType, filename: `${req.jobType}-${Date.now()}.${output.format === 'jpeg' ? 'jpg' : output.format}` }],
       model, costCents: openaiGptImage.estimatedCostCents(req), rawPromptUsed: prompt,
       provenance: {
-        model, quality, requestedSize: size, width: output.width, height: output.height,
+        model, quality, requestedSize: size, width: output.width, height: output.height, outputFormat: output.format,
         inputSha256: buffers.map(b => createHash('sha256').update(b).digest('hex')),
         usage: (result as unknown as { usage?: unknown }).usage ?? null,
         costIsEstimate: true, reviewRequired: true, fidelityGuaranteed: false,

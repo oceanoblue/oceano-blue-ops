@@ -81,7 +81,7 @@ export function createEnhanceRecipe(provider: string, directives: EnhanceDirecti
   const extra = directives.extra?.trim();
   return {
     version: 2, job_type: 'enhance_single', provider,
-    model: provider === 'openai-gpt-image' ? IMAGE_MODEL : undefined,
+    model: provider === 'openai-gpt-image' ? finish.model ?? IMAGE_MODEL : undefined,
     finish, prompt_version: FINISH_PROMPT_VERSION, directives,
     prompt_extra: extra || null,
     prompt: finishDirections(finish) + '\n\n' + composeEnhanceDirections({ ...directives, enhancementStyle: undefined, windowPull: false }) ,
