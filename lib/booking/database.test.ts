@@ -42,6 +42,8 @@ beforeAll(async () => {
     alter table contractors add column full_name text, add column email text, add column phone text;`);
   await db.exec(readFileSync('supabase/migrations/20260920230259_client_rescheduling.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20260921155310_photographer_dispatch.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260921165524_booking_auto_confirmation.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260921170607_booking_confirmation_workflow.sql','utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -177,9 +179,9 @@ describe('photographer dispatch transaction',()=>{
     await enableDispatch();const id=(await book()).rows[0].id;
     await db.query("update orders set contractor_response='declined' where id=$1",[id]);
     expect((await db.query<any>('select advance_photographer_assignment($1,1,$2) as ok',[id,backup])).rows[0].ok).toBe(true);
-    expect((await db.query<any>('select photographer_id,assignment_state,assignment_round from orders')).rows[0]).toEqual({photographer_id:backup,assignment_state:'confirmed',assignment_round:2});
+    expect((await db.query<any>('select photographer_id,assignment_state,assignment_round from orders')).rows[0]).toEqual({photographer_id:backup,assignment_state:'awaiting_response',assignment_round:2});
     expect((await db.query<any>('select advance_photographer_assignment($1,1,null) as ok',[id])).rows[0].ok).toBe(false);
-    expect((await db.query("select * from booking_followups where kind='office_attention'")).rows).toHaveLength(2);
+    expect((await db.query("select * from booking_followups where kind='office_attention'")).rows).toHaveLength(1);
   });
   it('holds pending offers, rejects expired acceptance, and escalates when nobody can cover',async()=>{
     await enableDispatch();const id=(await book()).rows[0].id;
@@ -212,7 +214,7 @@ describe('photographer dispatch transaction',()=>{
   it('invalidates acceptance and disables automatic routing when the office reassigns',async()=>{
     await enableDispatch();const id=(await book()).rows[0].id;
     await db.query('update orders set photographer_id=$2,contractor_id=null where id=$1',[id,backup]);
-    expect((await db.query<any>('select assignment_round,auto_dispatch,assignment_state from orders')).rows[0]).toEqual({assignment_round:2,auto_dispatch:false,assignment_state:'confirmed'});
+    expect((await db.query<any>('select assignment_round,auto_dispatch,assignment_state from orders')).rows[0]).toEqual({assignment_round:2,auto_dispatch:false,assignment_state:'awaiting_response'});
   });
   it('restricts dispatch mutation and routing configuration to server roles',async()=>{
     const r=(await db.query<any>(`select has_function_privilege('authenticated','advance_photographer_assignment(uuid,integer,uuid)','EXECUTE') as mutate,
@@ -244,5 +246,60 @@ describe('dispatch rescheduling and hours',()=>{
     expect((await db.query('select * from team_availability')).rows).toEqual(before);
     await db.query('select replace_photographer_hours($1,$2::jsonb)',[photographer,'[]']);
     expect((await db.query('select * from team_availability')).rows).toHaveLength(0);
+  });
+});
+
+
+describe('automatic confirmation policy',()=>{
+  it('confirms contractor bookings without fabricating a personal acceptance',async()=>{
+    await enableDispatch();await db.exec('update business_settings set auto_confirm_bookings=true');
+    const id=(await book()).rows[0].id;
+    expect((await db.query('select assignment_state,assignment_confirmation_mode,assignment_due_at,contractor_response from orders')).rows[0]).toEqual({assignment_state:'confirmed',assignment_confirmation_mode:'automatic',assignment_due_at:null,contractor_response:null});
+    const jobs=(await db.query<any>('select kind,payload from booking_followups')).rows;
+    expect(jobs.find(j=>j.kind==='client_email').payload.event).not.toBe('assignment_pending');
+    expect(jobs.find(j=>j.kind==='assignment_email').payload.automatically_confirmed).toBe(true);
+    expect((await db.query<any>('select advance_photographer_assignment($1,1,$2) as ok',[id,backup])).rows[0].ok).toBe(false);
+    await db.exec('update business_settings set auto_confirm_bookings=false');
+    await book(); // replay retains the original confirmed booking
+    expect((await db.query<any>('select assignment_state from orders')).rows[0].assignment_state).toBe('confirmed');
+    await db.query("update orders set contractor_response='declined' where id=$1",[id]);
+    expect((await db.query<any>('select assignment_state from orders')).rows[0].assignment_state).toBe('rerouting');
+  });
+  it('leaves pending requests and their deadlines intact when switched on',async()=>{
+    await enableDispatch();const id=(await book()).rows[0].id;
+    const before=(await db.query('select * from orders')).rows;
+    const jobs=(await db.query('select * from booking_followups')).rows;
+    await db.exec('update business_settings set auto_confirm_bookings=true');
+    expect((await db.query('select * from orders')).rows).toEqual(before);
+    expect((await db.query('select * from booking_followups')).rows).toEqual(jobs);
+    await db.query("update orders set contractor_response='accepted' where id=$1",[id]);
+    expect((await db.query<any>('select assignment_state,assignment_confirmation_mode from orders')).rows[0]).toEqual({assignment_state:'confirmed',assignment_confirmation_mode:'manual'});
+  });
+  it('requires internal photographer acceptance when off and checks ownership, version and deadline',async()=>{
+    await enableDispatch();const id=(await book({...payload,photographer_id:backup})).rows[0].id;
+    expect((await db.query<any>('select assignment_state from orders')).rows[0].assignment_state).toBe('awaiting_response');
+    expect((await db.query<any>("select recipient from booking_followups where kind='assignment_email'")).rows[0].recipient).toBe('backup@example.test');
+    const respond=(round:number,member:string,response='accepted')=>db.query<any>('select respond_to_team_assignment($1,$2,$3,$4) as ok',[id,round,member,response]);
+    expect((await respond(1,photographer)).rows[0].ok).toBe(false);
+    expect((await respond(2,backup)).rows[0].ok).toBe(false);
+    expect((await respond(1,backup)).rows[0].ok).toBe(true);
+    expect((await respond(1,backup)).rows[0].ok).toBe(false);
+    expect((await db.query("select * from booking_followups where payload->>'event'='assignment_confirmed'")).rows).toHaveLength(1);
+    expect((await respond(1,backup,'declined')).rows[0].ok).toBe(true);
+    expect((await respond(1,backup)).rows[0].ok).toBe(false);
+  });
+  it('uses the saved policy for backups and reschedules, while retaining conflict checks',async()=>{
+    await enableDispatch();const id=(await book()).rows[0].id;
+    await db.exec('update business_settings set auto_confirm_bookings=true');
+    await db.query("update orders set contractor_response='declined' where id=$1",[id]);
+    await db.query('select advance_photographer_assignment($1,1,$2)',[id,backup]);
+    expect((await db.query<any>('select assignment_state,assignment_confirmation_mode from orders')).rows[0]).toEqual({assignment_state:'confirmed',assignment_confirmation_mode:'automatic'});
+    await db.exec('update business_settings set auto_confirm_bookings=false');
+    await db.query("update orders set scheduled_at=scheduled_at+interval '1 day' where id=$1",[id]);
+    expect((await db.query<any>('select assignment_state,assignment_confirmation_mode,assignment_round from orders')).rows[0]).toEqual({assignment_state:'awaiting_response',assignment_confirmation_mode:'manual',assignment_round:3});
+    await db.query("update orders set assignment_due_at=now()-interval '1 minute' where id=$1",[id]);
+    expect((await db.query<any>("select respond_to_team_assignment($1,3,$2,'accepted') as ok",[id,backup])).rows[0].ok).toBe(false);
+    const rights=(await db.query<any>("select has_function_privilege('authenticated','respond_to_team_assignment(uuid,integer,uuid,text)','EXECUTE') as authenticated, has_function_privilege('anon','respond_to_team_assignment(uuid,integer,uuid,text)','EXECUTE') as anon")).rows[0];
+    expect(rights).toEqual({authenticated:false,anon:false});
   });
 });

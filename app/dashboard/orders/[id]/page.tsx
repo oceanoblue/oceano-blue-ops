@@ -1,3 +1,4 @@
+import { RespondControl } from '@/components/field/RespondControl';
 import { assignmentLabel } from '@/lib/booking/routing';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -38,6 +39,7 @@ export const dynamic = 'force-dynamic';
 export default async function OrderDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const supabase = await createClient();
+  const {data:{user}} = await supabase.auth.getUser();
   const { data, error } = await supabase
     .from('orders')
     .select(`
@@ -280,7 +282,8 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
             </details>
           </div>
           <div className="min-w-0 space-y-6">
-            <section className="card p-5 sm:p-6"><h2 className="mb-4 text-xl font-semibold">Schedule & team</h2><p className={`mb-4 rounded-lg p-3 text-sm ${assignmentLabel(order)==='Confirmed'?'bg-emerald-50 text-emerald-800':'bg-amber-50 text-amber-900'}`}>{assignmentLabel(order)}{order.assignment_due_at&&order.assignment_state==='awaiting_response'&&<span className="mt-1 block text-xs">Response due {fmtDateTimeTz(order.assignment_due_at,order.timezone)}{order.auto_dispatch?' · Backup will be checked automatically.':' · Office-managed assignment.'}</span>}</p>
+            <section className="card p-5 sm:p-6"><h2 className="mb-4 text-xl font-semibold">Schedule & team</h2><p className={`mb-4 rounded-lg p-3 text-sm ${assignmentLabel(order).startsWith('Confirmed')?'bg-emerald-50 text-emerald-800':'bg-amber-50 text-amber-900'}`}>{assignmentLabel(order)}{order.assignment_due_at&&order.assignment_state==='awaiting_response'&&<span className="mt-1 block text-xs">Response due {fmtDateTimeTz(order.assignment_due_at,order.timezone)}{order.auto_dispatch?' · Backup will be checked automatically.':' · Office-managed assignment.'}</span>}</p>
+            {order.assignment_round>0 && order.assignment_confirmation_mode!=='legacy' && !order.contractor_id && order.photographer_id===user?.id && ['booked','scheduled'].includes(order.status) && ['awaiting_response','confirmed'].includes(order.assignment_state) && <div className="mb-4"><RespondControl orderId={order.id} round={order.assignment_round} teamAssignment response={order.assignment_state==='confirmed' && order.assignment_confirmation_mode!=='automatic' ? 'accepted' : null} automaticallyConfirmed={order.assignment_state==='confirmed' && order.assignment_confirmation_mode==='automatic'} note={null}/></div>}
             <dl className="text-sm space-y-2">
               <Row label="Scheduled">{fmtDateTimeTz(order.scheduled_at, (order as any).timezone)}</Row>
               <Row label="Duration">{order.duration_minutes} min</Row>

@@ -2,12 +2,12 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { syncShootCalendar } from '@/lib/google-calendar/sync-shoot';
 import { sendEmail } from '@/lib/email/resend';
 import { sendSms } from '@/lib/integrations/quo';
-import { appointmentRescheduledEmail, bookingConfirmationEmail, bookingReceivedEmail, assignmentRequestEmail, assignmentOfficeEmail } from '@/lib/email/templates';
+import { appointmentRescheduledEmail, bookingConfirmationEmail, bookingReceivedEmail, assignmentRequestEmail, assignmentOfficeEmail, assignmentConfirmedEmail } from '@/lib/email/templates';
 import { signRespondToken, respondPageUrl, respondTokenExpiry } from '@/lib/field/respond-token';
 import { fmtDateTimeTz, fmtCents } from '@/lib/utils/format';
 import type { BookingInput } from './validation';
 
-export type Followup = { id: string; order_id: string; kind: string; recipient: string; payload: BookingInput & { event?: 'rescheduled' | 'assignment_pending' | 'assignment_confirmed'; pending?: boolean; previous_scheduled_at?: string; assignment_round?: number; contractor_id?: string; assignment_state?: string; assignment_due_at?: string }; attempts: number; lease_token: string; created_at: string };
+export type Followup = { id: string; order_id: string; kind: string; recipient: string; payload: BookingInput & { event?: 'rescheduled' | 'assignment_pending' | 'assignment_confirmed'; pending?: boolean; previous_scheduled_at?: string; assignment_round?: number; contractor_id?: string; assignment_state?: string; assignment_due_at?: string; photographer_id?: string; automatically_confirmed?: boolean }; attempts: number; lease_token: string; created_at: string };
 
 export async function deliverFollowup(job: Followup): Promise<void> {
   if (job.kind === 'calendar') {
@@ -18,7 +18,7 @@ export async function deliverFollowup(job: Followup): Promise<void> {
   const base=process.env.NEXT_PUBLIC_APP_URL || 'https://app.oceanoblue.net';
   if(job.kind==='assignment_email'||job.kind==='assignment_sms'||b.event==='assignment_pending'||b.event==='assignment_confirmed'||b.event==='rescheduled'||job.kind==='office_attention') {
     const admin=createAdminClient() as any;
-    const {data:order,error}=await admin.from('orders').select('assignment_round,assignment_state,assignment_due_at,contractor_id,archived_at,status,pay_amount_cents,contractors(full_name),order_items(description,quantity)').eq('id',job.order_id).maybeSingle();
+    const {data:order,error}=await admin.from('orders').select('assignment_round,assignment_state,assignment_confirmation_mode,assignment_due_at,photographer_id,contractor_id,archived_at,status,pay_amount_cents,contractors(full_name),order_items(description,quantity)').eq('id',job.order_id).maybeSingle();
     if(error)throw error;
     if(!order||order.archived_at||['cancelled','draft','delivered'].includes(order.status))return;
     if(job.kind==='office_attention' && (order.assignment_round!==b.assignment_round||order.assignment_state!==b.assignment_state))return;
@@ -26,17 +26,24 @@ export async function deliverFollowup(job: Followup): Promise<void> {
     if(b.event==='assignment_pending' && (order.assignment_state==='confirmed'||order.assignment_round!==b.assignment_round))return;
     if(b.event==='rescheduled' && b.assignment_round && order.assignment_round!==b.assignment_round)return;
     if(job.kind.startsWith('assignment_')) {
-      if(order.assignment_state!=='awaiting_response'||order.assignment_round!==b.assignment_round||order.contractor_id!==b.contractor_id||Date.parse(order.assignment_due_at)<=Date.now())return;
-      const token=signRespondToken(job.order_id,order.contractor_id,respondTokenExpiry(b.scheduled_at),order.assignment_round);
-      if(!token)throw new Error('assignment_link_not_configured');
-      const respondUrl=respondPageUrl(base,token);
+      const automatic = b.automatically_confirmed === true;
+      if(order.assignment_round!==b.assignment_round || order.contractor_id!==b.contractor_id || (b.photographer_id && order.photographer_id!==b.photographer_id))return;
+      if(automatic ? order.assignment_state!=='confirmed' || order.assignment_confirmation_mode!=='automatic' : order.assignment_state!=='awaiting_response' || !order.assignment_due_at || Date.parse(order.assignment_due_at)<=Date.now())return;
+      const portalUrl = order.contractor_id ? `${base}/field/shoots/${job.order_id}` : `${base}/field/assignments/${job.order_id}`;
+      let respondUrl = portalUrl;
+      if(order.contractor_id) {
+        const token=signRespondToken(job.order_id,order.contractor_id,respondTokenExpiry(b.scheduled_at),order.assignment_round);
+        if(!token)throw new Error('assignment_link_not_configured');
+        respondUrl=respondPageUrl(base,token);
+      }
       if(job.kind==='assignment_sms') {
-        const result=await sendSms({to:job.recipient,text:`Oceano Blue: shoot request at ${b.address_line1}, ${fmtDateTimeTz(b.scheduled_at,b.timezone)}. Please accept or decline: ${respondUrl}`});
+        const result=await sendSms({to:job.recipient,text:`Oceano Blue: ${automatic ? 'shoot confirmed automatically' : 'shoot request'} at ${b.address_line1}, ${fmtDateTimeTz(b.scheduled_at,b.timezone)}. ${automatic ? 'No acceptance required. Review details or report a change' : 'Please accept or decline'}: ${respondUrl}`});
         if(result.status!=='sent')throw new Error(result.status==='failed'?result.error:result.status);
         return;
       }
       if(Date.now()-Date.parse(job.created_at)>23*3600000)throw new Error('email_delivery_review_required');
-      const email=assignmentRequestEmail({name:order.contractors?.full_name||'Photographer',address:b.address_line1,when:fmtDateTimeTz(b.scheduled_at,b.timezone),deadline:fmtDateTimeTz(order.assignment_due_at,b.timezone),services:(order.order_items||[]).map((i:any)=>`${i.quantity} × ${i.description}`).join(', '),pay:order.pay_amount_cents?fmtCents(order.pay_amount_cents):'',respondUrl,portalUrl:`${base}/field/shoots/${job.order_id}`});
+      const details={name:order.contractors?.full_name||'Photographer',address:b.address_line1,when:fmtDateTimeTz(b.scheduled_at,b.timezone),deadline:order.assignment_due_at?fmtDateTimeTz(order.assignment_due_at,b.timezone):'',services:(order.order_items||[]).map((i:any)=>`${i.quantity} × ${i.description}`).join(', '),pay:order.pay_amount_cents?fmtCents(order.pay_amount_cents):'',respondUrl,portalUrl};
+      const email=automatic ? assignmentConfirmedEmail(details) : assignmentRequestEmail(details);
       const sent=await sendEmail({to:job.recipient,...email,idempotencyKey:job.id});
       if(sent.status!=='sent')throw new Error(sent.status==='failed'?sent.error:sent.status);
       return;

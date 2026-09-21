@@ -1,6 +1,7 @@
 import {beforeEach,expect,it,vi} from 'vitest';
 import {PUT} from '@/app/api/scheduling/hours/route';
 import {POST as block,DELETE as unblock} from '@/app/api/scheduling/time-off/route';
+import {POST as respond} from '@/app/api/scheduling/respond/route';
 import {POST as profile} from '@/app/api/scheduling/profiles/route';
 const {state,rpc,writes,filters}=vi.hoisted(()=>({state:{user:null as any,staff:null as any},rpc:vi.fn(),writes:vi.fn(),filters:[] as any[]}));
 vi.mock('@/lib/supabase/server',()=>({createClient:async()=>({auth:{getUser:async()=>({data:{user:state.user}})}}),createAdminClient:()=>({rpc,from:(table:string)=>{const q:any={then:(r:any)=>Promise.resolve({data:state.staff,error:null}).then(r)};q.eq=(key:string,val:any)=>{filters.push([table,key,val]);return q;};for(const k of ['select','single','or'])q[k]=()=>q;for(const k of ['insert','delete','upsert'])q[k]=(...args:any[])=>{writes(table,k,...args);return q;};return q;}})}));
@@ -24,4 +25,17 @@ it('denies contractor routing changes and unsigned requests',async()=>{
 });
 it('rejects invalid hours before replacing the previous schedule',async()=>{
  expect((await PUT(req({team_member_id:own,rows:[{day_of_week:1,start_local:'17:00',end_local:'09:00',timezone:'America/New_York'}]}))).status).toBe(400);expect(rpc).not.toHaveBeenCalled();
+});
+
+it('derives assignment response identity from authentication, never request data',async()=>{
+  rpc.mockResolvedValue({data:true,error:null});
+  expect((await respond(req({orderId:other,round:2,response:'accepted',member:other}))).status).toBe(200);
+  expect(rpc).toHaveBeenCalledWith('respond_to_team_assignment',{p_order:other,p_round:2,p_member:own,p_response:'accepted'});
+  rpc.mockResolvedValue({data:false,error:null});
+  expect((await respond(req({orderId:other,round:1,response:'accepted'}))).status).toBe(409);
+  state.user=null;expect((await respond(req({}))).status).toBe(401);
+});
+it('rejects inactive or non-photographer team responses',async()=>{
+  state.staff={role:'editor',is_active:true};expect((await respond(req({orderId:other,round:1,response:'accepted'}))).status).toBe(403);
+  expect(rpc).not.toHaveBeenCalled();
 });

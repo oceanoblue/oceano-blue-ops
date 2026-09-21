@@ -15,3 +15,14 @@ Assignment versions invalidate prior response links when a time or photographer 
 - Unit/integration coverage includes pooled capacity in both directions, priorities, service qualifications, fail-closed calendar errors, ZIP buffers, database overlap guards, pending/confirmed transitions, decline/expiry fallback, stale workers and links, rescheduling, outbox suppression, permissions, and transactional hour replacement.
 - 461 tests passed. TypeScript passed. Lint passed with ten pre-existing warnings. Production build passed with Webpack; local Turbopack cannot bind its internal port in the sandbox. Hosted CI validates the standard build.
 - Production checks use read-only data and browser navigation. No test booking or live notification is sent.
+
+
+## Automatic confirmation switch
+
+Settings → Scheduling → Automatic confirmation controls new assignment versions for both contractors and internal photographers. Default OFF requires acceptance, including Gustavo. ON confirms immediately, clears the response deadline and sends the assignee a “Shoot confirmed” notification. It never writes a fictional contractor acceptance. The schedule distinguishes “Confirmed automatically.” Qualification, availability and backup routing remain active in either mode.
+
+Each assignment stores a `manual` or `automatic` policy snapshot. Saving settings alone does not change existing orders, pending deadlines, links or notification jobs. A later reassignment or reschedule reads the then-current setting. Historic assignments remain `legacy`. Public booking replay retains the original result even after the setting changes.
+
+Contractors use their existing versioned response links/portal. Internal photographers receive a scoped `/field/assignments/[id]` link and can also respond from their own order workspace. The service-only response RPC locks the order and checks the authenticated assignee, active role, exact version, future appointment and response deadline. Automatic confirmations can still be declined; standard backup/office attention behavior applies.
+
+Validation covers both policies, idempotent replay after switching, untouched pending offers, fallback/rescheduling, internal ownership/version/timeout checks, notification wording and stale suppression. Existing order #72 stays accepted at $225. No real bookings or messages are created for testing.

@@ -61,3 +61,21 @@ it('does not send a client confirmation from an obsolete assignment',async()=>{
   const event=job();event.payload.event='assignment_confirmed';event.payload.assignment_round=2;
   await deliverFollowup(event);expect(sendEmail).not.toHaveBeenCalled();
 });
+
+it('notifies an automatically confirmed photographer without requesting acceptance',async()=>{
+  const event=job();event.kind='assignment_email';event.payload.assignment_round=1;event.payload.contractor_id='contractor';event.payload.automatically_confirmed=true;
+  readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'confirmed',assignment_confirmation_mode:'automatic',assignment_round:1,contractor_id:'contractor',assignment_due_at:null}});
+  vi.mocked(sendEmail).mockResolvedValue({status:'sent',id:'sent'} as any);
+  await deliverFollowup(event);
+  expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({subject:'Shoot confirmed — Test property',html:expect.stringContaining('No acceptance is required.')}));
+  expect(vi.mocked(sendEmail).mock.calls[0][0].html).not.toContain('Accept or decline');
+  readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'rerouting',assignment_confirmation_mode:'automatic',assignment_round:1,contractor_id:'contractor'}});
+  vi.mocked(sendEmail).mockClear();await deliverFollowup(event);expect(sendEmail).not.toHaveBeenCalled();
+});
+it('sends internal staff requests to their authenticated assignment page',async()=>{
+  const event=job();event.kind='assignment_email';event.payload.assignment_round=1;event.payload.contractor_id=null as any;event.payload.photographer_id='internal';
+  readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'awaiting_response',assignment_round:1,contractor_id:null,photographer_id:'internal',assignment_due_at:new Date(Date.now()+3600000).toISOString()}});
+  vi.mocked(sendEmail).mockResolvedValue({status:'sent',id:'sent'} as any);
+  await deliverFollowup(event);
+  expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({html:expect.stringContaining('/field/assignments/order1')}));
+});

@@ -12,9 +12,9 @@ export default async function SchedulingSettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login?next=/dashboard/settings/scheduling');
 
-  const { data: settings } = await supabase
+  const { data: settings, error } = await supabase
     .from('business_settings')
-    .select('buffer_minutes, min_notice_hours, max_notice_days, default_timezone, business_name, raw_retention_days, assignment_timeout_minutes')
+    .select('buffer_minutes, min_notice_hours, max_notice_days, default_timezone, business_name, raw_retention_days, assignment_timeout_minutes, auto_confirm_bookings')
     .eq('id', true)
     .maybeSingle();
 
@@ -27,18 +27,7 @@ export default async function SchedulingSettingsPage() {
         </p>
       </div>
       <SettingsNav />
-      <SchedulingSettingsForm
-        initial={
-          (settings as any) ?? {
-            buffer_minutes: 30,
-            min_notice_hours: 4,
-            max_notice_days: 30,
-            default_timezone: 'America/New_York',
-            business_name: 'Oceano Blue',
-            raw_retention_days: 30,
-          }
-        }
-      />
+      {error || !settings ? <p role="alert" className="card p-6 text-rose-700">Scheduling settings could not be loaded. Refresh the page to try again.</p> : <SchedulingSettingsForm initial={settings} />}
     </div>
   );
 }

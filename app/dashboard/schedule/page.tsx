@@ -24,16 +24,16 @@ export default async function SchedulePage({searchParams}:{searchParams:Promise<
     admin.from('team_members').select('id,full_name').eq('is_active',true).in('role',['admin','photographer']).order('full_name'),
     admin.from('photographer_routing').select('team_member_id,color,priority'),
     admin.from('team_calendar_connections').select('team_member_id,is_active,scope').eq('provider','google'),
-    admin.from('orders').select('id,order_number,status,scheduled_at,duration_minutes,photographer_id,contractor_id,contractor_response,assignment_state,assignment_due_at,listings(address_line1,city),clients(full_name),contractors(team_member_id,full_name),order_items(description)').is('archived_at',null).not('status','in','(cancelled,draft)').gte('scheduled_at',starts).lt('scheduled_at',ends).order('scheduled_at'),
+    admin.from('orders').select('id,order_number,status,scheduled_at,duration_minutes,photographer_id,contractor_id,contractor_response,assignment_confirmation_mode,assignment_state,assignment_due_at,listings(address_line1,city),clients(full_name),contractors(team_member_id,full_name),order_items(description)').is('archived_at',null).not('status','in','(cancelled,draft)').gte('scheduled_at',starts).lt('scheduled_at',ends).order('scheduled_at'),
     admin.from('schedule_blocks').select('id,team_member_id,starts_at,ends_at,reason').eq('is_available',false).lt('starts_at',ends).gt('ends_at',starts),
-    admin.from('orders').select('id,order_number,status,scheduled_at,photographer_id,contractor_id,contractor_response,assignment_state,assignment_due_at,listings(address_line1,city),clients(full_name),contractors(team_member_id,full_name),order_items(description)').is('archived_at',null).in('status',['booked','scheduled']).order('scheduled_at',{nullsFirst:true}),
+    admin.from('orders').select('id,order_number,status,scheduled_at,photographer_id,contractor_id,contractor_response,assignment_confirmation_mode,assignment_state,assignment_due_at,listings(address_line1,city),clients(full_name),contractors(team_member_id,full_name),order_items(description)').is('archived_at',null).in('status',['booked','scheduled']).order('scheduled_at',{nullsFirst:true}),
   ]);
   const members=(membersResult.data||[]).map((m:any)=>({...m,color:routingResult.data?.find((p:any)=>p.team_member_id===m.id)?.color||'#475569'}));
   const selected=members.some((m:any)=>m.id===search.photographer)?search.photographer:undefined;
   const visible=members.filter((m:any)=>!selected||m.id===selected);
   const resolve=(o:Shoot)=>o.contractors?.team_member_id||o.photographer_id;
   const orders=(ordersResult.data||[]).filter((o:Shoot)=>!selected||resolve(o)===selected);
-  const pending=(pendingResult.data||[]).filter((o:Shoot)=>(!selected||resolve(o)===selected)&&assignmentLabel(o)!=='Confirmed');
+  const pending=(pendingResult.data||[]).filter((o:Shoot)=>(!selected||resolve(o)===selected)&&!assignmentLabel(o).startsWith('Confirmed'));
   const calendars=await Promise.all(visible.map(async(m:any)=>{
     const c=connectionsResult.data?.find((c:any)=>c.team_member_id===m.id);
     if(!c)return {...m,state:'Not connected',busy:[]};
@@ -49,7 +49,7 @@ export default async function SchedulePage({searchParams}:{searchParams:Promise<
       <p className="mt-2 break-words text-sm font-semibold text-ink-950">{o.listings?.address_line1||'Property details needed'}</p><p className="mt-1 text-xs text-slate-500">{o.clients?.full_name} · {o.listings?.city}</p>
       <p className="mt-2 text-xs font-medium" style={{color:color||'#92400e'}}>{name(o)}</p>
       <p className="mt-1 text-xs text-slate-500">{(o.order_items||[]).map((i:any)=>i.description).join(' · ')||'Services not entered'}{o.duration_minutes?` · ${o.duration_minutes} min`:''}</p>
-      <span className={`mt-3 inline-block rounded-md px-2 py-1 text-[11px] font-medium ${label==='Confirmed'?'bg-emerald-50 text-emerald-800':'bg-amber-50 text-amber-900'}`}>{label}</span>
+      <span className={`mt-3 inline-block rounded-md px-2 py-1 text-[11px] font-medium ${label.startsWith('Confirmed')?'bg-emerald-50 text-emerald-800':'bg-amber-50 text-amber-900'}`}>{label}</span>
       {o.assignment_due_at&&label!=='Confirmed'&&<p className="mt-2 text-[11px] text-slate-500">{Date.parse(o.assignment_due_at)<Date.now()?'Response overdue':'Respond by'} {fmtTimeInTz(o.assignment_due_at,tz)}</p>}
     </Link>;
   }

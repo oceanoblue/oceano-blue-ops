@@ -20,10 +20,11 @@ export function travelBuffer(profile: RoutingProfile | undefined, base: number, 
 export const ASSIGNMENT_LABEL: Record<string,string> = {
   confirmed:'Confirmed',awaiting_response:'Awaiting photographer',rerouting:'Finding a backup',needs_attention:'Needs assignment',
 };
-export function assignmentLabel(order: {assignment_state?:string;contractor_id?:string|null;contractor_response?:string|null;photographer_id?:string|null}) {
+export function assignmentLabel(order: {assignment_state?:string;assignment_confirmation_mode?:string;contractor_id?:string|null;contractor_response?:string|null;photographer_id?:string|null}) {
   if(order.contractor_response==='declined')return 'Declined · needs attention';
   if(order.assignment_state && order.assignment_state!=='confirmed')return ASSIGNMENT_LABEL[order.assignment_state]||order.assignment_state;
   if(!order.photographer_id&&!order.contractor_id)return 'Unassigned';
+  if(order.assignment_confirmation_mode==='automatic'&&order.assignment_state==='confirmed')return 'Confirmed automatically';
   if(order.contractor_id&&!order.contractor_response)return 'Awaiting photographer';
   return 'Confirmed';
 }

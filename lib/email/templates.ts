@@ -315,3 +315,13 @@ export function assignmentOfficeEmail(p:{address:string;when:string;url:string;c
   const title=p.confirmed?'Backup photographer assigned':'Photographer needed';
   return {subject:`${title} — ${p.address}`,html:shell(`<p><strong>${title}</strong></p><p>${escapeHtml(p.address)}<br/>${escapeHtml(p.when)}</p><p>${p.confirmed?'The original offer was declined or expired. An available backup has been assigned.':'No eligible backup could be confirmed. Review the order and arrange coverage or contact the client.'}</p>${button(p.url,'Review assignment')}`,title)};
 }
+
+/** Clearly distinguishes the business policy from a personal photographer response. */
+export function assignmentConfirmedEmail(p: {name:string;address:string;when:string;services:string;respondUrl:string;pay:string}) {
+  return {subject:`Shoot confirmed — ${p.address}`,html:shell(`
+    <p>Hi ${escapeHtml(p.name)},</p><p>This shoot has been assigned to you and confirmed automatically. No acceptance is required.</p>
+    <p><strong>${escapeHtml(p.address)}</strong><br/>${escapeHtml(p.when)}</p>
+    <p>${escapeHtml(p.services)}</p>${p.pay?`<p>Your pay: ${escapeHtml(p.pay)}</p>`:''}
+    <p>If you can no longer cover this shoot, open the details and decline so we can arrange coverage.</p>
+    ${button(p.respondUrl,'Review shoot')}`, `Confirmed automatically: ${p.address}`)};
+}
