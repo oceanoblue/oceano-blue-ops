@@ -1,5 +1,6 @@
-import { buildPrompt, type EnhanceDirectives } from './prompts';
-import type { EnhanceRecipe } from './recipe';
+import { type EnhanceDirectives } from './prompts';
+import { createEnhanceRecipe } from './recipe';
+import { DEFAULT_FINISH, type Finish } from './finishing';
 import { AUTO_SCENE_FIXES } from './vision-analyze';
 
 /**
@@ -23,16 +24,11 @@ export function buildAutoEnhanceJobRow(opts: {
    *  flags them. Default true (org setting business_settings.auto_scene_fixes).
    *  Destructive ops (declutter/twilight/stage) always stay opt-in per photo. */
   sceneFixes?: boolean;
+  finish?: Finish;
 }) {
   const sceneFixes = opts.sceneFixes ?? true;
   const directives = AUTO_ENHANCE_DIRECTIVES;
-  const recipe: EnhanceRecipe = {
-    job_type: 'enhance_single',
-    provider: opts.providerId,
-    directives,
-    prompt_extra: null,
-    prompt: buildPrompt('enhance_single', directives),
-  };
+  const recipe = createEnhanceRecipe(opts.providerId, directives, opts.finish ?? DEFAULT_FINISH);
   return {
     order_id: opts.orderId,
     job_type: 'enhance_single' as const,
@@ -47,7 +43,7 @@ export function buildAutoEnhanceJobRow(opts: {
     // makes it re-runnable.
     params: {
       auto_chain_fixes: sceneFixes,
-      auto_chain_scope: AUTO_SCENE_FIXES,
+      auto_chain_scope: AUTO_SCENE_FIXES.filter(type => type !== 'window_pull'),
       recipe,
       auto_enhanced_on_upload: true,
     } as any,

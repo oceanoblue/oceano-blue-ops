@@ -117,6 +117,7 @@ export function EnhanceSettingsForm({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           photo_id: photoId,
+          mode: 'basic',
           options: {
             targetLongEdge: s.target_long_edge,
             jpegQuality: s.jpeg_quality,
@@ -147,9 +148,9 @@ export function EnhanceSettingsForm({
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,360px)_1fr]">
       <section className="card p-6">
-        <h2 className="font-semibold text-ocean-900">Luxury grade</h2>
+        <h2 className="font-semibold text-ocean-900">Basic correction grade</h2>
         <p className="mt-1 text-sm text-slate-600">
-          These drive every photo that runs through Oceano Enhance. Tune, preview against a
+          These control basic color correction, separate from the AI finish. Tune against a
           real shot, then Save.
         </p>
 
@@ -226,7 +227,7 @@ export function EnhanceSettingsForm({
         </div>
         <p className="mt-1 text-sm text-slate-600">
           Render a real upload with the current sliders. Nothing is saved here — it&apos;s a
-          sandbox. Hit Save grade on the left to apply it to all enhancing.
+          sandbox. Save grade applies these settings to basic correction only.
         </p>
 
         <div className="mt-4">

@@ -1,5 +1,8 @@
 'use client';
 
+import { FinishControls } from './FinishControls';
+import { DEFAULT_FINISH, type Finish } from '@/lib/ai/finishing';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
@@ -75,7 +78,7 @@ const JOB_LABEL: Record<string, string> = {
 };
 
 const PROVIDER_SHORT: Record<string, string> = {
-  'openai-gpt-image': 'GPT Image 2.0',
+  'openai-gpt-image': 'GPT Image 2.5 Sunburst',
   'gemini-nano-banana-2': 'Nano Banana 2',
   'gemini-nano-banana-pro': 'Nano Banana Pro',
   'gemini-banana-pro': 'Nano Banana Pro',
@@ -157,7 +160,7 @@ export function PhotoManager({
   // Stage 2 config. Default to the deterministic edit engine (the faithful
   // fuse + grade we tune) rather than a paid generative model — that's the
   // reliable "one look" path; generative providers stay available in the dropdown.
-  const [aiProvider, setAiProvider] = useState<AiProvider>('oceano-enhance');
+  const [aiProvider, setAiProvider] = useState<AiProvider>('openai-gpt-image');
   // Off by default: the signature enhance should NOT auto-apply sky / window /
   // lawn / declutter / twilight. Those alter content and stay opt-in per photo.
   const [autoDetect, setAutoDetect] = useState(false);
@@ -166,11 +169,10 @@ export function PhotoManager({
   // Stage 2 enhance preferences. Defaults match the
   // signature luxury finish: full-strength edit, keep the real sky unless a
   // preset is chosen, recover blown windows, straighten verticals.
-  const [enhancementStyle, setEnhancementStyle] = useState<EnhancementStyle>('signature');
+  const [finish, setFinish] = useState<Finish>(DEFAULT_FINISH);
   const [skyStyle, setSkyStyle] = useState<SkyStyle>('original');
-  const [windowPull, setWindowPull] = useState(true);
   const [perspectiveCorrection, setPerspectiveCorrection] = useState(true);
-  const [removeReflections, setRemoveReflections] = useState(true);
+  const [removeReflections, setRemoveReflections] = useState(false);
   const [blurFaces, setBlurFaces] = useState(false);
 
   // Stage 3 — open lightbox
@@ -757,9 +759,9 @@ export function PhotoManager({
             provider: aiProvider,
             photo_ids: [p.id],
             auto_chain_fixes: autoDetect,
-            enhancement_style: enhancementStyle,
+            finish,
             sky_style: skyStyle,
-            window_pull: windowPull,
+            window_pull: finish.windows !== 'off',
             perspective_correction: perspectiveCorrection,
             remove_reflections: removeReflections,
             blur_faces: blurFaces,
@@ -941,7 +943,7 @@ export function PhotoManager({
           <div className="flex items-center gap-2 text-slate-700">
             <Loader2 className="h-4 w-4 animate-spin text-ocean-600" />
             {inFlightJobs.length} photo{inFlightJobs.length === 1 ? '' : 's'} processing — results land in
-            Review &amp; Edit as each finishes (~30–60s per photo).
+            Review &amp; Edit as each finishes (processing time varies by quality).
           </div>
           <button
             onClick={refresh}
@@ -1003,16 +1005,14 @@ export function PhotoManager({
           inputs={stage2Inputs}
           selection={stage2Selection}
           onToggle={toggleStage2}
+          finish={finish}
+          onFinishChange={setFinish}
           provider={aiProvider}
           onProviderChange={setAiProvider}
           autoDetect={autoDetect}
           onAutoDetectChange={setAutoDetect}
-          enhancementStyle={enhancementStyle}
-          onEnhancementStyleChange={setEnhancementStyle}
           skyStyle={skyStyle}
           onSkyStyleChange={setSkyStyle}
-          windowPull={windowPull}
-          onWindowPullChange={setWindowPull}
           perspectiveCorrection={perspectiveCorrection}
           onPerspectiveCorrectionChange={setPerspectiveCorrection}
           removeReflections={removeReflections}
@@ -1285,6 +1285,8 @@ function Stage1({
 
 // ─── Stage 2: AI Enhance ─────────────────────────────────────────────────────
 function Stage2({
+  finish,
+  onFinishChange,
   inputs,
   selection,
   onToggle,
@@ -1292,12 +1294,8 @@ function Stage2({
   onProviderChange,
   autoDetect,
   onAutoDetectChange,
-  enhancementStyle,
-  onEnhancementStyleChange,
   skyStyle,
   onSkyStyleChange,
-  windowPull,
-  onWindowPullChange,
   perspectiveCorrection,
   onPerspectiveCorrectionChange,
   removeReflections,
@@ -1312,6 +1310,8 @@ function Stage2({
   photoUrls,
   setPhotoUrls,
 }: {
+  finish: Finish;
+  onFinishChange: (finish: Finish) => void;
   inputs: Photo[];
   selection: Set<string>;
   onToggle: (id: string) => void;
@@ -1319,12 +1319,8 @@ function Stage2({
   onProviderChange: (p: AiProvider) => void;
   autoDetect: boolean;
   onAutoDetectChange: (b: boolean) => void;
-  enhancementStyle: EnhancementStyle;
-  onEnhancementStyleChange: (s: EnhancementStyle) => void;
   skyStyle: SkyStyle;
   onSkyStyleChange: (s: SkyStyle) => void;
-  windowPull: boolean;
-  onWindowPullChange: (b: boolean) => void;
   perspectiveCorrection: boolean;
   onPerspectiveCorrectionChange: (b: boolean) => void;
   removeReflections: boolean;
@@ -1411,11 +1407,12 @@ function Stage2({
 
           {!autoEnhanceOnUpload && (
           <>
+          {provider !== 'oceano-enhance' && <FinishControls value={finish} onChange={onFinishChange} disabled={running} />}
           <section className="card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="text-sm font-semibold text-slate-800">Ready to enhance</div>
               <p className="text-xs text-slate-500 mt-0.5 max-w-prose">
-                One click runs the signature look — accurate, bright, airy, windows held. Open{' '}
+                Creates a new version with your chosen finish. Compare one photo before running a full set. Open{' '}
                 <button
                   type="button"
                   onClick={() => setShowAdvanced((v) => !v)}
@@ -1446,7 +1443,7 @@ function Stage2({
             className="text-xs font-medium text-slate-500 hover:text-slate-700 inline-flex items-center gap-1"
           >
             <ChevronRight className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
-            Advanced — provider, style, sky, and per-photo fixes
+            Advanced — engine and optional retouching
           </button>
 
           {showAdvanced && (
@@ -1457,19 +1454,6 @@ function Stage2({
               <span className="text-[11px] text-slate-400">Applied to this run</span>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Enhancement style
-                </label>
-                <select
-                  className="input mt-1"
-                  value={enhancementStyle}
-                  onChange={(e) => onEnhancementStyleChange(e.target.value as EnhancementStyle)}
-                >
-                  <option value="signature">Signature (full luxury finish)</option>
-                  <option value="natural">Natural (restrained)</option>
-                </select>
-              </div>
               <div>
                 <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
                   Sky style
@@ -1486,15 +1470,6 @@ function Stage2({
                   ))}
                 </select>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer sm:mt-5">
-                <input
-                  type="checkbox"
-                  checked={windowPull}
-                  onChange={(e) => onWindowPullChange(e.target.checked)}
-                  className="h-4 w-4 rounded accent-ocean-600"
-                />
-                <span className="text-sm text-slate-700">Window pulls</span>
-              </label>
               <label className="flex items-center gap-2 cursor-pointer sm:mt-5">
                 <input
                   type="checkbox"
@@ -1525,15 +1500,13 @@ function Stage2({
             </div>
             {provider === 'oceano-enhance' ? (
               <p className="text-[11px] text-slate-400">
-                The Oceano engine is deterministic — it never redraws content. It applies window
-                pulls and perspective correction directly; <span className="text-slate-500">Enhancement
+                Basic correction applies exposure and color adjustments; <span className="text-slate-500">Enhancement
                 style, Sky style, reflections and face-blur are prompt directives that only take
                 effect when a generative provider (below) runs the job.</span>
               </p>
             ) : (
               <p className="text-[11px] text-slate-400">
-                Whites stay neutral, the property is preserved exactly (MLS-accurate), and color is
-                enhanced to the lux signature look. Reflection &amp; face-blur edits only affect those
+                The AI targets neutral whites and the selected photographic finish. Compare details before delivery. Reflection &amp; face-blur edits only affect those
                 elements; sky replacement only runs on exteriors when a preset is chosen.
               </p>
             )}
@@ -1549,8 +1522,8 @@ function Stage2({
                 value={provider}
                 onChange={(e) => onProviderChange(e.target.value as AiProvider)}
               >
-                <option value="oceano-enhance">Oceano Smart Enhance (default)</option>
-                <option value="openai-gpt-image">GPT Image 2.0</option>
+                <option value="oceano-enhance">Basic correction (no AI finish)</option>
+                <option value="openai-gpt-image">GPT Image 2.5 Sunburst</option>
                 <option value="gemini-nano-banana-2">Nano Banana 2 (Gemini)</option>
                 <option value="gemini-nano-banana-pro">Nano Banana Pro (Gemini)</option>
                 <option value="auto">Auto pick</option>

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { SettingsNav } from '@/components/layout/SettingsNav';
 import { EnhanceSettingsForm } from '@/components/settings/EnhanceSettingsForm';
+import { FinishDefaultsPanel } from '@/components/settings/FinishDefaultsPanel';
 import { AutoEnhanceToggle } from '@/components/settings/AutoEnhanceToggle';
 import { LUXURY_BASELINE } from '@/lib/ai/oceano-enhance/pipeline';
 
@@ -68,11 +69,11 @@ export default async function EnhanceSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-ocean-950">Settings</h1>
         <p className="text-sm text-slate-600">
-          Tune the Oceano Enhance luxury grade and preview it against a real upload. Saved
-          values drive every enhance.
+          Set AI finish defaults in the photo editor. These controls tune basic correction and preview it against an upload.
         </p>
       </div>
       <SettingsNav />
+      <FinishDefaultsPanel />
       <AutoEnhanceToggle initial={autoEnhanceOnUpload} />
       <EnhanceSettingsForm initial={initial} recent={recent} />
     </div>

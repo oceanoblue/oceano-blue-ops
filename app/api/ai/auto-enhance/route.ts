@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { loadFinishDefaults } from '@/lib/ai/finish-settings';
 import { getProvider } from '@/lib/ai';
 import { buildAutoEnhanceJobRow } from '@/lib/ai/auto-enhance';
 
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
     );
   }
 
+  const finishDefaults = await loadFinishDefaults();
   const rows = eligible.map((p) =>
     buildAutoEnhanceJobRow({
       orderId: order_id,
@@ -104,6 +106,7 @@ export async function POST(request: Request) {
       providerId: enhanceProvider.id,
       createdBy: user.id,
       sceneFixes,
+      finish: finishDefaults.auto,
     })
   );
   const { data: inserted, error: insErr } = await admin.from('ai_jobs').insert(rows).select('id');

@@ -1,14 +1,16 @@
 import sharp from 'sharp';
+import { findWindowReference } from './window-reference';
+import { loadFinishDefaults } from './finish-settings';
+import { recipeFromParams } from './recipe';
 import { v4 as uuidv4 } from 'uuid';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getProvider } from './index';
 import { analyzePhoto, planEdits } from './vision-analyze';
 import { buildAutoEnhanceJobRow } from './auto-enhance';
-import { editEngineConfigured, runEditEngine } from './edit-engine';
 import { getTemporaryLink } from '@/lib/integrations/dropbox';
 import { captureError } from '@/lib/observability/report';
 import { profileFor } from '@/lib/photos/profiles';
-import type { AiJob, Photo } from '@/lib/supabase/database.types';
+import type { Photo } from '@/lib/supabase/database.types';
 import type { SourceImage } from './types';
 
 // Delivery target long edge. By default we DO NOT upscale — enhance outputs are
@@ -85,10 +87,7 @@ export async function runAiJob(jobId: string): Promise<{
     return { jobId, status: 'skipped' };
   }
   const job = claimed as any;
-  await supabase
-    .from('photos')
-    .update({ processing_status: 'running' })
-    .in('id', job.input_photo_ids);
+
 
   try {
     // 2. Load input bytes.
@@ -136,7 +135,8 @@ export async function runAiJob(jobId: string): Promise<{
     } else {
       const { data: loaded } = await supabase.from('photos').select('*').in('id', job.input_photo_ids);
       if (!loaded?.length) throw new Error('No input photos found');
-      inputs = loaded as Photo[];
+      inputs = (job.input_photo_ids as string[]).map(id => (loaded as Photo[]).find(p => p.id === id)).filter((p): p is Photo => !!p);
+      if (inputs.length !== job.input_photo_ids.length || inputs.some(p => p.order_id !== job.order_id)) throw new Error('invalid_job_inputs');
       sources = await Promise.all(
       inputs.map(async (p: Photo) => {
         // Cloud pipeline: the RAW lives in Dropbox (per-order intake folder), not
@@ -240,6 +240,22 @@ export async function runAiJob(jobId: string): Promise<{
       .maybeSingle();
     const profile = profileFor((order as any)?.project_type);
     const provider = getProvider((job.provider as any) ?? 'auto', job.job_type);
+    const recipe = recipeFromParams(job.params);
+    let referencePhotoId: string | null = null;
+    const wantsWindows = recipe?.finish ? recipe.finish.windows !== 'off' : recipe?.directives?.windowPull === true;
+    if (((provider.id !== 'oceano-enhance' && wantsWindows) || job.job_type === 'window_pull') && inputs[0]) {
+      const reference = await findWindowReference(supabase, inputs[0].id, job.order_id);
+      if (reference) {
+        sources = [sources[0], reference.source];
+        referencePhotoId = reference.photoId;
+      } else if (job.job_type === 'window_pull') {
+        throw new Error('window_reference_missing: this photo needs a darker exposure from its original bracket');
+      }
+    }
+    if (provider.id !== 'oceano-enhance' || !['hdr_merge', 'enhance_single'].includes(job.job_type)) {
+      const { error: markerError } = await supabase.from('ai_jobs').update({ params: { ...job.params, paid_request_started: true } }).eq('id', jobId).eq('status', 'running');
+      if (markerError) throw new Error('paid_request_marker_failed');
+    }
     const resp = await provider.process({
       jobType: job.job_type,
       inputs: sources,
@@ -257,7 +273,6 @@ export async function runAiJob(jobId: string): Promise<{
     // (migration 0050) and docs/HANDOFF-photo-quality.md.
     const isGenerative = (job.provider ?? 'oceano-enhance') !== 'oceano-enhance';
     const trainingPairRows: any[] = [];
-    let lookTransferred = false;
     for (const out of resp.outputs) {
       // Optional enlargement: only if DELIVERY_LONG_EDGE is set ABOVE the output's
       // real size (default 0 = never). We do not upscale by default — interpolating
@@ -266,39 +281,8 @@ export async function runAiJob(jobId: string): Promise<{
       let bytes = out.bytes;
       let mimeType = out.mimeType;
 
-      // LOOK TRANSFER — the fix for "GPT looks right but pixelates": generative
-      // models top out around 3.5MP, far under a 24–61MP master. For a plain
-      // enhance (a global relight — no content edits requested), the render is
-      // used as a GRADE REFERENCE only: the engine re-creates its tone/colour
-      // on the full-resolution input via monotone per-channel quantile mapping.
-      // The deliverable is then 100% real camera pixels at native res — no
-      // upscaling softness and definitionally zero hallucinated content.
-      // Content-editing job types (declutter / staging / sky / twilight) keep
-      // the raw render: there the changed pixels ARE the product. Best-effort:
-      // engine down → ship the render as before. LOOK_TRANSFER=off disables.
-      if (
-        isGenerative &&
-        job.job_type === 'enhance_single' &&
-        editEngineConfigured() &&
-        process.env.LOOK_TRANSFER !== 'off' &&
-        sources[0]?.mimeType === 'image/jpeg'
-      ) {
-        try {
-          bytes = await runEditEngine(
-            [
-              { bytes: sources[0].bytes as Buffer, filename: sources[0].filename ?? 'original.jpg' },
-              { bytes: out.bytes, filename: 'reference.jpg' },
-            ],
-            { mode: 'look', targetLongEdge: 0, quality: 95 }
-          );
-          mimeType = 'image/jpeg';
-          lookTransferred = true;
-        } catch (lookErr) {
-          captureError('ai.runner.lookTransfer', lookErr, { jobId, orderId: job.order_id });
-          bytes = out.bytes; // fall back to the raw render
-        }
-      }
-      const thisOutputTransferred = lookTransferred && bytes !== out.bytes;
+      // Preserve the selected AI finish. Global LUT transfer cannot reproduce
+      // spatial relighting or window recovery; it is not an enhancement fallback.
       // Name the output after the ORIGINAL frame, not the job type. The merged
       // base keeps the plain name (e.g. OBM03968.jpg); every enhanced output
       // gets a single "-enhanced" suffix (OBM03968-enhanced.jpg) — never
@@ -310,7 +294,7 @@ export async function runAiJob(jobId: string): Promise<{
       let filename = job.job_type === 'hdr_merge' ? `${baseName}.jpg` : `${baseName}-enhanced.jpg`;
       // (skipped after a look transfer — bytes are already native resolution,
       // and this block measures the RAW render, which would clobber them)
-      if (job.job_type !== 'hdr_merge' && !thisOutputTransferred) {
+      if (job.job_type !== 'hdr_merge') {
         try {
           const src = await sharp(out.bytes).metadata();
           const longEdge = Math.max(src.width ?? 0, src.height ?? 0);
@@ -346,6 +330,7 @@ export async function runAiJob(jobId: string): Promise<{
         id: photoId,
         order_id: job.order_id,
         kind: 'processed',
+        is_selected: null, // Draft: never deliver a new version before review.
         parent_photo_id: inputs[0]?.id,
         storage_path: storagePath,
         bucket: 'processed-photos',
@@ -364,7 +349,7 @@ export async function runAiJob(jobId: string): Promise<{
         // Reproducibility: link the output to its job and stash the full recipe
         // so this edit can be re-run, tweaked, or applied to other frames.
         source_job_id: jobId,
-        ai_recipe: (job.params as any)?.recipe ?? null,
+        ai_recipe: recipe ? { ...recipe, source_photo_id: inputs[0]?.id, provenance: { ...resp.provenance, windowReferencePhotoId: referencePhotoId, windowReferenceStatus: referencePhotoId ? 'available' : 'not_available' } } as any : null,
       });
       if (insErr) throw new Error(`Photo insert failed: ${insErr.message}`);
       outputPhotoIds.push(photoId);
@@ -408,9 +393,7 @@ export async function runAiJob(jobId: string): Promise<{
         completed_at: new Date().toISOString(),
         duration_ms: durationMs,
         cost_cents: resp.costCents,
-        // "+look-v1" = the render was used as a grade reference and the
-        // deliverable is the native-res original wearing that grade.
-        model: lookTransferred ? `${resp.model}+look-v1` : resp.model,
+        model: resp.model,
         output_photo_ids: outputPhotoIds,
       })
       .eq('id', jobId);
@@ -499,6 +482,7 @@ export async function runAiJob(jobId: string): Promise<{
           const sceneFixes = (bs as any)?.auto_scene_fixes !== false; // default on
           const enhanceProvider = getProvider('auto', 'enhance_single');
           if (enhanceProvider.isConfigured()) {
+            const finishDefaults = await loadFinishDefaults();
             const rows: any[] = [];
             for (const baseId of outputPhotoIds) {
               const { data: existing } = await supabase
@@ -516,6 +500,7 @@ export async function runAiJob(jobId: string): Promise<{
                   providerId: enhanceProvider.id,
                   createdBy: job.created_by,
                   sceneFixes,
+                  finish: finishDefaults.auto,
                 })
               );
             }
@@ -546,10 +531,7 @@ export async function runAiJob(jobId: string): Promise<{
         duration_ms: Date.now() - startedAt,
       })
       .eq('id', jobId);
-    await supabase
-      .from('photos')
-      .update({ processing_status: 'failed' })
-      .in('id', job.input_photo_ids);
+
 
     return { jobId, status: 'failed', error: message };
   }

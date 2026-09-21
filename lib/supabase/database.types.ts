@@ -2026,6 +2026,7 @@ export type Database = {
       }
       oceano_enhance_settings: {
         Row: {
+          finish_defaults: Json
           blacks: number
           contrast: number
           exposure: number
@@ -2045,6 +2046,7 @@ export type Database = {
           whites: number
         }
         Insert: {
+          finish_defaults?: Json
           blacks?: number
           contrast?: number
           exposure?: number
@@ -2064,6 +2066,7 @@ export type Database = {
           whites?: number
         }
         Update: {
+          finish_defaults?: Json
           blacks?: number
           contrast?: number
           exposure?: number

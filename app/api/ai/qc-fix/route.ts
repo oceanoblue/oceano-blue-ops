@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       order_id: resolved.orderId,
       job_type: recipe.job_type,
       provider: provider.id,
-      input_photo_ids: resolved.inputs,
+      input_photo_ids: recipe.version === 2 ? [f.photo_id] : resolved.inputs,
       prompt: recipe.prompt,
       status: 'pending' as const,
       created_by: user.id,

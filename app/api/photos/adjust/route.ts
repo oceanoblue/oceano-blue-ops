@@ -69,23 +69,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'photo_not_found' }, { status: 404 });
   }
 
-  // Always re-render from the raw parent if there is one — that way successive
-  // adjustments don't compound on top of each other.
-  let sourceBucket = src.bucket;
-  let sourcePath = src.storage_path;
-  let parentId: string = src.id;
-  if (src.parent_photo_id) {
-    const { data: parent } = await admin
-      .from('photos')
-      .select('bucket, storage_path, filename')
-      .eq('id', src.parent_photo_id)
-      .maybeSingle();
-    if (parent) {
-      sourceBucket = parent.bucket;
-      sourcePath = parent.storage_path;
-      parentId = src.parent_photo_id;
-    }
-  }
+  // Adjust the selected finished version, never an earlier raw parent.
+  const sourceBucket = src.bucket;
+  const sourcePath = src.storage_path;
+  const parentId = src.id;
 
   const { data: file, error: dlErr } = await admin.storage
     .from(sourceBucket)
@@ -95,7 +82,7 @@ export async function POST(request: Request) {
   }
 
   const buf = Buffer.from(await file.arrayBuffer());
-  const result = await enhanceSingle(buf, parsed.data.options);
+  const result = await enhanceSingle(buf, parsed.data.options, 'adjustment');
 
   // Persist as a new processed photo sibling
   const newId = uuidv4();
@@ -118,6 +105,7 @@ export async function POST(request: Request) {
       id: newId,
       order_id: src.order_id,
       kind: 'processed',
+      is_selected: null, // Draft: preserve the previously approved version.
       parent_photo_id: parentId,
       storage_path: newPath,
       bucket: 'processed-photos',
@@ -128,7 +116,8 @@ export async function POST(request: Request) {
       byte_size: result.bytes.byteLength,
       processing_status: 'complete',
       ai_provider: 'oceano-enhance',
-      ai_prompt: `manual adjust (lift=${parsed.data.options.shadowLift ?? 'd'}, hl=${parsed.data.options.highlightRecover ?? 'd'}, vib=${parsed.data.options.vibrance ?? 'd'})`,
+      ai_prompt: 'Tonal adjustment of the selected version',
+      ai_recipe: { kind: 'tone_adjustment', version: 2, source_photo_id: src.id, options: parsed.data.options } as any,
     })
     .select('id, filename')
     .single();
