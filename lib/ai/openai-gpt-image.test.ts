@@ -19,7 +19,7 @@ describe('Sunburst adapter', () => {
     const req = request(); req.inputs.push({ ...req.inputs[0], filename: 'dark.jpg' });
     const out = await openaiGptImage.process(req);
     const call = mocks.edit.mock.calls[0][0];
-    expect(call).toMatchObject({ model: 'gpt-image-2.5-sunburst', quality: 'xhigh', size: '128x192', output_format: 'jpeg' });
+    expect(call).toMatchObject({ model: 'gpt-image-2.5-sunburst', quality: 'xhigh', size: '128x192', output_format: 'png' });
     expect(call.image.map((f: File) => f.name)).toEqual(['portrait.jpg','dark.jpg']);
     expect(call.input_fidelity).toBeUndefined();
     expect(out.outputs[0].bytes).toEqual(source);
@@ -43,4 +43,17 @@ describe('Sunburst adapter', () => {
     finally { vi.unstubAllGlobals(); }
     expect(mocks.edit).not.toHaveBeenCalled();
   });
+});
+
+it('runs the chosen Flare model and retains lossless output with surface protections', async () => {
+  const png = await sharp(source).png().toBuffer();
+  mocks.edit.mockResolvedValue({ data: [{ b64_json: png.toString('base64') }] });
+  const req = request();
+  req.params.recipe = createEnhanceRecipe('openai-gpt-image', {}, { ...DEFAULT_FINISH, model: 'gpt-image-2.5-flare' });
+  const result = await openaiGptImage.process(req);
+  expect(mocks.edit.mock.calls[0][0]).toMatchObject({model:'gpt-image-2.5-flare',output_format:'png'});
+  expect(mocks.edit.mock.calls[0][0].prompt).toContain('SURFACE FIDELITY');
+  expect(result.outputs[0].bytes).toEqual(png);
+  expect(result.outputs[0].mimeType).toBe('image/png');
+  expect(result.provenance?.outputFormat).toBe('png');
 });

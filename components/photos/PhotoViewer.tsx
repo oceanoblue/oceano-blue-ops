@@ -16,6 +16,7 @@ import {
   Camera,
   Send,
 } from 'lucide-react';
+import { CEILING_REPAIR, DEFAULT_FINISH, IMAGE_MODEL, IMAGE_MODELS, ImageModelSchema, type ImageModel } from '@/lib/ai/finishing';
 import type { Photo } from '@/lib/supabase/database.types';
 
 // Pipeline option shape — kept narrow so the viewer doesn't import server code.
@@ -115,6 +116,15 @@ export function PhotoViewer({
 
   // AI revision prompt
   const [aiPrompt, setAiPrompt] = useState('');
+  const [revisionModel, setRevisionModel] = useState<ImageModel>(IMAGE_MODEL);
+  const [aiNotice, setAiNotice] = useState('');
+  const storedModel = (photo?.ai_recipe as { model?: string } | null)?.model;
+  useEffect(() => {
+    const parsed = ImageModelSchema.safeParse(storedModel);
+    setRevisionModel(parsed.success ? parsed.data : IMAGE_MODEL);
+    setAiNotice('');
+    setAiPrompt('');
+  }, [photo?.id, storedModel]);
 
   const hasParent = Boolean(photo?.parent_photo_id);
 
@@ -312,8 +322,8 @@ export function PhotoViewer({
     window.open(url, '_blank');
   }
 
-  async function sendAiPrompt() {
-    if (!photo || !aiPrompt.trim()) return;
+  async function sendAiPrompt(correction = aiPrompt) {
+    if (!photo || !correction.trim() || busy) return;
     setBusy('ai');
     setError(null);
     try {
@@ -327,7 +337,8 @@ export function PhotoViewer({
           provider: 'openai-gpt-image',
           photo_ids: [photo.id],
           refinement: true,
-          prompt_extra: aiPrompt.trim(),
+          prompt_extra: correction.trim(),
+          finish: { ...DEFAULT_FINISH, model: revisionModel, windows: 'off', quality: 'xhigh' },
         }),
       });
       if (!r.ok) {
@@ -335,6 +346,7 @@ export function PhotoViewer({
         setError(j.error || 'ai_failed');
       } else {
         setAiPrompt('');
+        setAiNotice('Revision queued. A new draft will appear in Review; your current photo stays unchanged.');
         onPhotosChanged();
       }
     } finally {
@@ -435,7 +447,7 @@ export function PhotoViewer({
       </div>
 
       {/* ─── Main area: image + sidebar ────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 flex">
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row">
         {/* Image canvas */}
         <div className="flex-1 min-w-0 relative bg-neutral-900 grid place-items-center overflow-hidden">
           {/* Prev / next */}
@@ -553,11 +565,13 @@ export function PhotoViewer({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') sendAiPrompt();
               }}
+              aria-label="AI revision instructions"
               placeholder="Describe changes for AI revision…"
               className="flex-1 bg-transparent outline-none text-sm text-neutral-100 placeholder:text-neutral-500"
             />
             <button
-              onClick={sendAiPrompt}
+              aria-label="Create AI revision"
+              onClick={() => sendAiPrompt()}
               disabled={busy === 'ai' || !aiPrompt.trim()}
               className="h-7 w-7 grid place-items-center rounded-full bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-40"
             >
@@ -567,8 +581,19 @@ export function PhotoViewer({
         </div>
 
         {/* ─── Right sidebar ─────────────────────────────────────────────── */}
-        <aside className="w-80 shrink-0 border-l border-neutral-800 bg-neutral-900 overflow-y-auto">
+        <aside className="w-full max-h-[38dvh] md:max-h-none md:w-80 shrink-0 border-t md:border-t-0 md:border-l border-neutral-800 bg-neutral-900 overflow-y-auto">
           <div className="p-4 space-y-5">
+            <section className="rounded-xl border border-teal-800/60 bg-teal-950/40 p-4 space-y-3" aria-label="AI refinement">
+              <div><h3 className="text-sm font-semibold text-teal-100">Refine the photograph</h3><p className="mt-1 text-xs leading-relaxed text-neutral-300">Small corrections. A new version for review.</p></div>
+              <label className="block text-xs text-neutral-300">Revision model
+                <select aria-label="Revision model" disabled={!!busy} value={revisionModel} onChange={e => setRevisionModel(e.target.value as ImageModel)} className="mt-2 min-h-10 w-full rounded-lg border border-neutral-600 bg-neutral-900 px-2 text-sm text-white">
+                  {Object.entries(IMAGE_MODELS).map(([id,m]) => <option value={id} key={id}>{m.label} · {m.version}</option>)}
+                </select>
+              </label>
+              <button type="button" disabled={!!busy} onClick={() => { setAiPrompt(CEILING_REPAIR); setAiNotice('Ceiling cleanup is prepared. Review the instruction below the photo, then send to create a draft.'); }} className="min-h-10 w-full rounded-lg bg-teal-100 px-3 py-2 text-xs font-semibold text-teal-950 hover:bg-white disabled:opacity-50">Prepare ceiling cleanup</button>
+              <p className="text-[11px] leading-relaxed text-neutral-400">Targets artificial patches while retaining plaster texture and fixture shadows. AI revisions use Extra high quality; time and cost vary.</p>
+              {aiNotice && <p role="status" className="text-xs leading-relaxed text-teal-200">{aiNotice}</p>}
+            </section>
             {/* Presets */}
             <SidebarSection title="Profiles">
               <div className="grid grid-cols-5 gap-1.5">

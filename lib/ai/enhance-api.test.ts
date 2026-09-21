@@ -53,3 +53,16 @@ it('saved defaults affect only the defaults row, never existing photos',async()=
   expect(written).toHaveLength(1);
   expect(written[0].table).toBe('oceano_enhance_settings');
 });
+
+it('snapshots the chosen model for a targeted ceiling revision without reapplying the finish',async()=>{
+  const result = await POST(request({order_id:order,job_type:'enhance_single',photo_ids:[photo],refinement:true,prompt_extra:'Correct only artificial ceiling patches',finish:{model:'gpt-image-2.5-flare',quality:'xhigh',windows:'off'}}));
+  expect(result.status).toBe(200);
+  const row=written.find(w=>w.table==='ai_jobs').value[0];
+  expect(row.params.recipe).toMatchObject({model:'gpt-image-2.5-flare',refinement:true,source_photo_id:photo,finish:{windows:'off',quality:'xhigh'}});
+  expect(row.prompt).toContain('Apply ONLY');
+  expect(row.prompt).not.toContain('Substantially improve');
+});
+it('rejects unsupported model IDs before creating a job',async()=>{
+  expect((await POST(request({order_id:order,job_type:'enhance_single',finish:{model:'unrecognized-model'}}))).status).toBe(400);
+  expect(written).toEqual([]);
+});

@@ -63,7 +63,7 @@ it('keeps the selected version first and same-capture reference second',async()=
   const reference={source:{bytes:source,filename:'dark.jpg',mimeType:'image/jpeg'},photoId:'dark'};
   mocks.reference.mockResolvedValue(reference);
   await runAiJob('job');
-  expect(mocks.process.mock.calls[0][0].inputs.map((s:any)=>s.filename)).toEqual(['current.jpg','dark.jpg']);
+  expect(mocks.process.mock.calls[0][0].inputs.map((s:any)=>s.filename)).toEqual(['current.png','dark.jpg']);
   expect(tables.photos[1].ai_recipe.provenance.windowReferencePhotoId).toBe('dark');
 });
 it('keeps the last successful photo intact on failure',async()=>{
@@ -88,4 +88,16 @@ it('does not attach a reference when window detail is off',async()=>{
   await runAiJob('job');
   expect(mocks.reference).not.toHaveBeenCalled();
   expect(mocks.process.mock.calls[0][0].inputs).toHaveLength(1);
+});
+
+it('uses lossless input pixels and stores PNG edits with the matching extension',async()=>{
+  const png = await sharp(generated).png().toBuffer();
+  mocks.process.mockResolvedValue({outputs:[{bytes:png,mimeType:'image/png',filename:'finish.png'}],model:'gpt-image-2.5-flare',costCents:25});
+  await runAiJob('job');
+  const input = mocks.process.mock.calls[0][0].inputs[0];
+  expect(input.mimeType).toBe('image/png');
+  expect((await sharp(input.bytes).metadata()).format).toBe('png');
+  expect(await sharp(input.bytes).raw().toBuffer()).toEqual(await sharp(source).raw().toBuffer());
+  expect(uploaded).toEqual([png]);
+  expect(tables.photos[1]).toMatchObject({filename:'current-enhanced.png',mime_type:'image/png',is_selected:null});
 });

@@ -96,6 +96,9 @@ export async function runAiJob(jobId: string): Promise<{
     // 400 on anything labeled image/x-raw — so the RAW-passthrough decision is
     // per PROVIDER, not just per job type.
     const engineProvider = (job.provider ?? 'oceano-enhance') === 'oceano-enhance';
+    const losslessInput = job.provider === 'openai-gpt-image';
+    const inputMime = losslessInput ? 'image/png' : 'image/jpeg';
+    const inputName = (name: string) => losslessInput ? name.replace(/\.[^.]+$/, '') + '.png' : name;
     const deterministic =
       engineProvider && (job.job_type === 'hdr_merge' || job.job_type === 'enhance_single');
 
@@ -127,9 +130,9 @@ export async function runAiJob(jobId: string): Promise<{
           const processed = await sharp(bytes)
             .rotate()
             .resize({ width: AI_INPUT_LONG_EDGE, height: AI_INPUT_LONG_EDGE, fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
-            .jpeg({ quality: 92, mozjpeg: true })
+            .toFormat(losslessInput ? 'png' : 'jpeg', losslessInput ? { compressionLevel: 3 } : { quality: 96, chromaSubsampling: '4:4:4' })
             .toBuffer();
-          return { bytes: processed, filename: name, mimeType: 'image/jpeg' } as SourceImage;
+          return { bytes: processed, filename: inputName(name), mimeType: inputMime } as SourceImage;
         })
       );
     } else {
@@ -166,9 +169,9 @@ export async function runAiJob(jobId: string): Promise<{
           const dbxProcessed = await sharp(dbxBytes)
             .rotate()
             .resize({ width: AI_INPUT_LONG_EDGE, height: AI_INPUT_LONG_EDGE, fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
-            .jpeg({ quality: 92, mozjpeg: true })
+            .toFormat(losslessInput ? 'png' : 'jpeg', losslessInput ? { compressionLevel: 3 } : { quality: 96, chromaSubsampling: '4:4:4' })
             .toBuffer();
-          return { bytes: dbxProcessed, filename: dbxName, mimeType: 'image/jpeg', bracketIndex: (p.exif as any)?.ExposureBiasValue };
+          return { bytes: dbxProcessed, filename: inputName(dbxName), mimeType: inputMime, bracketIndex: (p.exif as any)?.ExposureBiasValue };
         }
 
         const rawPath = (p as any).raw_storage_path as string | null | undefined;
@@ -208,7 +211,7 @@ export async function runAiJob(jobId: string): Promise<{
               withoutEnlargement: true,
               kernel: 'lanczos3',
             })
-            .jpeg({ quality: 92, mozjpeg: true })
+            .toFormat(losslessInput ? 'png' : 'jpeg', losslessInput ? { compressionLevel: 3 } : { quality: 96, chromaSubsampling: '4:4:4' })
             .toBuffer();
         } catch (decodeErr) {
           if (looksRaw) {
@@ -223,8 +226,8 @@ export async function runAiJob(jobId: string): Promise<{
         }
         return {
           bytes: processed,
-          filename: p.filename,
-          mimeType: 'image/jpeg',
+          filename: inputName(p.filename),
+          mimeType: inputMime,
           bracketIndex: (p.exif as any)?.ExposureBiasValue,
         };
       })
@@ -315,6 +318,7 @@ export async function runAiJob(jobId: string): Promise<{
         }
       }
 
+      filename = filename.replace(/\.jpg$/, mimeType === 'image/png' ? '.png' : mimeType === 'image/webp' ? '.webp' : '.jpg');
       const photoId = uuidv4();
       const storagePath = `${job.order_id}/${photoId}-${filename}`;
       const { error: upErr } = await supabase.storage

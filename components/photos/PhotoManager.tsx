@@ -1406,7 +1406,7 @@ function Stage2({
 
           {!autoEnhanceOnUpload && (
           <>
-          {provider !== 'oceano-enhance' && <FinishControls value={finish} onChange={onFinishChange} disabled={running} />}
+          {provider !== 'oceano-enhance' && <FinishControls value={finish} onChange={onFinishChange} disabled={running} showModels={provider === 'openai-gpt-image' || provider === 'auto'} />}
           <section className="card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="text-sm font-semibold text-slate-800">Ready to enhance</div>
@@ -1522,7 +1522,7 @@ function Stage2({
                 onChange={(e) => onProviderChange(e.target.value as AiProvider)}
               >
                 <option value="oceano-enhance">Basic correction (no AI finish)</option>
-                <option value="openai-gpt-image">GPT Image 2.5 Sunburst</option>
+                <option value="openai-gpt-image">GPT Image 2.5 · choose model above</option>
                 <option value="gemini-nano-banana-2">Nano Banana 2 (Gemini)</option>
                 <option value="gemini-nano-banana-pro">Nano Banana Pro (Gemini)</option>
                 <option value="auto">Auto pick</option>
