@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { ArrowUpRight, Check, ScanLine, Sparkles, Sun, Zap } from 'lucide-react';
 import { DEFAULT_FINISH_DEFAULTS, FINISH_STYLES, IMAGE_MODEL, IMAGE_MODELS, FinishDefaultsSchema, type Finish, type FinishDefaults, type ImageModel } from '@/lib/ai/finishing';
 
@@ -83,7 +84,7 @@ export function FinishControls({ value, onChange, disabled = false, showModels =
                 className={`group overflow-hidden rounded-2xl border text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a5e4d5] disabled:opacity-50 ${active ? 'border-[#a5e4d5] bg-[#1c4145] ring-1 ring-[#a5e4d5]' : 'border-white/15 bg-[#183438] hover:border-white/40'}`}>
                 <div className="relative aspect-[16/10] overflow-hidden">
                   {/* Existing brand photographs illustrate a mood, never a simulated render. */}
-                  <img src={ref.image} alt="" loading="lazy" className="h-full w-full object-cover transition duration-500 motion-safe:group-hover:scale-105" />
+                  <Image src={ref.image} alt="" fill sizes="(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw" className="object-cover transition duration-500 motion-safe:group-hover:scale-105" />
                   <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/65 to-transparent" />
                   <span className="absolute bottom-3 left-3 text-[10px] font-medium uppercase tracking-[0.12em] text-white">{ref.note}</span>
                   {active && <span className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-[#a5e4d5] text-[#102a2e] shadow"><Check className="h-4 w-4" /></span>}
