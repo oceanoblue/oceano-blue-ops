@@ -22,7 +22,7 @@ const request=(body:any={request_id:id,previous,scheduled_at:next})=>new Request
 it('uses the authenticated client identity and assigned photographer for availability and commit',async()=>{
   expect((await POST(request(),ctx)).status).toBe(200);
   expect(filters).toContainEqual(['orders','client_id',['client']]);
-  expect(getAvailability).toHaveBeenCalledWith(expect.any(String),90,'assigned');
+  expect(getAvailability).toHaveBeenCalledWith(expect.any(String),90,'assigned',{productIds:[],zip:undefined});
   expect(rpc).toHaveBeenCalledWith('commit_client_reschedule',expect.objectContaining({p_client_ids:['client'],p_photographer_id:'assigned',p_duration:90}));
 });
 it('requires login and ownership before reading availability',async()=>{

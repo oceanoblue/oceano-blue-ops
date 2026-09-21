@@ -42,7 +42,7 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
 
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, status, scheduled_at, delivered_at, order_number, total_cents, download_paid_at, photographer_id')
+    .select('id, status, scheduled_at, delivered_at, order_number, total_cents, download_paid_at, photographer_id, assignment_state')
     .eq('listing_id', params.id)
     .in('client_id', clientIds)
     .order('created_at', { ascending: false });
@@ -123,7 +123,7 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
         backHref="/portal/listings"
         backLabel="All listings"
       >
-        {latest && <StatusBadge status={latest.status} />}
+        {latest && (latest.assignment_state && latest.assignment_state!=='confirmed' ? <span className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{latest.assignment_state==='needs_attention'?'Our team is arranging your photographer':'Time reserved · awaiting photographer confirmation'}</span> : <StatusBadge status={latest.status} />)}
         {signed.length > 0 && (
           <Link
             href={`/api/portal/zip?listing_id=${l.id}`}

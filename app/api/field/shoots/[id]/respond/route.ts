@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
-import { afterContractorResponse } from '@/lib/field/respond';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { recordContractorResponse, afterContractorResponse } from '@/lib/field/respond';
 
 /**
  * Contractor accepts or declines their assigned shoot from the portal. The
@@ -11,6 +11,7 @@ import { afterContractorResponse } from '@/lib/field/respond';
  * is notified and the answer is mirrored onto the Google Calendar invite.
  */
 const Body = z.object({
+  round: z.number().int().min(0).default(0),
   response: z.enum(['accepted', 'declined']),
   note: z.string().max(2000).optional(),
 });
@@ -26,25 +27,11 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
   const parsed = Body.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: 'validation_failed' }, { status: 400 });
 
-  // Ownership + the write are enforced inside the RPC.
-  const { data, error } = await supabase.rpc('respond_to_assignment', {
-    p_order_id: params.id,
-    p_response: parsed.data.response,
-    p_note: parsed.data.note?.trim() || undefined,
-  });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-  const res = data as { ok?: boolean; reason?: string } | null;
-  if (!res?.ok) {
-    const reason = res?.reason;
-    const msg =
-      reason === 'not_your_assignment'
-        ? "This shoot isn't assigned to you."
-        : reason === 'no_contractor_for_this_login'
-          ? 'Your account isn’t registered as a photographer yet.'
-          : reason || 'Could not save your response.';
-    return NextResponse.json({ error: msg, reason }, { status: 400 });
-  }
+  const admin=createAdminClient() as any;
+  const {data:contractor}=await admin.from('contractors').select('id').eq('auth_user_id',user.id).eq('is_active',true).maybeSingle();
+  if(!contractor)return NextResponse.json({error:'No photographer profile for this account.'},{status:403});
+  const result=await recordContractorResponse({orderId:params.id,contractorId:contractor.id,round:parsed.data.round,response:parsed.data.response,note:parsed.data.note});
+  if(!result.ok)return NextResponse.json({error:'This assignment changed or expired. Refresh your shoots.'},{status:409});
 
   await afterContractorResponse({
     orderId: params.id,

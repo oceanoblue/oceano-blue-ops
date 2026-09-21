@@ -793,6 +793,8 @@ export type Database = {
       }
       business_settings: {
         Row: {
+          scheduling_dispatch_enabled: boolean
+          assignment_timeout_minutes: number
           gallery_watermark_enabled: boolean
           ai_editing_enabled: boolean
           auto_enhance_on_upload: boolean
@@ -809,6 +811,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          scheduling_dispatch_enabled?: boolean
+          assignment_timeout_minutes?: number
           gallery_watermark_enabled?: boolean
           ai_editing_enabled?: boolean
           auto_enhance_on_upload?: boolean
@@ -825,6 +829,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          scheduling_dispatch_enabled?: boolean
+          assignment_timeout_minutes?: number
           gallery_watermark_enabled?: boolean
           ai_editing_enabled?: boolean
           auto_enhance_on_upload?: boolean
@@ -2277,6 +2283,11 @@ export type Database = {
       }
       orders: {
         Row: {
+          assignment_state: string
+          assignment_due_at: string | null
+          assignment_round: number
+          auto_dispatch: boolean
+          assignment_attempted_ids: string[]
           archived_at: string | null
           client_id: string
           client_notes: string | null
@@ -2319,6 +2330,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assignment_state?: string
+          assignment_due_at?: string | null
+          assignment_round?: number
+          auto_dispatch?: boolean
+          assignment_attempted_ids?: string[]
           archived_at?: string | null
           client_id: string
           client_notes?: string | null
@@ -2361,6 +2377,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assignment_state?: string
+          assignment_due_at?: string | null
+          assignment_round?: number
+          auto_dispatch?: boolean
+          assignment_attempted_ids?: string[]
           archived_at?: string | null
           client_id?: string
           client_notes?: string | null

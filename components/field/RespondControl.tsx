@@ -14,10 +14,12 @@ type Response = 'accepted' | 'declined' | null;
  */
 export function RespondControl({
   orderId,
+  round,
   response,
   note,
 }: {
   orderId: string;
+  round: number;
   response: Response;
   note: string | null;
 }) {
@@ -36,7 +38,7 @@ export function RespondControl({
       const r = await fetch(`/api/field/shoots/${orderId}/respond`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ response: kind, note: noteText?.trim() || undefined }),
+        body: JSON.stringify({ round, response: kind, note: noteText?.trim() || undefined }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `Failed (${r.status})`);

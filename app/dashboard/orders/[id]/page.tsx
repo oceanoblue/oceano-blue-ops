@@ -1,3 +1,4 @@
+import { assignmentLabel } from '@/lib/booking/routing';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, CalendarDays, UserRound, Receipt, MapPin, Globe, Settings2 } from 'lucide-react';
@@ -279,7 +280,7 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
             </details>
           </div>
           <div className="min-w-0 space-y-6">
-            <section className="card p-5 sm:p-6"><h2 className="mb-4 text-xl font-semibold">Schedule & team</h2>
+            <section className="card p-5 sm:p-6"><h2 className="mb-4 text-xl font-semibold">Schedule & team</h2><p className={`mb-4 rounded-lg p-3 text-sm ${assignmentLabel(order)==='Confirmed'?'bg-emerald-50 text-emerald-800':'bg-amber-50 text-amber-900'}`}>{assignmentLabel(order)}{order.assignment_due_at&&order.assignment_state==='awaiting_response'&&<span className="mt-1 block text-xs">Response due {fmtDateTimeTz(order.assignment_due_at,order.timezone)}{order.auto_dispatch?' · Backup will be checked automatically.':' · Office-managed assignment.'}</span>}</p>
             <dl className="text-sm space-y-2">
               <Row label="Scheduled">{fmtDateTimeTz(order.scheduled_at, (order as any).timezone)}</Row>
               <Row label="Duration">{order.duration_minutes} min</Row>

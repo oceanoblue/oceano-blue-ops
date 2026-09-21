@@ -13,7 +13,7 @@ import { syncShootCalendar } from '@/lib/google-calendar/sync-shoot';
  *
  * Collapses the old 4-screen chain (client → listing → order → assign+link)
  * into one submit. The link/email are still explicit: we create the link but
- * never auto-email — sending stays a deliberate click on the order page.
+ * request acceptance automatically for a scheduled contractor; client messages stay separate.
  */
 const Body = z.object({
   // Client: attach to an existing one, or create inline via new_client.
@@ -250,6 +250,14 @@ export async function POST(request: Request) {
     }
   }
 
+  // Start a durable response request for a scheduled contractor assignment.
+  if(isContractor && b.scheduled_at) {
+    const {data:dispatchSettings}=await admin.from('business_settings').select('scheduling_dispatch_enabled,assignment_timeout_minutes').eq('id',true).single();
+    if(dispatchSettings?.scheduling_dispatch_enabled) {
+      const {error:offerError}=await admin.from('orders').update({assignment_round:1,assignment_state:'awaiting_response',auto_dispatch:false,assignment_due_at:new Date(Math.min(Date.parse(b.scheduled_at),Date.now()+(dispatchSettings.assignment_timeout_minutes||60)*60000)).toISOString()}).eq('id',order.id);
+      if(offerError){console.error('[shoots] assignment request failed:',offerError.message);intakeWarning=[intakeWarning,'The assignment request could not be queued. Open the order and reassign the photographer to retry.'].filter(Boolean).join(' ');}
+    }
+  }
   // Sync onto the office calendars (master + assignee). Fail-soft.
   try {
     await syncShootCalendar(order.id);

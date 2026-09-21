@@ -104,19 +104,7 @@ export function AssignShooterControl({
       // to the new shooter; the master stays). Fire-and-forget.
       fetch(`/api/orders/${orderId}/sync-calendar`, { method: 'POST' }).catch(() => {});
 
-      // Auto-notify the photographer the moment they're assigned (not just when
-      // the office remembers to hit the button). Non-fatal: the manual "Email
-      // upload link" button below is still there as a fallback / re-send.
-      const picked = sel ? shooters.find((x) => x.key === sel) : null;
-      if (picked?.kind === 'contractor') {
-        try {
-          const r = await fetch(`/api/orders/${orderId}/notify-contractor`, { method: 'POST' });
-          const d = await r.json().catch(() => ({}));
-          if (r.ok) setSentTo(d.to ?? picked.name);
-        } catch {
-          /* office can re-send with the button */
-        }
-      }
+      // Assignment notifications are queued atomically by the database.
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

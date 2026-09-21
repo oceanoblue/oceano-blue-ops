@@ -40,7 +40,7 @@ export async function mirrorGuestRsvps(opts: { baseUrl: string }): Promise<{
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: orders } = await admin
     .from('orders')
-    .select('id, contractor_id, contractors(email), order_calendar_events(calendar_id, event_id)')
+    .select('id, contractor_id, assignment_round, contractors(email), order_calendar_events(calendar_id, event_id)')
     .not('contractor_id', 'is', null)
     .is('contractor_response', null)
     .is('archived_at', null)
@@ -56,12 +56,13 @@ export async function mirrorGuestRsvps(opts: { baseUrl: string }): Promise<{
     checked += 1;
     try {
       const ev = await getEvent(actorId, master.calendar_id, master.event_id);
+      if(o.assignment_round>0 && ev?.description?.match(/Assignment version: (\d+)/)?.[1]!==String(o.assignment_round))continue;
       const guest = ev?.attendees.find((a) => a.email === email);
       const answer =
         guest?.responseStatus === 'accepted' ? 'accepted' : guest?.responseStatus === 'declined' ? 'declined' : null;
       if (!answer) continue;
 
-      const res = await recordContractorResponse({ orderId: o.id, contractorId: o.contractor_id, response: answer });
+      const res = await recordContractorResponse({ orderId: o.id, contractorId: o.contractor_id, response: answer, round: o.assignment_round });
       if (!res.ok) continue;
       mirrored += 1;
       logEvent('gcal.rsvp', 'mirrored', { orderId: o.id, answer });

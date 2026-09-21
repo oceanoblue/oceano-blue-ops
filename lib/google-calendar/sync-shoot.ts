@@ -113,12 +113,15 @@ export function sameEvent(ex: ExistingEvent, p: EventPayload): boolean {
 }
 
 /** Fill in RSVPs we don't want to touch with what Google currently has. */
-function carryForwardRsvps(payload: EventPayload, current: ExistingEvent): EventPayload {
+export function carryForwardRsvps(payload: EventPayload, current: ExistingEvent): EventPayload {
   if (!payload.attendees?.length) return payload;
+  const version=(text:string)=>text.match(/Assignment version: (\d+)/)?.[1] || '0';
+  const changed=version(payload.description||'')!==version(current.description||'');
   return {
     ...payload,
     attendees: payload.attendees.map((a) => {
       if (a.responseStatus) return a;
+      if(changed)return {...a,responseStatus:'needsAction' as const};
       const cur = current.attendees.find((c) => c.email === a.email.toLowerCase());
       return cur ? { ...a, responseStatus: cur.responseStatus } : a;
     }),
@@ -157,7 +160,7 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
   const { data: order, error: orderError } = await admin
     .from('orders')
     .select(
-      'id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, contractor_id, contractor_response, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
+      'id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, contractor_id, contractor_response, assignment_round, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
     )
     .eq('id', orderId)
     .maybeSingle();
@@ -256,7 +259,7 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
     // description — and therefore the event — doesn't change on every sync.
     const respondToken =
       guestEmail && order.contractor_id
-        ? signRespondToken(orderId, order.contractor_id, respondTokenExpiry(order.scheduled_at))
+        ? signRespondToken(orderId, order.contractor_id, respondTokenExpiry(order.scheduled_at), (order as any).assignment_round || undefined)
         : null;
     const respondUrl = respondToken ? respondPageUrl(base, respondToken) : null;
 
@@ -266,6 +269,7 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
       services ? `Services: ${services}` : null,
       respondUrl ? `Accept or decline: ${respondUrl}` : null,
       guestEmail && order.dropbox_intake_url ? `Upload RAWs: ${order.dropbox_intake_url}` : null,
+      `Assignment version: ${(order as any).assignment_round || 0}`,
       'Booked via Oceano Blue Ops',
     ]
       .filter(Boolean)

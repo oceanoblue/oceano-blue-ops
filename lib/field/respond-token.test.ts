@@ -36,3 +36,11 @@ describe('respond token', () => {
     expect(exp).toBe(Math.floor(Date.parse('2026-09-09T18:00:00Z') / 1000) + 30 * 86_400);
   });
 });
+
+it('binds a new response link to its assignment version',()=>{
+  const old=process.env.RESPOND_LINK_SECRET;process.env.RESPOND_LINK_SECRET='test-version-secret';
+  const one=signRespondToken('order','contractor',Math.floor(Date.now()/1000)+3600,1)!;
+  const two=signRespondToken('order','contractor',Math.floor(Date.now()/1000)+3600,2)!;
+  expect(one).not.toBe(two);expect(verifyRespondToken(one)?.r).toBe(1);
+  process.env.RESPOND_LINK_SECRET=old;
+});

@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils/cn';
 
 const DAYS = [
@@ -51,6 +50,8 @@ export function AvailabilityEditor({
   const [tz, setTz] = useState(rows[0]?.timezone ?? 'America/New_York');
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
+  const [error,setError]=useState('');
+
   function toggleDay(dow: number) {
     setDraft((d) => ({
       ...d,
@@ -77,24 +78,20 @@ export function AvailabilityEditor({
 
   function save() {
     start(async () => {
-      const supabase = createClient();
-      // Pull existing rows for this member, delete, then re-insert. Simpler
-      // than computing diffs and small N (max 7 rows).
-      await supabase.from('team_availability').delete().eq('team_member_id', member.id);
-      const rowsToInsert = Object.values(draft)
-        .filter((r): r is AvailabilityRow => !!r)
-        .map((r) => ({ ...r, timezone: tz, is_active: true }));
-      if (rowsToInsert.length) {
-        await supabase.from('team_availability').insert(rowsToInsert);
-      }
-      setSavedAt(new Date().toLocaleTimeString());
-      router.refresh();
+      setError(''); setSavedAt(null);
+      try {
+        const rowsToInsert=Object.values(draft).filter((r):r is AvailabilityRow=>!!r).map(r=>({...r,timezone:tz}));
+        const response=await fetch('/api/scheduling/hours',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({team_member_id:member.id,rows:rowsToInsert})});
+        const data=await response.json();
+        if(!response.ok)throw new Error(data.error||'Could not save hours.');
+        setSavedAt(new Date().toLocaleTimeString()); router.refresh();
+      } catch(e) { setError(e instanceof Error?e.message:'Could not save hours.'); }
     });
   }
 
   return (
     <section className="card p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="font-semibold text-ocean-900">{member.full_name}</h2>
           <p className="text-xs text-slate-500 capitalize">{member.role}</p>
@@ -118,12 +115,13 @@ export function AvailabilityEditor({
         )}
       </div>
 
+      {error&&<p role="alert" className="mb-3 text-sm text-rose-700">{error}</p>}
       <ul className="divide-y divide-slate-100">
         {DAYS.map(({ dow, label }) => {
           const row = draft[dow];
           const enabled = !!row;
           return (
-            <li key={dow} className="flex items-center gap-4 py-3">
+            <li key={dow} className="flex flex-wrap items-center gap-3 py-3">
               <button
                 type="button"
                 disabled={!canEdit}
@@ -146,7 +144,7 @@ export function AvailabilityEditor({
                 <div className="flex items-center gap-2 text-sm">
                   <input
                     type="time"
-                    className="input w-32"
+                    className="input w-28"
                     value={row.start_local.slice(0, 5)}
                     disabled={!canEdit}
                     onChange={(e) => setField(dow, 'start_local', e.target.value)}
@@ -154,7 +152,7 @@ export function AvailabilityEditor({
                   <span className="text-slate-500">to</span>
                   <input
                     type="time"
-                    className="input w-32"
+                    className="input w-28"
                     value={row.end_local.slice(0, 5)}
                     disabled={!canEdit}
                     onChange={(e) => setField(dow, 'end_local', e.target.value)}

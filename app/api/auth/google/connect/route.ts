@@ -16,8 +16,10 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(new URL('/login?next=/dashboard/settings/integrations', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'));
 
-  // state = team_member_id + random nonce (the nonce isn't stored — for v1 we
-  // accept the small CSRF surface since the user is already authenticated).
-  const state = `${user.id}.${randomBytes(8).toString('hex')}`;
-  return NextResponse.redirect(buildConsentUrl(state));
+  const {data:member}=await supabase.from('team_members').select('id,is_active').eq('id',user.id).maybeSingle();
+  if(!member?.is_active)return new Response('Forbidden',{status:403});
+  const state = `${user.id}.${randomBytes(32).toString('hex')}`;
+  const response=NextResponse.redirect(buildConsentUrl(state));
+  response.cookies.set('google_calendar_state',state,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',maxAge:600,path:'/api/auth/google'});
+  return response;
 }

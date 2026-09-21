@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { PhotographerSettings } from '@/components/scheduling/PhotographerSettings';
+import { calendarNeedsReconnect } from '@/lib/google-calendar/health';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { SettingsNav } from '@/components/layout/SettingsNav';
 import { AvailabilityEditor } from '@/components/settings/AvailabilityEditor';
 
@@ -14,10 +16,11 @@ export default async function AvailabilitySettingsPage() {
 
   const { data: me } = await supabase
     .from('team_members')
-    .select('id, full_name, role')
+    .select('id, full_name, role,is_active')
     .eq('id', user.id)
     .maybeSingle();
 
+  if(!me?.is_active)redirect('/field/shoots');
   const isAdmin = (me as any)?.role === 'admin';
 
   // Admins see everyone; everyone else sees themselves
@@ -35,6 +38,13 @@ export default async function AvailabilitySettingsPage() {
     .select('*')
     .in('team_member_id', visible.map((m: any) => m.id));
 
+  const admin=createAdminClient() as any;
+  const [profiles,products,blocks,connections]=await Promise.all([
+    admin.from('photographer_routing').select('*').in('team_member_id',visible.map(m=>m.id)),
+    admin.from('products').select('id,name').eq('is_active',true).order('name'),
+    admin.from('schedule_blocks').select('id,team_member_id,starts_at,ends_at,reason').in('team_member_id',visible.map(m=>m.id)).eq('is_available',false).gte('ends_at',new Date().toISOString()).order('starts_at'),
+    admin.from('team_calendar_connections').select('team_member_id,is_active,scope').in('team_member_id',visible.map(m=>m.id)).eq('provider','google'),
+  ]);
   return (
     <div className="space-y-8">
       <div>
@@ -50,12 +60,11 @@ export default async function AvailabilitySettingsPage() {
 
       <div className="space-y-8">
         {visible.map((m: any) => (
-          <AvailabilityEditor
-            key={m.id}
+          <div key={m.id} className="space-y-4"><AvailabilityEditor
             member={m}
             rows={(rows ?? []).filter((r: any) => r.team_member_id === m.id)}
             canEdit={isAdmin || m.id === user.id}
-          />
+          /><PhotographerSettings member={m} profile={profiles.data?.find((p:any)=>p.team_member_id===m.id)||null} products={products.data||[]} blocks={(blocks.data||[]).filter((b:any)=>b.team_member_id===m.id)} canRoute={isAdmin} canEdit={isAdmin||m.id===user.id} self={m.id===user.id} calendarStatus={(()=>{const c=connections.data?.find((c:any)=>c.team_member_id===m.id);return !c?'Not connected':calendarNeedsReconnect(c)?'Reconnect required':'Connected';})()}/></div>
         ))}
       </div>
     </div>

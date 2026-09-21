@@ -62,7 +62,7 @@ export function BookingWizard({
   const [products, setProducts] = useState<Product[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ orderId: string } | null>(null);
+  const [done, setDone] = useState<{ orderId: string; pending?: boolean } | null>(null);
 
   useEffect(() => {
     try {
@@ -142,7 +142,7 @@ export function BookingWizard({
         }
       } else {
         try { sessionStorage.removeItem(draftKey); } catch {}
-        setDone({ orderId: data.order_id });
+        setDone({ orderId: data.order_id, pending: data.assignment_state === 'awaiting_response' });
         setState((s) => ({ ...s, step: 5, contact }));
       }
     } catch {
@@ -156,14 +156,14 @@ export function BookingWizard({
     return (
       <div className="min-h-screen grid place-items-center bg-slate-50 px-6">
         <div className="card max-w-md w-full p-8 text-center">
-          <h1 className="text-2xl font-semibold text-ocean-900">Booking confirmed 🎉</h1>
+          <h1 className="text-2xl font-semibold text-ocean-900">{done.pending ? 'Time reserved' : 'Booking confirmed'}</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Thanks! Your shoot is booked for{' '}
+            {done.pending ? 'We’ve reserved your requested time for ' : 'Thanks! Your shoot is booked for '}
             <strong>{fmtDateTime(state.schedule.scheduled_at!)}</strong> at{' '}
             <strong>{state.address ? fmtAddress(state.address) : ''}</strong>.
           </p>
           <p className="mt-2 text-sm text-slate-600">
-            We&apos;ll send a confirmation email shortly.
+            {done.pending ? 'We’re checking with your photographer. We’ll email your final confirmation once they accept.' : 'We’ll send a confirmation email shortly.'}
           </p>
           <div className="mt-6 flex gap-2 justify-center">
             <Link href="/portal" className="btn-secondary">Open portal</Link>
@@ -235,6 +235,8 @@ export function BookingWizard({
             <ScheduleStep
               schedule={state.schedule}
               totalDuration={totalDuration}
+              productIds={state.items.map(i=>i.product_id).join(',')}
+              zip={state.address?.zip || ''}
               onBack={() => goto(3)}
               onComplete={(schedule) => setState((s) => ({ ...s, schedule, step: 5 }))}
             />

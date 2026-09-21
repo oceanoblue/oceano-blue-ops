@@ -26,7 +26,8 @@ export async function POST(request: Request) {
     if (lookupError) throw lookupError;
     if (existing) {
       if (existing.request_hash !== hash) return NextResponse.json({ error: 'idempotency_conflict', message: 'This request changed. Please review the booking and try again.' }, { status: 409 });
-      return NextResponse.json({ order_id: existing.order_id });
+      const {data: replay}=await admin.from('orders').select('assignment_state').eq('id',existing.order_id).single();
+      return NextResponse.json({ order_id: existing.order_id, assignment_state:replay?.assignment_state });
     }
     const audience = ['architectural', 'interior_design'].includes(b.project_type) ? 'architectural' : 'real_estate';
     const { data: products, error: productError } = await admin.from('products').select('id, duration_minutes')
@@ -38,14 +39,15 @@ export async function POST(request: Request) {
     const { data: settings, error: settingsError } = await admin.from('business_settings').select('default_timezone').eq('id', true).maybeSingle();
     if (settingsError) throw settingsError;
     const date = fmtDateInTz(b.scheduled_at, settings?.default_timezone || 'America/New_York', 'iso');
-    const available = await getAvailability(date, duration, b.photographer_id);
-    if (!available.slots.some(slot => Date.parse(slot.iso) === Date.parse(b.scheduled_at))) {
+    const available = await getAvailability(date, duration, undefined, {productIds:b.items.map(i=>i.product_id),zip:b.zip});
+    const selectedSlot=available.slots.find(slot=>Date.parse(slot.iso)===Date.parse(b.scheduled_at));
+    if (!selectedSlot) {
       return NextResponse.json({ error: available.calendarDegraded ? 'availability_unavailable' : 'slot_unavailable', message: available.calendarDegraded
         ? 'We cannot verify this photographer’s calendar. Please try later or contact the office.'
         : 'That time is no longer available. Please choose another time.' }, { status: available.calendarDegraded ? 503 : 409 });
     }
     const { data: orderId, error } = await admin.rpc('commit_public_booking', {
-      p_payload: { ...b, duration_minutes: duration }, p_request_id: key, p_request_hash: hash,
+      p_payload: { ...b, photographer_id:selectedSlot.photographer_id, duration_minutes: duration }, p_request_id: key, p_request_hash: hash,
     });
     if (error) {
       if (error.code === '23P01') return NextResponse.json({ error: 'slot_unavailable', message: 'That time was just taken. Please choose another time.' }, { status: 409 });
@@ -54,7 +56,8 @@ export async function POST(request: Request) {
     }
     // Calendar/email/SMS follow-ups were committed atomically and are processed
     // by cron. A provider outage cannot lose the booking or its notifications.
-    return NextResponse.json({ order_id: orderId });
+    const {data: booked}=await admin.from('orders').select('assignment_state').eq('id',orderId).single();
+    return NextResponse.json({ order_id: orderId, assignment_state:booked?.assignment_state });
   } catch (error) {
     captureError('booking.commit', error);
     return NextResponse.json({ error: 'booking_unavailable', message: 'We could not confirm your booking. Please try again shortly; your details are saved.' }, { status: 503 });

@@ -14,19 +14,19 @@ export type ResponseSource = 'portal' | 'email' | 'calendar';
 /**
  * Record a contractor's accept / decline on a shoot from a SERVER path that
  * has already established who the contractor is (a signed email link, or the
- * Google Calendar RSVP mirror). The portal path uses the respond_to_assignment
- * RPC instead, which re-derives the caller from the session; this mirrors that
- * RPC's guards: their own assignment only, and only while the shoot is live.
+ * Google Calendar RSVP mirror, or authenticated portal). Each caller supplies
+ * the assignment version so a delayed response cannot confirm a replacement.
  */
 export async function recordContractorResponse(opts: {
   orderId: string;
   contractorId: string;
   response: ContractorResponse;
   note?: string | null;
+  round?: number;
 }): Promise<{ ok: true } | { ok: false; reason: 'not_your_assignment' }> {
   const admin = createAdminClient() as any;
   const note = (opts.note ?? '').trim() || null;
-  const { data: updated } = await admin
+  let update = admin
     .from('orders')
     .update({
       contractor_response: opts.response,
@@ -38,8 +38,10 @@ export async function recordContractorResponse(opts: {
     .eq('contractor_id', opts.contractorId)
     .is('archived_at', null)
     .not('status', 'in', '(cancelled,draft)')
-    .select('id')
-    .maybeSingle();
+    .select('id');
+  if(opts.round !== undefined)update=update.eq('assignment_round',opts.round);
+  const {data:updated,error}=await update.maybeSingle();
+  if(error && !/assignment_expired/.test(error.message))throw error;
   if (!updated) return { ok: false, reason: 'not_your_assignment' };
 
   await admin.from('assignment_events').insert({

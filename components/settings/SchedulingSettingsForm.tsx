@@ -11,6 +11,7 @@ interface Settings {
   default_timezone: string;
   business_name: string;
   raw_retention_days: number;
+  assignment_timeout_minutes?: number;
 }
 
 const TIMEZONES = [
@@ -50,6 +51,7 @@ export function SchedulingSettingsForm({ initial }: { initial: Settings }) {
       </p>
 
       <div className="mt-6 space-y-5">
+        <label className="block text-sm">Photographer response window (minutes)<input className="input mt-2 max-w-xs" type="number" min={15} max={1440} value={s.assignment_timeout_minutes ?? 60} onChange={e=>setS({...s,assignment_timeout_minutes:Number(e.target.value)})}/><span className="mt-1 block text-xs text-slate-500">For online bookings, a decline or timeout checks the next eligible photographer. Reservations remain pending until confirmed.</span></label>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="label">Buffer time (min)</label>

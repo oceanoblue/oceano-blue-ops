@@ -34,7 +34,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   const { data: order } = await admin
     .from('orders')
     .select(
-      'id, order_number, contractor_id, scheduled_at, timezone, pay_amount_cents, dropbox_intake_url, dropbox_intake_path, listings(address_line1, city, state, zip, sqft), internal_notes'
+      'id, order_number, contractor_id, assignment_round, scheduled_at, timezone, pay_amount_cents, dropbox_intake_url, dropbox_intake_path, listings(address_line1, city, state, zip, sqft), internal_notes'
     )
     .eq('id', params.id)
     .maybeSingle();
@@ -80,7 +80,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   const pay = (order as any).pay_amount_cents as number | null;
 
   // Login-free accept / decline links (signed; die on reassignment).
-  const token = signRespondToken(order.id, order.contractor_id, respondTokenExpiry(order.scheduled_at));
+  const token = signRespondToken(order.id, order.contractor_id, respondTokenExpiry(order.scheduled_at), (order as any).assignment_round || undefined);
   const acceptUrl = token ? respondPageUrl(base, token, 'accepted') : null;
   const declineUrl = token ? respondPageUrl(base, token, 'declined') : null;
   const respondUrl = token ? respondPageUrl(base, token) : `${base}/field/shoots/${order.id}`;
