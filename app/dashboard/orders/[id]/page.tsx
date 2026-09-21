@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { fmtDateTime, fmtDateTimeTz, fmtAddress, fmtCents } from '@/lib/utils/format';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { OrderServicesEditor } from '@/components/orders/OrderServicesEditor';
 import { OrderStatusControl } from '@/components/orders/OrderStatusControl';
 import { AssignTeamControl } from '@/components/orders/AssignTeamControl';
 import { PhotoManager } from '@/components/photos/PhotoManager';
@@ -52,6 +53,10 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
 
   if (error || !data) notFound();
   const order = data as any;
+  const [{ data: serviceProducts }, { data: paymentReviews }] = await Promise.all([
+    supabase.from('products').select('id,name,base_price_cents,pricing_tiers(min_sqft,max_sqft,price_cents)').eq('is_active', true).order('sort_order'),
+    (supabase as any).from('order_payment_reviews').select('session_id,amount_cents').eq('order_id', order.id).is('resolved_at', null),
+  ]);
 
   // ── Reel order extras: the brief, signed footage previews, and a starter
   //    edit-instructions plan for the team to refine. ────────────────────────
@@ -408,38 +413,16 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
             </div>
           </section>
 
-          <section className="card p-6">
-            <h2 className="font-semibold mb-4">Services</h2>
-            {(() => {
-              // Priced line items live in order_items (what checkout/paywall charge);
-              // fall back to the legacy order_services only if none exist.
-              const items = (order.order_items?.length ? order.order_items : order.order_services) ?? [];
-              return items.length === 0 ? (
-                <p className="text-sm text-slate-500">No line items.</p>
-              ) : (
-                <ul className="text-sm divide-y divide-slate-100">
-                  {items.map((s: any) => (
-                    <li key={s.id} className="py-2 flex items-start justify-between gap-3">
-                      <span className="flex-1">
-                        {s.description || s.service_type}
-                        {s.quantity > 1 && (
-                          <span className="text-slate-400"> · {fmtCents(s.unit_price_cents)} each</span>
-                        )}
-                      </span>
-                      {s.quantity > 1 && <span className="text-slate-400">×{s.quantity}</span>}
-                      <span className="tabular-nums font-medium text-slate-700">
-                        {fmtCents(s.total_cents ?? (s.unit_price_cents ?? 0) * (s.quantity ?? 1))}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              );
-            })()}
-            <div className="mt-3 border-t pt-3 flex items-center justify-between text-sm">
-              <span className="text-slate-500">Total</span>
-              <span className="font-semibold">{fmtCents(order.total_cents)}</span>
-            </div>
-          </section>
+          {paymentReviews?.length > 0 && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <strong>Payment needs review</strong>
+            {paymentReviews.map((review: { session_id: string; amount_cents: number }) => <p key={review.session_id}>
+              {fmtCents(review.amount_cents)} was received from an earlier or duplicate checkout. Reconcile this payment in Stripe before requesting another payment. Session: {review.session_id}
+            </p>)}
+          </div>}
+          <OrderServicesEditor orderId={order.id} updatedAt={order.updated_at} sqft={order.listings?.sqft ?? null}
+            paid={!!order.download_paid_at} total={order.total_cents ?? 0}
+            items={(order.order_items?.length ? order.order_items : order.order_services) ?? []}
+            products={serviceProducts ?? []} />
 
           <CostSummary jobs={(order.ai_jobs ?? []) as any[]} />
 

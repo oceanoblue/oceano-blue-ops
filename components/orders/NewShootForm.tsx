@@ -3,12 +3,13 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ClipboardList, User, Home, Calendar, Camera, ChevronDown, Loader2, Package } from 'lucide-react';
+import { servicePrice, type ServiceProduct } from '@/lib/orders/service-pricing';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 export interface ClientOpt { id: string; full_name: string; brokerage: string | null }
 export interface ContractorOpt { id: string; full_name: string; pay_rate_cents: number }
 export interface TeamOpt { id: string; full_name: string }
-export interface ProductOpt { id: string; name: string; kind: string; is_addon: boolean; base_price_cents: number }
+export interface ProductOpt extends ServiceProduct { kind: string; is_addon: boolean }
 
 /**
  * One-screen "New Shoot" — client + property + assignment + (auto) Dropbox link
@@ -65,7 +66,7 @@ export function NewShootForm({
     });
   const coreProducts = products.filter((p) => !p.is_addon);
   const addonProducts = products.filter((p) => p.is_addon);
-  const estTotal = products.reduce((s, p) => s + (items[p.id] ?? 0) * p.base_price_cents, 0);
+  const estTotal = products.reduce((s, p) => s + (items[p.id] ?? 0) * servicePrice(p, addr.sqft ? Number(addr.sqft) : null), 0);
   const fmtUsd = (c: number) => `$${(c / 100).toLocaleString('en-US')}`;
 
   const [busy, setBusy] = useState(false);
@@ -222,7 +223,6 @@ export function NewShootForm({
               <Field label="Property type" value={addr.property_type} onChange={(v) => setAddr({ ...addr, property_type: v })} placeholder="Single family" />
               <Field label="Beds" type="number" value={addr.bedrooms} onChange={(v) => setAddr({ ...addr, bedrooms: v })} />
               <Field label="Baths" type="number" value={addr.bathrooms} onChange={(v) => setAddr({ ...addr, bathrooms: v })} />
-              <Field label="Sq ft" type="number" value={addr.sqft} onChange={(v) => setAddr({ ...addr, sqft: v })} />
               <div className="col-span-2 sm:col-span-3">
                 <Field label="Access notes (lockbox, gate code…)" value={addr.access_notes} onChange={(v) => setAddr({ ...addr, access_notes: v })} placeholder="Lockbox on front door, code 1234" />
               </div>
@@ -287,13 +287,17 @@ export function NewShootForm({
       {products.length > 0 && (
         <Section icon={<Package className="h-4 w-4" />} title="Products">
           <div className="space-y-4">
+            <label className="block text-sm">Property size (sq ft)
+              <input className="input mt-1" type="number" min="1" max="1000000" step="1" value={addr.sqft} onChange={e => setAddr({ ...addr, sqft: e.target.value })} placeholder="Enter size for accurate pricing" />
+            </label>
+            {!addr.sqft && <p className="text-sm text-amber-800">No size entered: starting prices will be used. You can edit prices and services after booking.</p>}
             {coreProducts.length > 0 && (
               <div className="space-y-2">
                 {coreProducts.map((p) => (
                   <ProductRow
                     key={p.id}
                     name={p.name}
-                    price={`from ${fmtUsd(p.base_price_cents)}`}
+                    price={fmtUsd(servicePrice(p, addr.sqft ? Number(addr.sqft) : null))}
                     qty={items[p.id] ?? 0}
                     onQty={(q) => setQty(p.id, q)}
                   />
@@ -308,7 +312,7 @@ export function NewShootForm({
                     <ProductRow
                       key={p.id}
                       name={p.name}
-                      price={p.base_price_cents ? `from ${fmtUsd(p.base_price_cents)}` : '—'}
+                      price={fmtUsd(servicePrice(p, addr.sqft ? Number(addr.sqft) : null))}
                       qty={items[p.id] ?? 0}
                       onQty={(q) => setQty(p.id, q)}
                     />
@@ -317,8 +321,8 @@ export function NewShootForm({
               </div>
             )}
             <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-sm">
-              <span className="text-slate-500" title="Final price is calculated from the property's square footage at delivery.">
-                Estimated total (final price by sq ft)
+              <span className="text-slate-500" title="Prices are calculated when the shoot is created. You can edit services on the order afterward.">
+                Total at booking
               </span>
               <span className="font-semibold text-ocean-900 tabular-nums">{fmtUsd(estTotal)}</span>
             </div>

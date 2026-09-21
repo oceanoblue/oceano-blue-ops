@@ -43,16 +43,14 @@ export async function POST(req: Request) {
     const orderId = session.metadata?.order_id;
     if (orderId) {
       const supabase = createAdminClient();
-      // Idempotent: only stamp if not already paid.
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          download_paid_at: new Date().toISOString(),
-          download_paid_cents: session.amount_total ?? null,
-          download_stripe_session_id: session.id,
-        })
-        .eq('id', orderId)
-        .is('download_paid_at', null);
+      // The transaction shares a row lock with invoice editing. Older checkouts
+      // are retained in the office review queue instead of unlocking a new bill.
+      const { error } = await (supabase as any).rpc('settle_order_checkout', {
+        p_order_id: orderId,
+        p_session_id: session.id,
+        p_amount_cents: session.amount_total ?? 0,
+        p_revision: Number(session.metadata?.services_revision ?? 0),
+      });
       if (error) {
         captureError('stripe.paymentPersistence', error, { eventId: event.id, orderId });
         // Stripe retries non-2xx responses. Acknowledging here would permanently

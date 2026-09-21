@@ -109,7 +109,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
         window.location.href = j.url;
         return;
       }
-      setCheckoutError(j.error ? 'Checkout is unavailable right now. Please contact our team.' : 'Could not open checkout. Please try again.');
+      setCheckoutError(j.error === 'payment_needs_review' ? 'We received a payment that needs review. Please contact our team before paying again.' : j.error ? 'Checkout is unavailable right now. Please contact our team.' : 'Could not open checkout. Please try again.');
       setUnlocking(false);
     } catch {
       setCheckoutError('Could not connect to checkout. Please try again.');

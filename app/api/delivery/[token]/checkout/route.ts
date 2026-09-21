@@ -29,19 +29,24 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
 
   const { data: order } = await supabase
     .from('orders')
-    .select('id, order_number, total_cents, download_paid_at, listing_id')
+    .select('id, order_number, total_cents, download_paid_at, listing_id, services_revision')
     .eq('id', link.order_id)
     .single();
   if (!order) return NextResponse.json({ error: 'order_missing' }, { status: 404 });
   if (order.download_paid_at) return NextResponse.json({ paid: true });
+
+  const { data: reviews, error: reviewError } = await (supabase as any).from('order_payment_reviews')
+    .select('session_id').eq('order_id', order.id).is('resolved_at', null).limit(1);
+  if (reviewError) return NextResponse.json({ error: 'payments_unavailable' }, { status: 503 });
+  if (reviews?.length) return NextResponse.json({ error: 'payment_needs_review' }, { status: 409 });
 
   const { data: items } = await supabase
     .from('order_items')
     .select('description, quantity, unit_price_cents, total_cents')
     .eq('order_id', order.id);
 
-  const itemsSum = (items ?? []).reduce((s: number, i: any) => s + (i.total_cents ?? 0), 0);
-  const priceCents = order.total_cents && order.total_cents > 0 ? order.total_cents : itemsSum;
+  const itemsSum = (items ?? []).reduce((s: number, i: any) => s + (i.quantity ?? 1) * (i.unit_price_cents ?? 0), 0);
+  const priceCents = order.total_cents ?? itemsSum;
   if (!priceCents || priceCents <= 0) {
     return NextResponse.json({ error: 'no_price_set' }, { status: 400 });
   }
@@ -49,7 +54,7 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
   // Build itemized line items from the order's products when available, so the
   // buyer sees exactly what they're paying for; otherwise a single line.
   const lineItems =
-    (items ?? []).length > 0
+    (items ?? []).length > 0 && itemsSum === priceCents
       ? (items ?? []).map((i: any) => ({
           quantity: i.quantity ?? 1,
           price_data: {
@@ -74,7 +79,7 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
     mode: 'payment',
     line_items: lineItems,
     // Reconcile in the webhook by order id; token lets us log the source link.
-    metadata: { order_id: order.id, token: params.token },
+    metadata: { order_id: order.id, token: params.token, services_revision: String((order as any).services_revision) },
     success_url: `${base}/gallery/${params.token}?paid=1`,
     cancel_url: `${base}/gallery/${params.token}`,
     allow_promotion_codes: true,
