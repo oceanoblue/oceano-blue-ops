@@ -17,11 +17,15 @@ export function RespondControl({
   round,
   response,
   note,
+  automaticallyConfirmed = false,
+  teamAssignment = false,
 }: {
   orderId: string;
   round: number;
   response: Response;
   note: string | null;
+  automaticallyConfirmed?: boolean;
+  teamAssignment?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<null | 'accepted' | 'declined'>(null);
@@ -35,10 +39,10 @@ export function RespondControl({
     try {
       // Goes through the server route (not the RPC directly) so the office gets
       // an email the moment a shoot is accepted or declined.
-      const r = await fetch(`/api/field/shoots/${orderId}/respond`, {
+      const r = await fetch(teamAssignment ? '/api/scheduling/respond' : `/api/field/shoots/${orderId}/respond`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ round, response: kind, note: noteText?.trim() || undefined }),
+        body: JSON.stringify({ orderId, round, response: kind, note: noteText?.trim() || undefined }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `Failed (${r.status})`);
@@ -53,11 +57,11 @@ export function RespondControl({
   }
 
   // Already accepted.
-  if (response === 'accepted' && !declining) {
+  if ((response === 'accepted' || automaticallyConfirmed) && !declining) {
     return (
       <div className="rounded-lg bg-emerald-50 p-3 text-sm ring-1 ring-emerald-200">
         <p className="inline-flex items-center gap-1.5 font-medium text-emerald-800">
-          <CheckCircle2 className="h-4 w-4" /> You accepted this shoot
+          <CheckCircle2 className="h-4 w-4" /> {automaticallyConfirmed ? 'Confirmed automatically · no acceptance required' : 'You accepted this shoot'}
         </p>
         <button onClick={() => setDeclining(true)} className="mt-1 text-xs text-slate-500 underline hover:text-slate-700">
           Something changed — decline instead
@@ -91,14 +95,14 @@ export function RespondControl({
   if (declining) {
     return (
       <div className="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
-        <label className="label">Why are you declining? (optional, helps the office)</label>
+        <label className={`label ${teamAssignment ? 'hidden' : ''}`}>Why are you declining? (optional, helps the office)</label>
         <textarea
-          className="input"
+          className={`input ${teamAssignment ? 'hidden' : ''}`}
           rows={2}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Double-booked that morning…"
-          autoFocus
+          autoFocus={!teamAssignment}
         />
         <div className="mt-2 flex items-center gap-2">
           <button

@@ -26,7 +26,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
     .maybeSingle();
   if (!shoot) notFound();
 
-  const {data:version}=await createAdminClient().from('orders').select('assignment_round').eq('id',shoot.id).single();
+  const {data:version}=await createAdminClient().from('orders').select('assignment_round,assignment_state,assignment_confirmation_mode').eq('id',shoot.id).single();
   const l = (shoot.listing ?? {}) as any;
 
   return (
@@ -48,6 +48,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
             <RespondControl
               orderId={shoot.id}
               round={version?.assignment_round ?? 0}
+              automaticallyConfirmed={version?.assignment_state==='confirmed' && version?.assignment_confirmation_mode==='automatic' && !shoot.contractor_response}
               response={shoot.contractor_response ?? null}
               note={shoot.contractor_response_note ?? null}
             />

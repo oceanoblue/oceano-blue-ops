@@ -46,7 +46,7 @@ export default async function RespondPage(
     admin
       .from('orders')
       .select(
-        'id, status, archived_at, scheduled_at, timezone, contractor_id, assignment_round, contractor_response, contractor_response_note, dropbox_intake_url, listings(address_line1, city, state, zip, sqft)'
+        'id, status, archived_at, scheduled_at, timezone, contractor_id, assignment_round, assignment_state, assignment_confirmation_mode, contractor_response, contractor_response_note, dropbox_intake_url, listings(address_line1, city, state, zip, sqft)'
       )
       .eq('id', payload.o)
       .maybeSingle(),
@@ -85,16 +85,16 @@ export default async function RespondPage(
   const action = `/api/field/respond/${encodeURIComponent(token)}`;
 
   // Just answered (redirected back from the POST), or answered earlier.
-  const state = searchParams.state === 'stale' ? null : searchParams.state;
-  const current = (state as 'accepted' | 'declined' | undefined) ?? order.contractor_response ?? null;
+  const current = order.contractor_response ?? null;
 
-  if (current === 'accepted') {
+  const automatic = !current && order.assignment_state==='confirmed' && order.assignment_confirmation_mode==='automatic';
+  if (current === 'accepted' || automatic) {
     return (
-      <Shell title={`Thanks, ${first}!`}>
+      <Shell title={automatic ? 'Your confirmed shoot' : `Thanks, ${first}!`}>
         <ShootCard address={address} cityStateZip={cityStateZip} when={when} />
         <Card>
           <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-800">
-            <CheckCircle2 className="h-5 w-5" /> You accepted this shoot.
+            <CheckCircle2 className="h-5 w-5" /> {automatic ? 'Confirmed automatically. No acceptance is required.' : 'You accepted this shoot.'}
           </p>
           <p className="mt-2 text-sm text-slate-600">
             It&rsquo;s on your calendar. When you&rsquo;re done shooting, upload the RAWs to the

@@ -794,6 +794,7 @@ export type Database = {
       business_settings: {
         Row: {
           scheduling_dispatch_enabled: boolean
+          auto_confirm_bookings: boolean
           assignment_timeout_minutes: number
           gallery_watermark_enabled: boolean
           ai_editing_enabled: boolean
@@ -812,6 +813,7 @@ export type Database = {
         }
         Insert: {
           scheduling_dispatch_enabled?: boolean
+          auto_confirm_bookings?: boolean
           assignment_timeout_minutes?: number
           gallery_watermark_enabled?: boolean
           ai_editing_enabled?: boolean
@@ -830,6 +832,7 @@ export type Database = {
         }
         Update: {
           scheduling_dispatch_enabled?: boolean
+          auto_confirm_bookings?: boolean
           assignment_timeout_minutes?: number
           gallery_watermark_enabled?: boolean
           ai_editing_enabled?: boolean
@@ -2285,6 +2288,7 @@ export type Database = {
         Row: {
           assignment_state: string
           assignment_due_at: string | null
+          assignment_confirmation_mode: string
           assignment_round: number
           auto_dispatch: boolean
           assignment_attempted_ids: string[]
@@ -2332,6 +2336,7 @@ export type Database = {
         Insert: {
           assignment_state?: string
           assignment_due_at?: string | null
+          assignment_confirmation_mode?: string
           assignment_round?: number
           auto_dispatch?: boolean
           assignment_attempted_ids?: string[]
@@ -2379,6 +2384,7 @@ export type Database = {
         Update: {
           assignment_state?: string
           assignment_due_at?: string | null
+          assignment_confirmation_mode?: string
           assignment_round?: number
           auto_dispatch?: boolean
           assignment_attempted_ids?: string[]

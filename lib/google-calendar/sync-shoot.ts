@@ -160,7 +160,7 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
   const { data: order, error: orderError } = await admin
     .from('orders')
     .select(
-      'id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, contractor_id, contractor_response, assignment_round, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
+      'id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, contractor_id, contractor_response, assignment_round, assignment_state, assignment_confirmation_mode, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
     )
     .eq('id', orderId)
     .maybeSingle();
@@ -267,7 +267,8 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
       client ? `Client: ${client}` : null,
       shooterLabel ? `Shooter: ${shooterLabel}` : 'Unassigned',
       services ? `Services: ${services}` : null,
-      respondUrl ? `Accept or decline: ${respondUrl}` : null,
+      (order as any).assignment_state==='confirmed' && (order as any).assignment_confirmation_mode==='automatic' ? 'Confirmed automatically. No acceptance required.' : null,
+      respondUrl ? `${(order as any).assignment_confirmation_mode==='automatic' ? 'Review shoot or decline' : 'Accept or decline'}: ${respondUrl}` : null,
       guestEmail && order.dropbox_intake_url ? `Upload RAWs: ${order.dropbox_intake_url}` : null,
       `Assignment version: ${(order as any).assignment_round || 0}`,
       'Booked via Oceano Blue Ops',

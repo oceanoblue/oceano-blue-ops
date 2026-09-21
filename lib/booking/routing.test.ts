@@ -19,5 +19,6 @@ describe('photographer routing',()=>{
     expect(assignmentLabel({contractor_id:'c',assignment_state:'confirmed'})).toBe('Awaiting photographer');
     expect(assignmentLabel({contractor_response:'declined'})).toContain('Declined');
     expect(assignmentLabel({photographer_id:'p'})).toBe('Confirmed');
+    expect(assignmentLabel({contractor_id:'c',assignment_state:'confirmed',assignment_confirmation_mode:'automatic'})).toBe('Confirmed automatically');
   });
 });
