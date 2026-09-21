@@ -28,5 +28,6 @@ export async function POST(request: Request) {
       .eq('team_member_id', user.id)
       .eq('provider', 'google');
   }
-  return NextResponse.redirect(new URL('/dashboard/settings/integrations', request.url));
+  const {data:member}=await supabase.from('team_members').select('role').eq('id',user.id).maybeSingle();
+  return NextResponse.redirect(new URL(member?.role==='photographer'?'/field/availability':'/dashboard/settings/integrations', request.url));
 }

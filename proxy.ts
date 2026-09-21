@@ -1,3 +1,4 @@
+import { photographerSelfServicePath } from '@/lib/security/photographer-self-service';
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
@@ -111,7 +112,7 @@ export async function proxy(request: NextRequest) {
   // scheduling (availability, double-book guard, calendar) — not so they can
   // browse every order, client, and price. Send them to their own portal,
   // which shows only the shoots assigned to them.
-  if (me?.role === 'photographer') {
+  if (me?.role === 'photographer' && !photographerSelfServicePath(pathname)) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
