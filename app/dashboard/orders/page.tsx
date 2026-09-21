@@ -1,177 +1,55 @@
 import Link from 'next/link';
-import { ClipboardList } from 'lucide-react';
+import { ArrowRight, Archive, ClipboardList, Plus, Search } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { STATUS_LABEL, fmtDateTime, fmtAddress } from '@/lib/utils/format';
-import { PageHeader } from '@/components/ui/PageHeader';
+import { STATUS_LABEL, fmtDateTime, fmtCents } from '@/lib/utils/format';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Avatar } from '@/components/ui/Avatar';
+import { ORDER_VIEWS, orderListHref } from '@/lib/orders/workflow';
 
 export const dynamic = 'force-dynamic';
-
-const usd = (cents?: number | null) =>
-  cents && cents > 0 ? `$${(cents / 100).toLocaleString('en-US')}` : '—';
-
-const COLUMNS: Column<any>[] = [
-  {
-    key: 'order',
-    header: 'Order',
-    cell: (o) => (
-      <>
-        <span className="font-medium text-ocean-800">#{o.order_number}</span>
-        {o.project_type === 'architectural' && (
-          <span className="ml-2 pill bg-violet-100 text-violet-700">ARCH</span>
-        )}
-        {o.order_kind === 'reel_edit' && (
-          <span className="ml-2 pill bg-ocean-100 text-ocean-700">REEL</span>
-        )}
-        {o.rush && <span className="ml-2 pill bg-rose-100 text-rose-700">RUSH</span>}
-      </>
-    ),
-  },
-  { key: 'address', header: 'Address', className: 'text-slate-700', cell: (o) => (o.listings ? fmtAddress(o.listings) : '—') },
-  {
-    key: 'client',
-    header: 'Client',
-    className: 'text-slate-700',
-    cell: (o) => (
-      <div className="flex items-center gap-2.5">
-        <Avatar name={o.clients?.full_name} />
-        <div className="min-w-0">
-          <div className="truncate font-medium text-ocean-900">{o.clients?.full_name ?? '—'}</div>
-          {o.clients?.brokerage && (
-            <div className="truncate text-xs text-slate-500">{o.clients.brokerage}</div>
-          )}
-        </div>
-      </div>
-    ),
-  },
-  { key: 'scheduled', header: 'Scheduled', className: 'text-slate-700', cell: (o) => fmtDateTime(o.scheduled_at) },
-  {
-    key: 'total',
-    header: 'Total',
-    className: 'text-slate-700 tabular-nums',
-    cell: (o) => (
-      <span className="inline-flex items-center gap-1.5">
-        {usd(o.total_cents)}
-        {o.download_paid_at && <span className="pill bg-emerald-100 text-emerald-700">PAID</span>}
-      </span>
-    ),
-  },
-  { key: 'status', header: 'Status', cell: (o) => <StatusBadge status={o.status} /> },
+const SORT_KEYS=new Set(['order','address','client','scheduled','total','status']);
+type SearchParams={view?:string;status?:string;q?:string;kind?:string;archived?:string;sort?:string;dir?:string;page?:string};
+const COLUMNS:Column<any>[]=[
+  {key:'address',header:'Property / order',cell:o=><div className="min-w-52"><Link href={`/dashboard/orders/${o.id}`} className="font-semibold text-ink-950 hover:text-ocean-700 hover:underline">{o.listings?.address_line1||`Order #${o.order_number}`}</Link><p className="mt-1 text-xs text-slate-500">#{o.order_number} · {[o.listings?.city,o.listings?.state].filter(Boolean).join(', ')}{o.order_kind==='reel_edit'?' · Reel':''}{o.rush?' · Rush':''}</p></div>},
+  {key:'client',header:'Client',cell:o=><div className="min-w-36"><p className="font-medium text-slate-700">{o.clients?.full_name||'—'}</p>{o.clients?.brokerage&&<p className="mt-1 text-xs text-slate-500">{o.clients.brokerage}</p>}</div>},
+  {key:'scheduled',header:'Appointment',cell:o=><span className={o.scheduled_at?'text-slate-600':'text-amber-800'}>{o.scheduled_at?fmtDateTime(o.scheduled_at):'Needs scheduling'}</span>},
+  {key:'status',header:'Progress',cell:o=><StatusBadge status={o.status}/>},
+  {key:'total',header:'Total',className:'text-right tabular-nums',cell:o=><div><p className="font-semibold text-ink-900">{fmtCents(o.total_cents)}</p><p className={`mt-1 text-xs ${o.download_paid_at?'text-emerald-700':'text-slate-500'}`}>{o.download_paid_at?'Paid':'Unpaid'}</p></div>},
 ];
 
-const SORT_KEYS = new Set(['order','address','client','scheduled','total','status']);
-
-export default async function OrdersPage(
-  props: {
-    searchParams: Promise<{ status?: string; q?: string; kind?: string; archived?: string; sort?: string; dir?: string; page?: string }>;
-  }
-) {
-  const searchParams = await props.searchParams;
-  const sortKey =
-    searchParams.sort && SORT_KEYS.has(searchParams.sort) ? searchParams.sort : 'scheduled';
-  const asc = searchParams.dir === 'asc'; // default: descending (newest first)
-
-  const supabase = await createClient();
-  const page = Math.max(1, Math.min(100000, Number.parseInt(searchParams.page || '1', 10) || 1));
-  const q = (searchParams.q || '').slice(0, 100);
-  const statuses = searchParams.status?.split(',').filter(status => status in STATUS_LABEL) || null;
-  const { data, error } = await (supabase as any).rpc('search_operations_orders', {
-    p_statuses: statuses?.length ? statuses : null, p_kind: searchParams.kind === 'reel' ? 'reel_edit' : null,
-    p_archived: searchParams.archived === '1', p_query: q, p_sort: sortKey, p_ascending: asc, p_page: page, p_size: 50,
+export default async function OrdersPage(props:{searchParams:Promise<SearchParams>}) {
+  const search=await props.searchParams;
+  const view=ORDER_VIEWS.find(v=>v.id===search.view)??ORDER_VIEWS[0];
+  const archived=search.archived==='1';
+  const sortKey=search.sort&&SORT_KEYS.has(search.sort)?search.sort:'scheduled';
+  const asc=search.dir?search.dir==='asc':view.id==='upcoming';
+  const page=Math.max(1,Math.min(100000,Number.parseInt(search.page||'1',10)||1));
+  const q=(search.q||'').slice(0,100);
+  const explicit=search.status?.split(',').filter(status=>status in STATUS_LABEL);
+  const statuses=explicit?.length?explicit:archived?null:view.statuses;
+  const supabase=await createClient();
+  const {data,error}=await (supabase as any).rpc('search_operations_orders',{
+    p_statuses:statuses,p_kind:search.kind==='reel'?'reel_edit':null,p_archived:archived,p_query:q,p_sort:sortKey,p_ascending:asc,p_page:page,p_size:50,
   });
-  const orders = data?.rows || [];
-  const total = data?.total || 0;
-  const pages = Math.max(1, Math.ceil(total / 50));
-  const pageHref = (target: number) => {
-    const params = new URLSearchParams();
-    for (const [key,value] of Object.entries(searchParams)) if (value) params.set(key, value);
-    params.set('page', String(target));
-    return `/dashboard/orders?${params.toString()}`;
-  };
-
-  // Build a sort URL that keeps the active filters and toggles direction when
-  // the same column is clicked again.
-  const sortHref = (key: string) => {
-    const p = new URLSearchParams();
-    if (searchParams.status) p.set('status', searchParams.status);
-    if (q) p.set('q', q);
-    if (searchParams.kind) p.set('kind', searchParams.kind);
-    if (searchParams.archived) p.set('archived', searchParams.archived);
-    const nextAsc = !(sortKey === key && asc); // asc → desc on the active column, else asc
-    p.set('sort', key);
-    p.set('dir', nextAsc ? 'asc' : 'desc');
-    return `/dashboard/orders?${p.toString()}`;
-  };
-
-  return (
-    <div className="space-y-6">
-      <PageHeader eyebrow="Pipeline" title="Orders" subtitle="Every shoot in the pipeline.">
-        <Link href="/dashboard/orders/new" className="btn-primary">New shoot</Link>
-      </PageHeader>
-
-      <form className="flex flex-wrap items-end gap-2" action="/dashboard/orders">
-        {Object.entries(searchParams).filter(([key]) => key !== 'q' && key !== 'page').map(([key,value]) => <input key={key} type="hidden" name={key} value={value || ''} />)}
-        <label className="label flex-1">Search orders<input name="q" defaultValue={q} maxLength={100} className="input mt-1" placeholder="Order number, address, or client" /></label>
-        <button className="btn-secondary">Search</button>
+  const orders:any[]=data?.rows||[];const total=data?.total||0;const pages=Math.max(1,Math.ceil(total/50));
+  const href=(changes:Record<string,string|undefined>)=>orderListHref(search,changes);
+  const empty=<EmptyState icon={ClipboardList} title={q?'No matching orders':archived?'No archived orders':'You’re all caught up here'} description={q?'Try a different address, client, or order number.':'Choose another work area or create a new shoot.'} action={<Link href={href({view:'all',status:undefined,q:undefined})} className="btn-secondary">View all orders</Link>}/>;
+  return <div className="order-workflow mx-auto max-w-[1440px] space-y-6">
+    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-ocean-700">Your production desk</p><h1 className="text-4xl text-ink-950">{archived?'Archived orders':'Orders'}</h1><p className="mt-2 text-sm text-slate-500">A clear path from booking to the client’s gallery.</p></div><div className="flex items-center gap-3"><Link className="btn-ghost min-h-11" href={href({archived:archived?undefined:'1',status:undefined})}><Archive className="h-4 w-4"/>{archived?'Active orders':'Archive'}</Link><Link href="/dashboard/orders/new" className="btn-primary min-h-11"><Plus className="h-4 w-4"/>New shoot</Link></div></header>
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      {!archived&&<nav aria-label="Order work queues" className="flex overflow-x-auto border-b border-slate-100 px-3 pt-2">{ORDER_VIEWS.map(item=><Link key={item.id} aria-current={!search.status&&view.id===item.id?'page':undefined} href={href({view:item.id,status:undefined})} className={`shrink-0 border-b-2 px-4 py-4 text-sm font-medium transition-colors ${!search.status&&view.id===item.id?'border-ocean-700 text-ocean-800':'border-transparent text-slate-500 hover:border-slate-200 hover:text-ink-950'}`}>{item.label}</Link>)}</nav>}
+      <form action="/dashboard/orders" className="flex flex-wrap items-end gap-3 p-4 sm:p-5">
+        <input type="hidden" name="view" value={view.id}/>{archived&&<input type="hidden" name="archived" value="1"/>}{search.sort&&<input type="hidden" name="sort" value={search.sort}/>} {search.dir&&<input type="hidden" name="dir" value={search.dir}/>}
+        <label className="min-w-52 flex-1 text-xs font-medium text-slate-600">Find an order<span className="relative mt-2 block"><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400"/><input name="q" defaultValue={q} maxLength={100} className="input !pl-9" placeholder="Search property, client, or order #"/></span></label>
+        <label className="text-xs font-medium text-slate-600">Status<select name="status" defaultValue={search.status||''} className="input mt-2"><option value="">All in this view</option>{Object.entries(STATUS_LABEL).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="text-xs font-medium text-slate-600">Type<select name="kind" defaultValue={search.kind||''} className="input mt-2"><option value="">All types</option><option value="reel">Reels</option></select></label>
+        <button className="btn-secondary min-h-11">Apply</button>{(q||search.status||search.kind)&&<Link href={href({q:undefined,status:undefined,kind:undefined})} className="btn-ghost min-h-11">Clear filters</Link>}
       </form>
-      {!error && <p className="text-sm text-slate-600">{total} orders · Page {page} of {pages}</p>}
-      <div className="flex flex-wrap gap-2">
-        <FilterPill label="All" href="/dashboard/orders" active={!searchParams.status && !searchParams.kind} />
-        <FilterPill label="Reels" href="/dashboard/orders?kind=reel" active={searchParams.kind === 'reel'} />
-        <FilterPill label="Archived" href="/dashboard/orders?archived=1" active={searchParams.archived === '1'} />
-        {['draft', 'booked', 'scheduled', 'shooting', 'uploaded', 'processing', 'editing', 'ready', 'delivered'].map((s) => (
-          <FilterPill
-            key={s}
-            label={STATUS_LABEL[s]}
-            href={`/dashboard/orders?status=${s}`}
-            active={searchParams.status === s}
-          />
-        ))}
-      </div>
-
-      <DataTable
-        columns={COLUMNS.map((c) => ({ ...c, sortable: true }))}
-        rows={orders}
-        sort={{ key: sortKey, dir: asc ? 'asc' : 'desc' }}
-        sortHref={sortHref}
-        rowKey={(o) => o.id}
-        rowHref={(o) => `/dashboard/orders/${o.id}`}
-        empty={
-          <EmptyState
-            icon={ClipboardList}
-            title={searchParams.status ? 'No orders in this status' : 'No orders yet'}
-            description={
-              searchParams.status
-                ? 'Try a different filter, or create a new order.'
-                : 'New bookings and manually-added shoots will show up here.'
-            }
-            action={
-              <Link href="/dashboard/orders/new" className="btn-primary">
-                New shoot
-              </Link>
-            }
-          />
-        }
-        error={error?.message ?? null}
-      />
-      {!error && <nav aria-label="Order pages" className="flex gap-4">
-        {page > 1 && <Link className="btn-secondary" href={pageHref(page - 1)}>Previous</Link>}
-        {page < pages && <Link className="btn-secondary" href={pageHref(page + 1)}>Next</Link>}
-      </nav>}
     </div>
-  );
-}
-
-function FilterPill({ label, href, active }: { label: string; href: string; active: boolean }) {
-  return (
-    <Link
-      href={href}
-      className={`pill border ${active ? 'bg-ocean-700 text-white border-ocean-700' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
-    >
-      {label}
-    </Link>
-  );
+    {!error&&<div className="flex items-center justify-between gap-3 text-sm"><p className="text-slate-500"><span className="font-semibold text-ink-900">{total}</span> {q?'matching ':''}order{total===1?'':'s'}{search.status?' · '+search.status.split(',').map(s=>STATUS_LABEL[s]).filter(Boolean).join(', '):''}</p><span className="text-xs text-slate-500">Page {page} of {pages}</span></div>}
+    <div className="hidden md:block"><DataTable columns={COLUMNS.map(c=>({...c,sortable:true}))} rows={orders} sort={{key:sortKey,dir:asc?'asc':'desc'}} sortHref={key=>href({sort:key,dir:sortKey===key&&asc?'desc':'asc'})} rowKey={o=>o.id} rowHref={o=>`/dashboard/orders/${o.id}`} empty={empty} error={error?'Orders could not load. Refresh to try again.':null}/></div>
+    <div className="space-y-3 md:hidden">{error?<p role="alert" className="card p-5 text-sm text-rose-700">Orders could not load. Refresh to try again.</p>:orders.length?orders.map(o=><Link key={o.id} href={`/dashboard/orders/${o.id}`} className="card block p-5"><div className="mb-3 flex justify-between gap-3"><span className="text-xs text-slate-500">#{o.order_number}</span><StatusBadge status={o.status}/></div><h2 className="text-xl font-semibold">{o.listings?.address_line1||`Order #${o.order_number}`}</h2><p className="mt-1 text-sm text-slate-500">{o.clients?.full_name||'No client'}</p><div className="mt-4 flex items-end justify-between gap-3 border-t pt-4"><div><p className="text-xs text-slate-500">{o.scheduled_at?fmtDateTime(o.scheduled_at):'Needs scheduling'}</p><p className="mt-1 text-sm font-semibold">{fmtCents(o.total_cents)} <span className="font-normal text-slate-500">· {o.download_paid_at?'Paid':'Unpaid'}</span></p></div><ArrowRight className="h-4 w-4 text-slate-400"/></div></Link>):empty}</div>
+    {!error&&pages>1&&<nav aria-label="Order pages" className="flex items-center justify-between gap-3">{page>1?<Link className="btn-secondary min-h-11" href={href({page:String(page-1)})}>Previous</Link>:<span/>}{page<pages&&<Link className="btn-secondary min-h-11" href={href({page:String(page+1)})}>Next</Link>}</nav>}
+  </div>;
 }

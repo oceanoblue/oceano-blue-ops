@@ -79,21 +79,16 @@ export function RawIntakeControl({
           className="min-w-0 flex-1 truncate text-ocean-700 hover:underline"
           title={intakeUrl}
         >
-          {intakeUrl}
+          Open photographer upload page
         </a>
         <button onClick={copy} className="btn-ghost inline-flex shrink-0 items-center gap-1">
           {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      {intakePath && (
-        <p className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-          <FolderOpen className="h-3.5 w-3.5" />
-          Dropbox: {intakePath} (syncs to this Mac)
-        </p>
-      )}
+      {intakePath && <details className="pt-2 text-xs text-slate-500"><summary className="cursor-pointer">Storage folder</summary><p className="mt-2 break-all">Dropbox: {intakePath}</p></details>}
       <p className="text-xs text-slate-500">
-        Text or email this link to the photographer — uploads land in the folder above.
+        Copy the link to share it. Files go into this property’s Dropbox folder.
       </p>
     </div>
   );
