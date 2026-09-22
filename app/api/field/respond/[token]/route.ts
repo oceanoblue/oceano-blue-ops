@@ -51,6 +51,7 @@ export async function POST(request: Request, props: { params: Promise<{ token: s
   }
 
   await afterContractorResponse({
+    result,
     orderId: payload.o,
     response: parsed.data.response,
     note: parsed.data.note ?? null,
