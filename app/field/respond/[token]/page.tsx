@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ResponseForm } from '@/components/field/ResponseForm';
 import { Check, X, CheckCircle2, XCircle, AlertTriangle, MapPin, CalendarDays } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/server';
 import { verifyRespondToken } from '@/lib/field/respond-token';
@@ -138,7 +139,7 @@ export default async function RespondPage(
       <ShootCard address={address} cityStateZip={cityStateZip} when={when} />
       <Card>
         {choice === 'accepted' ? (
-          <form action={action} method="POST" className="space-y-3">
+          <ResponseForm action={action} className="space-y-3">
             <input type="hidden" name="response" value="accepted" />
             <button className="btn-primary inline-flex w-full items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700">
               <Check className="h-4 w-4" /> Yes, I&rsquo;ll take it
@@ -149,9 +150,9 @@ export default async function RespondPage(
             >
               I can&rsquo;t make this one
             </Link>
-          </form>
+          </ResponseForm>
         ) : (
-          <form action={action} method="POST" className="space-y-3">
+          <ResponseForm action={action} className="space-y-3">
             <input type="hidden" name="response" value="declined" />
             <label className="label">Reason (optional)</label>
             <textarea
@@ -170,7 +171,7 @@ export default async function RespondPage(
             >
               Actually, I can take it
             </Link>
-          </form>
+          </ResponseForm>
         )}
       </Card>
     </Shell>
@@ -212,12 +213,12 @@ function ShootCard({ address, cityStateZip, when }: { address: string; cityState
 
 function ChangeMind({ action, to }: { action: string; to: 'accepted' | 'declined' }) {
   return (
-    <form action={action} method="POST" className="mt-4">
+    <ResponseForm action={action} className="mt-4">
       <input type="hidden" name="response" value={to} />
       <button className="text-xs text-slate-500 underline-offset-2 hover:underline">
         {to === 'accepted' ? 'Accept it after all' : 'I need to decline after all'}
       </button>
-    </form>
+    </ResponseForm>
   );
 }
 

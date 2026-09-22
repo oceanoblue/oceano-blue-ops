@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/server';
 import { sendEmail } from '@/lib/email/resend';
 import { sendSms } from '@/lib/integrations/quo';
@@ -7,6 +8,10 @@ import { syncShootCalendar } from '@/lib/google-calendar/sync-shoot';
 import { captureError, logEvent } from '@/lib/observability/report';
 
 export type ContractorResponse = 'accepted' | 'declined';
+export type ResponseResult =
+  | { ok: true; changed: false }
+  | { ok: true; changed: true; eventKey: string; contractorId: string; round: number }
+  | { ok: false; reason: 'not_your_assignment' };
 
 /** Where an answer came from — for the office notification + logs. */
 export type ResponseSource = 'portal' | 'email' | 'calendar';
@@ -22,8 +27,10 @@ export async function recordContractorResponse(opts: {
   contractorId: string;
   response: ContractorResponse;
   note?: string | null;
-  round?: number;
-}): Promise<{ ok: true } | { ok: false; reason: 'not_your_assignment' }> {
+  round: number;
+  /** Calendar reads must never overwrite a response made in the app. */
+  onlyIfUnanswered?: boolean;
+}): Promise<ResponseResult> {
   const admin = createAdminClient() as any;
   const note = (opts.note ?? '').trim() || null;
   let update = admin
@@ -36,13 +43,28 @@ export async function recordContractorResponse(opts: {
     })
     .eq('id', opts.orderId)
     .eq('contractor_id', opts.contractorId)
+    .eq('assignment_round', opts.round)
     .is('archived_at', null)
     .not('status', 'in', '(cancelled,draft)')
-    .select('id');
-  if(opts.round !== undefined)update=update.eq('assignment_round',opts.round);
+    .select('id, contractor_responded_at');
+  // This condition is evaluated by Postgres in the UPDATE itself, including
+  // after a competing writer releases the row lock. Only one request wins.
+  update = opts.onlyIfUnanswered
+    ? update.is('contractor_response', null)
+    : update.or(`contractor_response.is.null,contractor_response.neq.${opts.response}`);
   const {data:updated,error}=await update.maybeSingle();
   if(error && !/assignment_expired/.test(error.message))throw error;
-  if (!updated) return { ok: false, reason: 'not_your_assignment' };
+  if (!updated) {
+    if (error) return { ok: false, reason: 'not_your_assignment' };
+    const { data: current, error: readError } = await admin.from('orders')
+      .select('contractor_response').eq('id', opts.orderId)
+      .eq('contractor_id', opts.contractorId).eq('assignment_round', opts.round)
+      .is('archived_at', null).not('status', 'in', '(cancelled,draft)').maybeSingle();
+    if (readError) throw readError;
+    return current?.contractor_response === opts.response
+      ? { ok: true, changed: false }
+      : { ok: false, reason: 'not_your_assignment' };
+  }
 
   await admin.from('assignment_events').insert({
     order_id: opts.orderId,
@@ -50,7 +72,8 @@ export async function recordContractorResponse(opts: {
     event: opts.response,
     note,
   });
-  return { ok: true };
+  return { ok: true, changed: true, contractorId: opts.contractorId, round: opts.round,
+    eventKey: `contractor-response/${opts.orderId}/${opts.round}/${opts.response}/${updated.contractor_responded_at}` };
 }
 
 /**
@@ -60,6 +83,7 @@ export async function recordContractorResponse(opts: {
  */
 export async function afterContractorResponse(opts: {
   orderId: string;
+  result: ResponseResult;
   response: ContractorResponse;
   note?: string | null;
   source: ResponseSource;
@@ -67,9 +91,10 @@ export async function afterContractorResponse(opts: {
   /** Skip the calendar push (the answer already came FROM the calendar). */
   skipCalendar?: boolean;
 }): Promise<void> {
+  if (!opts.result.ok || !opts.result.changed) return;
   logEvent('field.respond', opts.response, { orderId: opts.orderId, source: opts.source });
   try {
-    await notifyOffice(opts.orderId, opts.response, opts.note ?? null, opts.baseUrl, opts.source);
+    await notifyOffice(opts.orderId, opts.response, opts.note ?? null, opts.baseUrl, opts.source, opts.result);
   } catch (e) {
     captureError('field.respond.notify', e, { orderId: opts.orderId });
   }
@@ -88,7 +113,8 @@ async function notifyOffice(
   response: ContractorResponse,
   note: string | null,
   baseUrl: string,
-  source: ResponseSource
+  source: ResponseSource,
+  result: Extract<ResponseResult, { changed: true }>
 ) {
   const admin = createAdminClient() as any;
 
@@ -96,6 +122,8 @@ async function notifyOffice(
     .from('orders')
     .select('order_number, contractor_id, scheduled_at, timezone, listings(address_line1, city, state, zip)')
     .eq('id', orderId)
+    .eq('contractor_id', result.contractorId)
+    .eq('assignment_round', result.round)
     .maybeSingle();
   if (!order) return;
 
@@ -107,8 +135,8 @@ async function notifyOffice(
   ]);
 
   const adminRows = (admins ?? []) as Array<{ email: string | null; phone: string | null }>;
-  const emailTo = adminRows.map((a) => a.email).filter((e): e is string => Boolean(e));
-  const smsTo = adminRows.map((a) => a.phone).filter((p): p is string => Boolean(p));
+  const emailTo = [...new Set(adminRows.map((a) => a.email?.trim().toLowerCase()).filter((e): e is string => Boolean(e)))];
+  const smsTo = [...new Set(adminRows.map((a) => a.phone?.trim()).filter((p): p is string => Boolean(p)))];
   if (emailTo.length === 0 && smsTo.length === 0) return;
 
   const listing = (order.listings ?? {}) as any;
@@ -129,7 +157,7 @@ async function notifyOffice(
   const smsText = `Oceano Blue: ${who} ${response} the shoot at ${address}${via}${note ? ` — "${note}"` : ''}`;
 
   await Promise.all([
-    ...emailTo.map((to) => sendEmail({ to, subject, html })),
+    ...emailTo.map((to) => sendEmail({ to, subject, html, idempotencyKey: `${result.eventKey}/${createHash('sha256').update(to).digest('hex').slice(0, 16)}` })),
     ...smsTo.map((to) => sendSms({ to, text: smsText })),
   ]);
 }

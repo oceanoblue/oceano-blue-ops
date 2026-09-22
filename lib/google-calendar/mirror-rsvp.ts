@@ -62,12 +62,13 @@ export async function mirrorGuestRsvps(opts: { baseUrl: string }): Promise<{
         guest?.responseStatus === 'accepted' ? 'accepted' : guest?.responseStatus === 'declined' ? 'declined' : null;
       if (!answer) continue;
 
-      const res = await recordContractorResponse({ orderId: o.id, contractorId: o.contractor_id, response: answer, round: o.assignment_round });
-      if (!res.ok) continue;
+      const res = await recordContractorResponse({ orderId: o.id, contractorId: o.contractor_id, response: answer, round: o.assignment_round, onlyIfUnanswered: true });
+      if (!res.ok || !res.changed) continue;
       mirrored += 1;
       logEvent('gcal.rsvp', 'mirrored', { orderId: o.id, answer });
       // The answer came FROM the calendar, so there's nothing to push back.
       await afterContractorResponse({
+        result: res,
         orderId: o.id,
         response: answer,
         source: 'calendar',

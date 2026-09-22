@@ -5,10 +5,8 @@ import { recordContractorResponse, afterContractorResponse } from '@/lib/field/r
 
 /**
  * Contractor accepts or declines their assigned shoot from the portal. The
- * state change goes through respond_to_assignment() (SECURITY DEFINER —
- * re-derives the caller's contractor and enforces "your own assignment"), so
- * this route is safe under the public /api/field prefix. Afterwards the office
- * is notified and the answer is mirrored onto the Google Calendar invite.
+ * authenticated contractor and assignment version scope an atomic conditional
+ * write. Only a changed response notifies the office and syncs the calendar.
  */
 const Body = z.object({
   round: z.number().int().min(0).default(0),
@@ -34,6 +32,7 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
   if(!result.ok)return NextResponse.json({error:'This assignment changed or expired. Refresh your shoots.'},{status:409});
 
   await afterContractorResponse({
+    result,
     orderId: params.id,
     response: parsed.data.response,
     note: parsed.data.note ?? null,
