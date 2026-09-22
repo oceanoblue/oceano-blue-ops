@@ -149,14 +149,6 @@ export function carryForwardRsvps(payload: EventPayload, current: ExistingEvent)
 export async function syncShootCalendar(orderId: string, options: { strict?: boolean } = {}): Promise<void> {
   const admin = createAdminClient() as any;
 
-  // Pick the actor: an active admin with a Google connection.
-  const actorId = await getActorId(admin);
-  if (!actorId) {
-    logEvent('gcal.sync', 'no_connected_admin', { orderId });
-    if (options.strict) throw new Error('calendar_reconnect_required');
-    return;
-  }
-
   const { data: order, error: orderError } = await admin
     .from('orders')
     .select(
@@ -166,6 +158,23 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
     .maybeSingle();
   if (orderError) throw orderError;
   if (!order) throw new Error('order_not_found');
+
+  // Administrative cleanup of completed work must not recreate old invites,
+  // update their guests, or delete historical calendar entries.
+  const ended = order.scheduled_at &&
+    Date.parse(order.scheduled_at) + (order.duration_minutes ?? 60) * 60_000 <= Date.now();
+  if (order.status === 'delivered' || ended) {
+    logEvent('gcal.sync', 'historical_skipped', { orderId, reason: order.status === 'delivered' ? 'delivered' : 'shoot_ended' });
+    return;
+  }
+
+  // Pick the actor: an active admin with a Google connection.
+  const actorId = await getActorId(admin);
+  if (!actorId) {
+    logEvent('gcal.sync', 'no_connected_admin', { orderId });
+    if (options.strict) throw new Error('calendar_reconnect_required');
+    return;
+  }
 
   const { data: existingRows, error: existingError } = await admin
     .from('order_calendar_events')
