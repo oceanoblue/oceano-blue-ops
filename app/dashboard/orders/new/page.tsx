@@ -23,7 +23,7 @@ export default async function NewShootPage() {
         .order('full_name'),
       supabase
         .from('contractors')
-        .select('id, full_name, pay_rate_cents')
+        .select('id, full_name, pay_rate_cents, team_member_id')
         .eq('is_active', true)
         .order('full_name'),
       supabase
@@ -41,7 +41,7 @@ export default async function NewShootPage() {
   const {data: profiles} = await (supabase as any).from('photographer_routing').select('team_member_id,capture_skills');
   const videographers = (team || []).filter(t => profiles?.some((p:any)=>p.team_member_id===t.id&&p.capture_skills.includes('videography')));
   const photographers = ((team ?? []) as any[])
-    .filter((t) => t.role === 'photographer' || t.role === 'admin')
+    .filter((t) => (t.role === 'photographer' || t.role === 'admin') && !(contractorRows || []).some(c => c.team_member_id === t.id) && profiles?.some((p:any)=>p.team_member_id===t.id&&p.capture_skills.some((s:string)=>s==='photography'||s==='tour_360')))
     .map((t) => ({ id: t.id, full_name: t.full_name }));
 
   return (
