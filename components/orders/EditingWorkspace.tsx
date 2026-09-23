@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
 import { Loader2, Download, UploadCloud, CheckCircle2 } from 'lucide-react';
+import { extractUploadExif } from '@/lib/photos/exif-extract';
 import { createClient } from '@/lib/supabase/client';
 
 /** Provider-neutral external-editing workflow, kept deliberately simple:
@@ -65,6 +66,7 @@ export function EditingWorkspace({
             byte_size: file.size,
             width,
             height,
+            exif: await extractUploadExif(file),
           });
           setProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
         }

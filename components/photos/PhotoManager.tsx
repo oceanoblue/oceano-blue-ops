@@ -182,7 +182,9 @@ export function PhotoManager({
       .from('photos')
       .select('*')
       .eq('order_id', orderId)
-      .order('created_at', { ascending: true });
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('filename', { ascending: true })
+      .order('id', { ascending: true });
     setPhotos((ps ?? []) as Photo[]);
     const r = await fetch(`/api/ai/status?order_id=${orderId}`);
     const j = await r.json();
@@ -1633,6 +1635,25 @@ function Stage3({
   onChange: () => void;
   onBack?: () => void;
 }) {
+  const [sortMode, setSortMode] = useState<'filename' | 'captured'>('filename');
+  const [sorting, setSorting] = useState(false);
+  const [sortMessage, setSortMessage] = useState('');
+  const [sortError, setSortError] = useState('');
+  async function savePhotoOrder() {
+    setSorting(true); setSortError(''); setSortMessage('');
+    try {
+      const response = await fetch('/api/photos/order', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId, mode: sortMode }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save the order.');
+      setByRoom(false);
+      await onChange();
+      setSortMessage(`Saved ${sortMode === 'captured' ? 'date taken' : 'photo number'} order for the gallery and downloads.${result.missing_dates ? ` ${result.missing_dates} photos have no capture date; they appear last, in photo number order.` : ''}`);
+    } catch (error) { setSortError(error instanceof Error ? error.message : 'Could not save the order.'); }
+    finally { setSorting(false); }
+  }
   const [organizing, setOrganizing] = useState(false);
   const [organizeError, setOrganizeError] = useState<string | null>(null);
   const [byRoom, setByRoom] = useState(false);
@@ -1819,7 +1840,7 @@ function Stage3({
             </button>
             <button
               onClick={organizeByRoom}
-              disabled={organizing || photos.length === 0}
+              disabled={organizing || sorting || photos.length === 0}
               className="text-xs font-medium px-2.5 py-1.5 rounded-md bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-60 inline-flex items-center gap-1.5"
               title="Use AI to tag each photo by area (living room, kitchen, primary bedroom, …)"
             >
@@ -1839,6 +1860,27 @@ function Stage3({
           </button>}
         </div></details>
       </header>
+
+      <section aria-label="Delivery photo order" className="rounded-xl border border-ocean-200 bg-ocean-50/60 p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-ocean-900">Delivery photo order</h3>
+            <p className="mt-1 text-xs text-slate-600">Set the sequence your client sees. Downloads are numbered to match. Apply again after adding photos.</p>
+          </div>
+          <label className="text-xs font-medium text-slate-600">Arrange by
+            <select value={sortMode} onChange={e => setSortMode(e.target.value as 'filename' | 'captured')} disabled={sorting} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900">
+              <option value="filename">Photo number · low to high</option>
+              <option value="captured">Date taken · oldest first</option>
+            </select>
+          </label>
+          <button type="button" onClick={savePhotoOrder} disabled={sorting || organizing || photos.length === 0 || processingJobs.length > 0} className="inline-flex items-center gap-2 rounded-lg bg-ocean-700 px-4 py-2 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50">
+            {sorting && <Loader2 className="h-4 w-4 animate-spin" />}{sorting ? 'Arranging…' : 'Save photo order'}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">{processingJobs.length > 0 ? 'Sorting becomes available when enhancement finishes.' : 'Date taken uses camera metadata; photos without a date go last, sorted by filename. Room grouping is only a viewing option.'}</p>
+        {sortMessage && <p role="status" className="mt-2 text-sm text-emerald-800">{sortMessage}</p>}
+        {sortError && <p role="alert" className="mt-2 text-sm text-rose-700">{sortError}</p>}
+      </section>
 
       {organizeError && (
         <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
@@ -2454,6 +2496,7 @@ function ProcessedCard({
         </div>
       )}
 
+      <div title={photo.filename} className="pointer-events-none absolute left-1.5 top-1.5 max-w-[62%] truncate rounded bg-slate-950/70 px-1.5 py-0.5 text-[10px] text-white">{photo.filename}</div>
       {isApproved && (
         <div className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-600 text-white px-1.5 py-0.5 rounded shadow">
           <CheckCircle2 className="h-3 w-3" /> Approved

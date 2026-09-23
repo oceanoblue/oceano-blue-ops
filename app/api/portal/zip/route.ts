@@ -1,4 +1,5 @@
 import archiver from 'archiver';
+import { deliveryFilename } from '@/lib/photos/order';
 import { createClient } from '@/lib/supabase/server';
 import { paywallFor } from '@/lib/payments/gate';
 import { isDeliverable } from '@/lib/photos/deliverable';
@@ -50,9 +51,9 @@ export async function GET(request: Request) {
       archive.on('data', (chunk) => controller.enqueue(chunk));
       archive.on('end', () => controller.close());
       archive.on('error', (e) => controller.error(e));
-      for (const p of downloadable) {
+      for (const [index, p] of downloadable.entries()) {
         const { data } = await supabase.storage.from((p as any).bucket).download((p as any).storage_path);
-        if (data) archive.append(Buffer.from(await data.arrayBuffer()), { name: (p as any).filename });
+        if (data) archive.append(Buffer.from(await data.arrayBuffer()), { name: deliveryFilename(p.filename, index, downloadable.length) });
       }
       archive.finalize();
     },
