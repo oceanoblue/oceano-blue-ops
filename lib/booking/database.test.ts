@@ -51,6 +51,7 @@ beforeAll(async () => {
   await db.exec('create table order_calendar_events(order_id uuid,calendar_id text,role text,unique(order_id,calendar_id))');
   await db.exec(readFileSync('supabase/migrations/20260923104656_manual_assignment_review.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20260923105506_calendar_role_keys.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260923110950_preserve_accepted_shorter_visits.sql','utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -414,6 +415,32 @@ describe('individual crew visits and manual request recovery',()=>{
    await split(id,false,120,60,60);
    expect((await db.query<any>('select assignment_round,contractor_response from orders where id=$1',[id])).rows[0]).toEqual({assignment_round:1,contractor_response:'accepted'});
    expect((await db.query("select kind from booking_followups where kind in ('assignment_email','assignment_sms')")).rows).toHaveLength(0);
+ });
+ it('retains the actual acceptance and timestamp when shortening a visit, syncing only the calendar',async()=>{
+   const id=await setup();const acceptedAt=new Date().toISOString();
+   await db.query("update orders set contractor_response='accepted',contractor_responded_at=$2,contractor_response_note='Confirmed' where id=$1",[id,acceptedAt]);await db.exec('delete from booking_followups');
+   await split(id);await split(id);
+   const row=(await db.query<any>('select assignment_round,assignment_state,contractor_response,contractor_responded_at,contractor_response_note,assignment_due_at from orders where id=$1',[id])).rows[0];
+   expect(row).toMatchObject({assignment_round:1,assignment_state:'confirmed',contractor_response:'accepted',contractor_response_note:'Confirmed',assignment_due_at:null});
+   expect(new Date(row.contractor_responded_at).toISOString()).toBe(acceptedAt);
+   expect((await db.query('select kind from booking_followups')).rows).toEqual([{kind:'calendar'}]);
+ });
+ it('requests acceptance again when a shorter visit is extended or its arrival changes',async()=>{
+   const id=await setup();await split(id);await db.query("update orders set contractor_response='accepted' where id=$1",[id]);await db.exec('delete from booking_followups');
+   await split(id,false,90,90,30);
+   expect((await db.query<any>('select assignment_state,contractor_response from orders where id=$1',[id])).rows[0]).toEqual({assignment_state:'awaiting_response',contractor_response:null});
+   await db.query("update orders set contractor_response='accepted' where id=$1",[id]);await db.exec('delete from booking_followups');
+   await db.query('update orders set photographer_start_offset_minutes=15,photographer_duration_minutes=60 where id=$1',[id]);
+   expect((await db.query<any>('select assignment_state,contractor_response from orders where id=$1',[id])).rows[0]).toEqual({assignment_state:'awaiting_response',contractor_response:null});
+   expect((await db.query("select kind from booking_followups where kind='assignment_email'")).rows).toHaveLength(1);
+ });
+ it('syncs a photography-only shortening and preserves internal staff acceptance too',async()=>{
+   await enableDispatch();await db.exec('update products set duration_minutes=120');
+   const id=(await book({...payload,photographer_id:backup,duration_minutes:120})).rows[0].id;
+   await db.query("select respond_to_team_assignment($1,1,$2,'accepted')",[id,backup]);await db.exec('delete from booking_followups');
+   await db.query('update orders set photographer_duration_minutes=60 where id=$1',[id]);
+   expect((await db.query<any>('select assignment_state,assignment_round from orders where id=$1',[id])).rows[0]).toEqual({assignment_state:'confirmed',assignment_round:1});
+   expect((await db.query('select kind from booking_followups')).rows).toEqual([{kind:'calendar'}]);
  });
  it('does not invalidate photography acceptance when only the video visit changes',async()=>{
    const id=await setup();await split(id);await db.query("update orders set contractor_response='accepted' where id=$1",[id]);await db.exec('delete from booking_followups');
