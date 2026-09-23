@@ -2326,6 +2326,10 @@ export type Database = {
           pay_request_id: string | null
           pay_status: string
           videographer_id: string | null
+          photographer_start_offset_minutes: number
+          photographer_duration_minutes: number | null
+          videographer_start_offset_minutes: number
+          videographer_duration_minutes: number | null
           photographer_id: string | null
           project_type: Database["public"]["Enums"]["project_type"]
           rush: boolean
@@ -2375,6 +2379,10 @@ export type Database = {
           pay_request_id?: string | null
           pay_status?: string
           videographer_id?: string | null
+          photographer_start_offset_minutes?: number
+          photographer_duration_minutes?: number | null
+          videographer_start_offset_minutes?: number
+          videographer_duration_minutes?: number | null
           photographer_id?: string | null
           project_type?: Database["public"]["Enums"]["project_type"]
           rush?: boolean
@@ -2424,6 +2432,10 @@ export type Database = {
           pay_request_id?: string | null
           pay_status?: string
           videographer_id?: string | null
+          photographer_start_offset_minutes?: number
+          photographer_duration_minutes?: number | null
+          videographer_start_offset_minutes?: number
+          videographer_duration_minutes?: number | null
           photographer_id?: string | null
           project_type?: Database["public"]["Enums"]["project_type"]
           rush?: boolean

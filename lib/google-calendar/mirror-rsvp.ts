@@ -40,7 +40,7 @@ export async function mirrorGuestRsvps(opts: { baseUrl: string }): Promise<{
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: orders } = await admin
     .from('orders')
-    .select('id, contractor_id, assignment_round, contractors(email), order_calendar_events(calendar_id, event_id)')
+    .select('id, contractor_id, assignment_round, contractors(email), order_calendar_events(calendar_id, event_id, role)')
     .not('contractor_id', 'is', null)
     .is('contractor_response', null)
     .is('archived_at', null)
@@ -51,7 +51,7 @@ export async function mirrorGuestRsvps(opts: { baseUrl: string }): Promise<{
   let mirrored = 0;
   for (const o of orders ?? []) {
     const email = String(o.contractors?.email ?? '').trim().toLowerCase();
-    const master = (o.order_calendar_events ?? []).find((e: any) => e.calendar_id === MASTER_CALENDAR_ID);
+    const master = (o.order_calendar_events ?? []).find((e:any)=>e.role==='photographer') || (o.order_calendar_events ?? []).find((e: any) => e.calendar_id === MASTER_CALENDAR_ID&&e.role==='master');
     if (!email || !master) continue;
     checked += 1;
     try {

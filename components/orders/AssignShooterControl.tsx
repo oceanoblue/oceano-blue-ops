@@ -2,8 +2,10 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Send, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { Loader2, Send, CheckCircle2 } from 'lucide-react';
+import {roleWindow,type CrewTiming} from '@/lib/booking/crew-windows';
+import {scheduleInput,scheduleWindow} from '@/lib/orders/schedule-window';
+import {fmtTimeInTz} from '@/lib/utils/timezone';
 
 export type Shooter = {
   key: string; // "contractor:<id>" | "team:<id>"
@@ -30,7 +32,7 @@ export function AssignShooterControl({
   currentVideographerId,
   updatedAt,
   needsVideo,
-  shooters,
+  shooters, timing, timezone, canRenew, assignmentRound,
 }: {
   orderId: string;
   currentContractorId: string | null;
@@ -38,7 +40,7 @@ export function AssignShooterControl({
   currentVideographerId: string | null;
   updatedAt: string;
   needsVideo: boolean;
-  shooters: Shooter[];
+  shooters: Shooter[]; timing:CrewTiming; timezone:string; canRenew:boolean; assignmentRound:number;
 }) {
   const router = useRouter();
   const saving = useRef(false);
@@ -48,7 +50,11 @@ export function AssignShooterControl({
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsOverride, setNeedsOverride] = useState(false);
-  const [pendingSel, setPendingSel] = useState<string | null>(null);
+  const [warnings,setWarnings]=useState<string[]>([]);
+  const [pendingAction,setPendingAction]=useState<'save'|'renew'>('save');
+  const initialTimes=()=>Object.fromEntries((['photographer','videographer'] as const).flatMap(role=>{const w=roleWindow(timing,role);return [[`${role}From`,scheduleInput(w.start,timezone)],[`${role}To`,scheduleInput(w.end,timezone)]];}));
+  const [times,setTimes]=useState(initialTimes);
+  const roleText=(role:'photographer'|'videographer')=>{const w=roleWindow(timing,role);return w.start&&w.end?`${fmtTimeInTz(w.start,timezone)}–${fmtTimeInTz(w.end,timezone)}`:'Time not set';};
 
   // Resolve the current selection to a key that actually exists in the deduped
   // list. A person who is both a team photographer AND a contractor (e.g. Karen)
@@ -73,60 +79,25 @@ export function AssignShooterControl({
   const assigned = shooters.find((s) => s.key === current);
   const contractorAssigned = assigned?.kind === 'contractor';
 
-  async function assign(sel: string, allowOverlap = false) {
-    if (saving.current) return;
-    saving.current = true;
-    setBusy(true);
-    setError(null);
-    setSentTo(null);
+  async function assign(action:'save'|'renew'|'review'='save',acknowledge=false) {
+    if(saving.current)return; saving.current=true;setBusy(true);setError(null);setWarnings([]);
     try {
-      const supabase = createClient();
-      let photographerId: string | null = null;
-      let contractorId: string | null = null;
-
-      const s = sel ? shooters.find((x) => x.key === sel) : null;
-      if (s?.kind === 'contractor') {
-        contractorId = s.id;
-
-        photographerId = s.teamMemberId ?? null; // linked scheduling identity
-      } else if (s?.kind === 'team') {
-        photographerId = s.id;
+      const selected=shooters.find(x=>x.key===photo);
+      const windows:Record<string,number|null>={};
+      if(timing.scheduled_at&&action!=='renew')for(const role of ['photographer','videographer'] as const){
+        const w=scheduleWindow(times[`${role}From`],times[`${role}To`],timezone);
+        const offset=(Date.parse(w.scheduledAt)-Date.parse(timing.scheduled_at))/60000;
+        if(offset<0||offset+w.duration>(timing.duration_minutes||60))throw new Error('Each crew visit must fit inside the client appointment.');
+        windows[role==='photographer'?'photo_offset':'video_offset']=offset;
+        windows[role==='photographer'?'photo_duration':'video_duration']=w.duration;
       }
-
-      const { error } = await (supabase as any).rpc('set_order_crew', {
-        p_order: orderId,
-        p_photographer: photographerId,
-        p_contractor: contractorId,
-        p_videographer: video || null,
-        p_expected_updated_at: updatedAt,
-        p_allow_overlap: allowOverlap,
-      });
-      if (error) {
-        const conflict =
-          (error as any).code === '23P01' || /slot_unavailable|exclusion/i.test(error.message || '');
-        if (conflict && !allowOverlap) {
-          setPendingSel(sel);
-          setNeedsOverride(true);
-          return;
-        }
-        throw new Error(
-          conflict ? 'A crew member is already booked around this time.' : error.message?.includes('order_changed') ? 'The order changed. Refresh before assigning the crew.' : error.message
-        );
-      }
-      setNeedsOverride(false);
-      setPendingSel(null);
-      setEditing(false);
-
-      // Calendar synchronization is queued in the same database transaction.
-
-      // Assignment notifications are queued atomically by the database.
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      saving.current = false;
-      setBusy(false);
-    }
+      const response=await fetch(`/api/orders/${orderId}/crew`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,updated_at:updatedAt,round:assignmentRound,photographer_id:selected?.kind==='contractor'?selected.teamMemberId:selected?.id,contractor_id:selected?.kind==='contractor'?selected.id:null,videographer_id:video||null,acknowledge_warnings:acknowledge,...windows})});
+      const data=await response.json();
+      if(data.warnings?.length){setWarnings(data.warnings);if(action!=='review'){setPendingAction(action);setNeedsOverride(true);return;}}
+      if(!response.ok)throw new Error(data.error||'Unable to save crew');
+      if(action==='review'){if(!data.warnings?.length)setSentTo('Availability checks passed.');return;}
+      setNeedsOverride(false);setEditing(false);setSentTo(action==='renew'?'New acceptance request queued. The photographer remains unconfirmed.':null);router.refresh();
+    }catch(e){setError(e instanceof Error?e.message:String(e));}finally{saving.current=false;setBusy(false);}
   }
 
   async function sendUploadLink() {
@@ -145,7 +116,7 @@ export function AssignShooterControl({
               : d.error || `Failed (${r.status})`
         );
       }
-      setSentTo(d.to ?? 'the photographer');
+      setSentTo(`Upload link sent to ${d.to ?? 'the photographer'}.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -160,15 +131,15 @@ export function AssignShooterControl({
   return (
     <div>
       {!editing ? <div className="rounded-xl border border-slate-200 p-4">
-        <dl className="space-y-3 text-sm"><div className="flex justify-between gap-3"><dt className="text-slate-500">Photographer / 360</dt><dd className="font-medium">{assigned?.name || 'Unassigned'}</dd></div><div className="flex justify-between gap-3"><dt className="text-slate-500">Videographer</dt><dd className="font-medium">{videoName || 'Unassigned'}</dd></div></dl>
+        <dl className="space-y-3 text-sm"><div className="flex justify-between gap-3"><dt className="text-slate-500">Photographer / 360</dt><dd className="font-medium">{assigned?.name || 'Unassigned'}<span className="block text-xs text-slate-500">{roleText('photographer')}</span></dd></div><div className="flex justify-between gap-3"><dt className="text-slate-500">Videographer</dt><dd className="font-medium">{videoName || 'Unassigned'}<span className="block text-xs text-slate-500">{roleText('videographer')}</span></dd></div></dl>
         {needsVideo && !currentVideographerId && <p className="mt-3 text-xs text-amber-800">Video is booked. Assign a videographer before the shoot.</p>}
-        <button type="button" className="mt-4 text-sm font-medium text-ocean-700 underline" onClick={()=>{setPhoto(current);setVideo(currentVideographerId||'');setError(null);setNeedsOverride(false);setEditing(true);}}>Edit crew</button>
+        <button type="button" className="mt-4 text-sm font-medium text-ocean-700 underline" onClick={()=>{setPhoto(current);setVideo(currentVideographerId||'');setTimes(initialTimes());setWarnings([]);setError(null);setNeedsOverride(false);setEditing(true);}}>Edit crew</button>
       </div> : <div className="space-y-3 rounded-xl border border-ocean-200 bg-ocean-50/30 p-4">
       <label htmlFor="crew-photo" className="label flex items-center gap-2">
         Photographer
         {busy && <Loader2 className="h-3 w-3 animate-spin text-slate-400" />}
       </label>
-      <select id="crew-photo" value={photo} onChange={(e) => {setPhoto(e.target.value);setNeedsOverride(false);}} disabled={busy} className="input">
+      <select id="crew-photo" value={photo} onChange={(e) => {setPhoto(e.target.value);setNeedsOverride(false);setWarnings([]);}} disabled={busy} className="input">
         <option value="">— Unassigned —</option>
         {contractors.length > 0 && (
           <optgroup label="Contractors">
@@ -188,39 +159,16 @@ export function AssignShooterControl({
           </optgroup>
         )}
       </select>
+      {timing.scheduled_at&&<div className="grid gap-2 sm:grid-cols-2">{(['From','To'] as const).map(edge=><label key={edge} className="text-xs">Photography {edge.toLowerCase()}<input type="datetime-local" className="input mt-1" disabled={busy} value={times[`photographer${edge}`]} onChange={e=>{setTimes({...times,[`photographer${edge}`]:e.target.value});setNeedsOverride(false);setWarnings([]);}}/></label>)}</div>}
       <label htmlFor="crew-video" className="label">Videographer</label>
-      <select id="crew-video" value={video} disabled={busy} className="input" onChange={e=>{setVideo(e.target.value);setNeedsOverride(false);}}><option value="">— Unassigned —</option>{videoCrew.map(s=><option key={s.key} value={s.kind==='team'?s.id:s.teamMemberId!}>{s.name}</option>)}</select>
-      <p className="text-xs text-slate-600">One person can cover both roles. Both people reserve the appointment window. Video assignments are managed by the office; photographer acceptance is tracked separately.</p>
-      {!needsOverride && <div className="flex gap-2"><button disabled={busy} type="button" className="btn-primary" onClick={()=>assign(photo)}>{busy?'Saving…':'Save crew'}</button><button disabled={busy} type="button" className="btn-ghost" onClick={()=>setEditing(false)}>Cancel</button></div>}
-
-      {needsOverride && (
-        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <p className="flex items-start gap-1.5 text-sm text-amber-800">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            A crew member has another shoot or a travel-buffer conflict. Assign anyway?
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              onClick={() => assign(pendingSel ?? '', true)}
-              disabled={busy}
-              className="btn-primary inline-flex items-center gap-1.5 text-sm disabled:opacity-50"
-            >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Assign anyway
-            </button>
-            <button
-              onClick={() => {
-                setNeedsOverride(false);
-                setPendingSel(null);
-              }}
-              className="btn-ghost text-sm"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      <select id="crew-video" value={video} disabled={busy} className="input" onChange={e=>{setVideo(e.target.value);setNeedsOverride(false);setWarnings([]);}}><option value="">— Unassigned —</option>{videoCrew.map(s=><option key={s.key} value={s.kind==='team'?s.id:s.teamMemberId!}>{s.name}</option>)}</select>
+      {timing.scheduled_at&&video&&<div className="grid gap-2 sm:grid-cols-2">{(['From','To'] as const).map(edge=><label key={edge} className="text-xs">Video {edge.toLowerCase()}<input type="datetime-local" className="input mt-1" disabled={busy} value={times[`videographer${edge}`]} onChange={e=>{setTimes({...times,[`videographer${edge}`]:e.target.value});setNeedsOverride(false);setWarnings([]);}}/></label>)}</div>}
+      <p className="text-xs text-slate-600">Each person reserves only their visit. Times are {timezone.replaceAll('_',' ')} and must fit within the client appointment. Office-assigned photographers have 24 hours to respond, or until the shoot starts if sooner.</p>
+      {!needsOverride && <div className="flex gap-2"><button disabled={busy} type="button" className="btn-primary" onClick={()=>assign()}>{busy?'Saving…':'Save crew'}</button><button disabled={busy} type="button" className="btn-ghost" onClick={()=>setEditing(false)}>Cancel</button></div>}
 
       </div>}
+      {canRenew&&!editing&&<button type="button" disabled={busy} className="btn-secondary mt-3" onClick={()=>assign('renew')}>Send new acceptance request</button>}
+      {!!warnings.length&&<div role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p className="font-semibold">Availability needs review</p><ul className="mt-2 list-disc space-y-2 pl-5">{warnings.map(w=><li key={w}>{w}</li>)}</ul>{needsOverride&&<div className="mt-3 flex gap-2"><button className="btn-secondary" disabled={busy} onClick={()=>assign(pendingAction,true)}>{pendingAction==='renew'?'Send availability request':'Save with these warnings'}</button><button className="btn-ghost" onClick={()=>{setWarnings([]);setNeedsOverride(false);setWarnings([]);}}>Cancel</button></div>}</div>}
       {contractorAssigned && (
         <div className="mt-2">
           <button
@@ -233,7 +181,7 @@ export function AssignShooterControl({
           </button>
           {sentTo && (
             <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-emerald-700">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Sent to {sentTo}
+              <CheckCircle2 className="h-3.5 w-3.5" /> {sentTo}
             </p>
           )}
         </div>

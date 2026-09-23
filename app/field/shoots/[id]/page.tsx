@@ -1,3 +1,6 @@
+import {roleWindow} from '@/lib/booking/crew-windows';
+import {fmtDateTimeTz} from '@/lib/utils/format';
+import {fmtTimeInTz} from '@/lib/utils/timezone';
 import { redirect, notFound } from 'next/navigation';
 import { MapPin } from 'lucide-react';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
@@ -26,7 +29,8 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
     .maybeSingle();
   if (!shoot) notFound();
 
-  const {data:version}=await (createAdminClient() as any).from('orders').select('assignment_round,assignment_state,assignment_confirmation_mode,photographer_id,videographer_id,videographer:team_members!orders_videographer_id_fkey(full_name)').eq('id',shoot.id).single();
+  const {data:version}=await (createAdminClient() as any).from('orders').select('scheduled_at,duration_minutes,timezone,photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,assignment_round,assignment_state,assignment_confirmation_mode,photographer_id,videographer_id,videographer:team_members!orders_videographer_id_fkey(full_name)').eq('id',shoot.id).single();
+  const visit=version?roleWindow(version,'photographer'):null;
   const l = (shoot.listing ?? {}) as any;
 
   return (
@@ -78,6 +82,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
                 </span>
               </span>
             </Row>
+            <Row label="Your visit">{visit?.start&&visit.end?`${fmtDateTimeTz(visit.start,version.timezone)}–${fmtTimeInTz(visit.end,version.timezone)}`:'Not scheduled'}</Row>
             <Row label="Size">{l.sqft ? `${l.sqft.toLocaleString()} sqft` : '—'}</Row>
             <Row label="Beds / baths">
               {(l.bedrooms ?? '—') + ' bd · ' + (l.bathrooms ?? '—') + ' ba'}

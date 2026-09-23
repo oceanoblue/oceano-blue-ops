@@ -87,3 +87,14 @@ it('labels a split-crew photographer request without implying responsibility for
   await deliverFollowup(event);
   expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({html:expect.stringContaining('Your role: photography / 360. Video is assigned separately. Full order:')}));
 });
+it('sends the photographer only their one-hour visit in both email and SMS',async()=>{
+ const event=job();Object.assign(event,{kind:'assignment_email'});Object.assign(event.payload,{assignment_round:4,contractor_id:'contractor'});
+ readOrder.mockResolvedValue({data:{scheduled_at:'2026-09-30T19:30:00Z',timezone:'America/New_York',duration_minutes:120,photographer_duration_minutes:60,status:'booked',assignment_state:'awaiting_response',assignment_round:4,contractor_id:'contractor',photographer_id:'photo',videographer_id:'video',assignment_due_at:new Date(Date.now()+86400000).toISOString()}});
+ vi.mocked(sendEmail).mockResolvedValue({status:'sent',id:'sent'} as any);
+ vi.mocked(sendSms).mockResolvedValue({status:'sent'} as any);
+ await deliverFollowup(event);
+ const html=vi.mocked(sendEmail).mock.calls[0][0].html;
+ expect(html).toContain('3:30 PM');expect(html).toContain('4:30 PM');expect(html).not.toContain('5:30 PM');
+ await deliverFollowup({...event,kind:'assignment_sms'});
+ expect(vi.mocked(sendSms).mock.calls[0][0].text).toContain('3:30 PM–4:30 PM');
+});

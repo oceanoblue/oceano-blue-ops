@@ -39,3 +39,11 @@ it('does not apply the photographer response to the video invitation',async()=>{
   expect(mocks.insert.mock.calls[0][2].attendees).toEqual([{email:'karen@example.test'}]);
   expect(mocks.insert.mock.calls[0][2].description).toContain('Videographer: Karen');
 });
+it('keeps the client window but invites photography and holds video for their own sequential hours',async()=>{
+  Object.assign(order,{scheduled_at:'2026-09-30T19:30:00Z',duration_minutes:120,photographer_duration_minutes:60,videographer_start_offset_minutes:60,videographer_duration_minutes:60,contractor_response:null});
+  await syncShootCalendar('order',{strict:true});
+  expect(mocks.insert).toHaveBeenCalledTimes(3);
+  expect(mocks.insert).toHaveBeenCalledWith('gustavo','info@oceanoblue.net',expect.objectContaining({startIso:'2026-09-30T19:30:00.000Z',endIso:'2026-09-30T21:30:00.000Z',attendees:[]}),'all','order:info@oceanoblue.net');
+  expect(mocks.insert).toHaveBeenCalledWith('gustavo','info@oceanoblue.net',expect.objectContaining({summary:'Photography · Karen · 48 Rice Mill Road',startIso:'2026-09-30T19:30:00.000Z',endIso:'2026-09-30T20:30:00.000Z',attendees:[{email:'karen@example.test',responseStatus:undefined}]}),'all','order:info@oceanoblue.net:photographer');
+  expect(mocks.insert).toHaveBeenCalledWith('gustavo','gustavo@example.test',expect.objectContaining({startIso:'2026-09-30T20:30:00.000Z',endIso:'2026-09-30T21:30:00.000Z',attendees:[]}),'none','order:gustavo@example.test');
+});

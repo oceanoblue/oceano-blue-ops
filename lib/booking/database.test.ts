@@ -48,6 +48,9 @@ beforeAll(async () => {
   await db.exec("alter table products add column kind text default 'photo'; alter table orders add column package_name text, add column internal_notes text; create type order_status as enum ('draft','booked','scheduled','shooting','delivered','cancelled');");
   await db.exec(readFileSync('supabase/migrations/20260923002221_staff_appointment_window.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20260923005028_photo_video_crew.sql','utf8'));
+  await db.exec('create table order_calendar_events(order_id uuid,calendar_id text,role text,unique(order_id,calendar_id))');
+  await db.exec(readFileSync('supabase/migrations/20260923104656_manual_assignment_review.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260923110001_calendar_role_keys.sql','utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -371,4 +374,68 @@ describe('photography and video crew',()=>{
       expect((await db.query<{skills:string[]}>('select product_capture_skills($1,$2) as skills',[p.kind,p.name])).rows[0].skills).toEqual(productCaptureSkills(p));
     }
   });
+});
+
+describe('individual crew visits and manual request recovery',()=>{
+ async function setup(){
+   await enableDispatch();
+   await db.exec(`update photographer_routing set capture_skills=array['photography','videography'] where team_member_id='${backup}'; update products set duration_minutes=120`);
+   return (await book({...payload,duration_minutes:120})).rows[0].id;
+ }
+ async function split(id:string,override=false,photoDuration=60,videoOffset=60,videoDuration=60){
+   const stamp=(await db.query<{at:string}>('select updated_at::text as at from orders where id=$1',[id])).rows[0].at;
+   return db.query('select set_order_crew($1,$2,$3,$4,$5,$6,0,$7,$8,$9)',[id,photographer,contractor,backup,stamp,override,photoDuration,videoOffset,videoDuration]);
+ }
+ it('stores two one-hour visits, leaves the client window intact, and queues one new request on retry',async()=>{
+   const id=await setup();await db.exec('delete from booking_followups');await split(id);await split(id);
+   const row=(await db.query<any>('select *,extract(epoch from assignment_due_at-now())/60 as deadline from orders where id=$1',[id])).rows[0];
+   expect(row.duration_minutes).toBe(120);expect(row.photographer_duration_minutes).toBe(60);expect(row.videographer_start_offset_minutes).toBe(60);expect(row.videographer_duration_minutes).toBe(60);
+   expect(Number(row.deadline)).toBeGreaterThan(1439);expect(row.auto_dispatch).toBe(false);expect(row.assignment_state).toBe('awaiting_response');expect(row.assignment_round).toBe(2);
+   expect((await db.query("select kind from booking_followups where kind in ('assignment_email','assignment_sms','calendar') order by kind")).rows).toEqual([{kind:'assignment_email'},{kind:'assignment_sms'},{kind:'calendar'}]);
+ });
+ it('blocks each person only during their actual visit plus travel time',async()=>{
+   const id=await setup();await split(id);
+   const at=(minutes:number)=>new Date(Date.parse(String(payload.scheduled_at))+minutes*60000).toISOString();
+   const add=(person:string,minutes:number)=>db.query("insert into orders(id,status,photographer_id,scheduled_at,duration_minutes) values(gen_random_uuid(),'scheduled',$1,$2,30)",[person,at(minutes)]);
+   await add(backup,0); // Ends at 10:30; video begins at 11:00.
+   await add(photographer,90); // Photo ends at 11:00; next appointment 11:30.
+   await expect(add(photographer,0)).rejects.toThrow('slot_unavailable');
+   await expect(add(backup,75)).rejects.toThrow('slot_unavailable');
+ });
+ it('permits a photo visit inside saved hours even when video and the client window run later',async()=>{
+   const id=await setup();await split(id);
+   await db.exec(`update team_availability set end_local='11:00' where team_member_id='${photographer}'`);
+   await expect(split(id,false,90,90,30)).rejects.toThrow('working hours');
+   await split(id,false,60,75,45);
+   await expect(split(id,true,60,90,60)).rejects.toThrow('crew_windows_inside_appointment');
+ });
+ it('does not invalidate photography acceptance when only the video visit changes',async()=>{
+   const id=await setup();await split(id);await db.query("update orders set contractor_response='accepted' where id=$1",[id]);await db.exec('delete from booking_followups');
+   await split(id,false,60,75,45);
+   expect((await db.query<any>('select assignment_round,contractor_response from orders where id=$1',[id])).rows[0]).toEqual({assignment_round:2,contractor_response:'accepted'});
+   expect((await db.query('select kind from booking_followups')).rows).toEqual([{kind:'calendar'}]);
+ });
+ it('accepts a late unanswered office assignment without accepting a different assignment version',async()=>{
+   const id=await setup();await split(id);
+   await db.query("update orders set assignment_state='needs_attention',assignment_due_at=null where id=$1",[id]);
+   await db.query("update orders set contractor_response='accepted' where id=$1 and assignment_round=1",[id]);
+   expect((await db.query<any>('select contractor_response from orders where id=$1',[id])).rows[0].contractor_response).toBe(null);
+   await db.query("update orders set contractor_response='accepted' where id=$1 and assignment_round=2",[id]);
+   expect((await db.query<any>('select assignment_state from orders where id=$1',[id])).rows[0].assignment_state).toBe('confirmed');
+ });
+ it('renews overdue office requests once, rejects stale edits, and requires staff authorization',async()=>{
+   const id=await setup();await split(id);await db.query("update orders set assignment_state='needs_attention',assignment_due_at=null where id=$1",[id]);await db.exec('delete from booking_followups');
+   const stamp=(await db.query<{at:string}>('select updated_at::text as at from orders where id=$1',[id])).rows[0].at;
+   const renew=(expected=stamp)=>db.query('select renew_order_assignment($1,2,$2,$3)',[id,expected,'Please confirm availability']);
+   await expect(renew('2020-01-01T00:00:00Z')).rejects.toThrow('order_changed');
+   await renew();await renew();
+   expect((await db.query("select kind from booking_followups where kind='assignment_email'")).rows).toHaveLength(1);
+   expect((await db.query<any>("select payload->>'availability_note' as note from booking_followups where kind='assignment_email'")).rows[0].note).toBe('Please confirm availability');
+   await db.exec('create or replace function is_team_member() returns boolean language sql as $$select false$$');
+   await expect(renew()).rejects.toThrow('forbidden');
+ });
+ it('keeps automatic dispatch on its shorter response deadline',async()=>{
+   await setup();const row=(await db.query<any>('select extract(epoch from assignment_due_at-now())/60 as deadline from orders')).rows[0];
+   expect(Number(row.deadline)).toBeLessThanOrEqual(60);expect(Number(row.deadline)).toBeGreaterThan(59);
+ });
 });

@@ -1,3 +1,4 @@
+import {memberWindows} from '@/lib/booking/crew-windows';
 import { crewMemberIds, productCaptureSkills } from '@/lib/booking/capture-skills';
 import { scheduleCalendarRanges } from '@/lib/booking/calendar-ranges';
 import Link from 'next/link';
@@ -25,9 +26,9 @@ export default async function SchedulePage({searchParams}:{searchParams:Promise<
     admin.from('team_members').select('id,full_name').eq('is_active',true).in('role',['admin','photographer']).order('full_name'),
     admin.from('photographer_routing').select('team_member_id,color,priority'),
     admin.from('team_calendar_connections').select('team_member_id,is_active,scope').eq('provider','google'),
-    admin.from('orders').select('id,order_number,status,scheduled_at,duration_minutes,photographer_id,videographer_id,contractor_id,contractor_response,assignment_confirmation_mode,assignment_state,assignment_due_at,listings(address_line1,city),clients(full_name),contractors(team_member_id,full_name),order_items(description,products(name,kind))').is('archived_at',null).not('status','in','(cancelled,draft)').gte('scheduled_at',starts).lt('scheduled_at',ends).order('scheduled_at'),
+    admin.from('orders').select('photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,id,order_number,status,scheduled_at,duration_minutes,photographer_id,videographer_id,contractor_id,contractor_response,assignment_confirmation_mode,assignment_state,assignment_due_at,listings(address_line1,city),clients(full_name),contractors(team_member_id,full_name),order_items(description,products(name,kind))').is('archived_at',null).not('status','in','(cancelled,draft)').gte('scheduled_at',starts).lt('scheduled_at',ends).order('scheduled_at'),
     admin.from('schedule_blocks').select('id,team_member_id,starts_at,ends_at,reason').eq('is_available',false).lt('starts_at',ends).gt('ends_at',starts),
-    admin.from('orders').select('id,order_number,status,scheduled_at,photographer_id,videographer_id,contractor_id,contractor_response,assignment_confirmation_mode,assignment_state,assignment_due_at,listings(address_line1,city),clients(full_name),contractors(team_member_id,full_name),order_items(description,products(name,kind))').is('archived_at',null).in('status',['booked','scheduled']).order('scheduled_at',{nullsFirst:true}),
+    admin.from('orders').select('photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,id,order_number,status,scheduled_at,photographer_id,videographer_id,contractor_id,contractor_response,assignment_confirmation_mode,assignment_state,assignment_due_at,listings(address_line1,city),clients(full_name),contractors(team_member_id,full_name),order_items(description,products(name,kind))').is('archived_at',null).in('status',['booked','scheduled']).order('scheduled_at',{nullsFirst:true}),
   ]);
   const members=(membersResult.data||[]).map((m:any)=>({...m,color:routingResult.data?.find((p:any)=>p.team_member_id===m.id)?.color||'#475569'}));
   const selected=members.some((m:any)=>m.id===search.photographer)?search.photographer:undefined;
@@ -46,12 +47,14 @@ export default async function SchedulePage({searchParams}:{searchParams:Promise<
   const name=(o:Shoot)=>`Photo: ${o.contractors?.full_name||members.find((m:any)=>m.id===o.photographer_id)?.full_name||'Unassigned'}${o.videographer_id ? ` · Video: ${members.find((m:any)=>m.id===o.videographer_id)?.full_name||'Assigned'}` : ''}`;
   const error=membersResult.error||routingResult.error||ordersResult.error||pendingResult.error||blocksResult.error||connectionsResult.error;
   function card(o:Shoot,color?:string,memberId?:string) {
+    const visits=memberId?memberWindows(o as any,memberId):[];
+    const visit=visits.length?{start:visits.map(w=>w.start!).sort()[0],end:visits.map(w=>w.end!).sort().at(-1)!}:null;
     const label=missingVideo(o)?'Videographer needed':`Photo · ${assignmentLabel(o)}`;return <Link key={o.id} href={`/dashboard/orders/${o.id}`} className="block rounded-xl border border-slate-200 border-l-4 bg-white p-3 shadow-sm transition hover:shadow-md focus-visible:outline-ocean-600" style={{borderLeftColor:color||'#d97706'}}>
-      <div className="flex justify-between gap-2 text-xs text-slate-500"><span>{o.scheduled_at?`${fmtTimeInTz(o.scheduled_at,tz)}${o.duration_minutes?`–${fmtTimeInTz(new Date(Date.parse(o.scheduled_at)+o.duration_minutes*60000),tz)}`:''}`:'Date needed'}</span><span>#{o.order_number}</span></div>
+      <div className="flex justify-between gap-2 text-xs text-slate-500"><span>{o.scheduled_at?`${fmtTimeInTz(visit?.start||o.scheduled_at,tz)}${o.duration_minutes?`–${fmtTimeInTz(visit?.end||new Date(Date.parse(o.scheduled_at)+o.duration_minutes*60000),tz)}`:''}`:'Date needed'}</span><span>#{o.order_number}</span></div>
       <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{memberId && o.videographer_id===memberId ? resolve(o)===memberId ? 'Photo + video' : 'Video' : 'Photography / 360'}</p>
       <p className="mt-2 break-words text-sm font-semibold text-ink-950">{o.listings?.address_line1||'Property details needed'}</p><p className="mt-1 text-xs text-slate-500">{o.clients?.full_name} · {o.listings?.city}</p>
       <p className="mt-2 text-xs font-medium" style={{color:color||'#92400e'}}>{name(o)}</p>
-      <p className="mt-1 text-xs text-slate-500">{(o.order_items||[]).map((i:any)=>i.description).join(' · ')||'Services not entered'}{o.duration_minutes?` · ${o.duration_minutes} min`:''}</p>
+      <p className="mt-1 text-xs text-slate-500">{(o.order_items||[]).map((i:any)=>i.description).join(' · ')||'Services not entered'}{o.duration_minutes?` · ${visit?Math.round((Date.parse(visit.end)-Date.parse(visit.start))/60000):o.duration_minutes} min`:''}</p>
       <span className={`mt-3 inline-block rounded-md px-2 py-1 text-[11px] font-medium ${!missingVideo(o)&&assignmentLabel(o).startsWith('Confirmed')?'bg-emerald-50 text-emerald-800':'bg-amber-50 text-amber-900'}`}>{label}</span>
       {o.assignment_due_at&&!assignmentLabel(o).startsWith('Confirmed')&&<p className="mt-2 text-[11px] text-slate-500">{Date.parse(o.assignment_due_at)<Date.now()?'Response overdue':'Respond by'} {fmtTimeInTz(o.assignment_due_at,tz)}</p>}
     </Link>;
@@ -62,7 +65,7 @@ export default async function SchedulePage({searchParams}:{searchParams:Promise<
     const dayBlocks=(blocksResult.data||[]).filter((b:any)=>b.team_member_id===m.id&&Date.parse(b.starts_at)<dayEnd&&Date.parse(b.ends_at)>dayStart);
     const blocks=dayBlocks.filter((b:any)=>!b.reason?.startsWith('sync:'));
     const cached=dayBlocks.filter((b:any)=>b.reason?.startsWith('sync:')).map((b:any)=>({start:b.starts_at,end:b.ends_at}));
-    const hidden=[...shoots.map((o:Shoot)=>({start:o.scheduled_at,end:new Date(Date.parse(o.scheduled_at)+(o.duration_minutes||60)*60000).toISOString()})),...blocks.map((b:any)=>({start:b.starts_at,end:b.ends_at}))];
+    const hidden=[...shoots.flatMap((o:Shoot)=>memberWindows(o as any,m.id).map(w=>({start:w.start!,end:w.end!}))),...blocks.map((b:any)=>({start:b.starts_at,end:b.ends_at}))];
     const busy=scheduleCalendarRanges(m.busy.filter((b:any)=>Date.parse(b.start)<dayEnd&&Date.parse(b.end)>dayStart),cached,hidden);
     return <div className="space-y-2">{shoots.map((o:Shoot)=>card(o,m.color,m.id))}{blocks.map((b:any)=><div key={b.id} className="rounded-lg bg-slate-200 p-3 text-xs text-slate-700">Time off · {fmtTimeInTz(new Date(Math.max(Date.parse(b.starts_at),dayStart)),tz)}–{fmtTimeInTz(new Date(Math.min(Date.parse(b.ends_at),dayEnd)),tz)}</div>)}{busy.map((b:any,i:number)=><div key={i} className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-500">Calendar busy · {fmtTimeInTz(new Date(Math.max(Date.parse(b.start),dayStart)),tz)}–{fmtTimeInTz(new Date(Math.min(Date.parse(b.end),dayEnd)),tz)}</div>)}{!shoots.length&&!blocks.length&&!busy.length&&<p className="py-5 text-xs text-slate-400">No shoots scheduled</p>}</div>;
   }
