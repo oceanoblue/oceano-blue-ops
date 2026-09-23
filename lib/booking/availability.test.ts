@@ -55,3 +55,13 @@ it('allows qualified 360 bookings without giving the photographer video eligibil
  tables.photographer_routing[1].product_ids=null;
  expect((await getAvailability('2026-09-22',60,undefined,{...options,productIds:['360']})).slots[0].photographer_id).toBe('karen');
 });
+it('releases each crew member outside their own visit, retaining the travel buffer',async()=>{
+ tables.orders=[{photographer_id:'karen',videographer_id:'gustavo',scheduled_at:'2026-09-22T15:00:00Z',duration_minutes:120,photographer_duration_minutes:60,videographer_start_offset_minutes:60,videographer_duration_minutes:60,listings:{zip:'29910'}}];
+ const result=await getAvailability('2026-09-22',30,undefined,{...options,allCandidates:true});
+ const offered=(at:string,person:string)=>result.slots.some(s=>s.iso===`2026-09-22T${at}:00.000Z`&&s.photographer_id===person);
+ expect(offered('15:00','karen')).toBe(false);
+ expect(offered('15:00','gustavo')).toBe(true);
+ expect(offered('16:00','karen')).toBe(false);
+ expect(offered('16:30','karen')).toBe(true);
+ expect(offered('16:30','gustavo')).toBe(false);
+});

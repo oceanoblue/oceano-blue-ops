@@ -311,6 +311,7 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
                 currentVideographerId={order.videographer_id ?? null}
                 updatedAt={order.updated_at}
                 needsVideo={needsVideo}
+                timing={order as any} timezone={order.timezone || 'America/New_York'} assignmentRound={order.assignment_round} canRenew={order.assignment_state==='needs_attention'&&!order.contractor_response&&!!order.photographer_id}
                 shooters={shooters}
               />
               <AssignTeamControl

@@ -58,7 +58,7 @@ export function RescheduleControl({
         }
         throw new Error(
           conflict ? 'That photographer is already booked around this time.' :
-          err.message?.includes('order_changed') ? 'This appointment changed in another window. Refresh the page before editing again.' : err.message
+          err.message?.includes('crew_windows_inside_appointment') ? 'The client window must contain both crew visits. Edit crew times first, or choose a longer client window.' : err.message?.includes('order_changed') ? 'This appointment changed in another window. Refresh the page before editing again.' : err.message
         );
       }
       // Move the shoot on the calendars.
@@ -138,7 +138,7 @@ export function RescheduleControl({
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
           <p className="flex items-start gap-1.5 text-sm text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            This appointment overlaps another shoot or its travel buffer.
+            A crew visit conflicts with working hours, another shoot, or its travel buffer.
             Book it anyway?
           </p>
           <div className="mt-2 flex items-center gap-2">

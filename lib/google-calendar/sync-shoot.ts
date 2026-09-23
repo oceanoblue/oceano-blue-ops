@@ -1,3 +1,4 @@
+import {roleWindow} from '@/lib/booking/crew-windows';
 import { createAdminClient } from '@/lib/supabase/server';
 import {
   insertEvent,
@@ -68,7 +69,7 @@ export async function removeShootCalendar(orderId: string): Promise<void> {
     if (actorId) {
       const actor = await actorForCalendar(admin, r.calendar_id, actorId);
       // Guests on the master get a cancellation email; direct holds are silent.
-      await deleteEvent(actor, r.calendar_id, r.event_id, r.role === 'master' ? 'all' : 'none').catch(
+      await deleteEvent(actor, r.calendar_id, r.event_id, r.role === 'assignee' ? 'none' : 'all').catch(
         () => {}
       );
     }
@@ -78,7 +79,7 @@ export async function removeShootCalendar(orderId: string): Promise<void> {
 
 type Desired = {
   calendarId: string;
-  role: 'master' | 'assignee';
+  role: 'master' | 'assignee' | 'photographer' | 'videographer';
   actorId: string;
   payload: EventPayload;
   /** Email guests about this event (invites / updates / cancellations). */
@@ -152,7 +153,7 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
   const { data: order, error: orderError } = await admin
     .from('orders')
     .select(
-      'id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, videographer_id, contractor_id, contractor_response, assignment_round, assignment_state, assignment_confirmation_mode, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
+      'photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, videographer_id, contractor_id, contractor_response, assignment_round, assignment_state, assignment_confirmation_mode, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
     )
     .eq('id', orderId)
     .maybeSingle();
@@ -181,9 +182,9 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
     .select('id, calendar_id, event_id, role')
     .eq('order_id', orderId);
   if (existingError) throw existingError;
-  const existing = new Map<string, { id: string; event_id: string; role: string }>();
+  const existing = new Map<string, { id: string; event_id: string; role: string; calendarId:string }>();
   for (const r of existingRows ?? []) {
-    existing.set(r.calendar_id, { id: r.id, event_id: r.event_id, role: r.role });
+    existing.set(`${r.calendar_id}:${r.role}`, { id: r.id, event_id: r.event_id, role: r.role,calendarId:r.calendar_id });
   }
 
   // Build the desired set of events.
@@ -302,6 +303,10 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
       .filter(Boolean)
       .join('\n');
 
+    const photoWindow=roleWindow(order,'photographer'),videoWindow=roleWindow(order,'videographer');
+    const timedCrew=photoWindow.offset!==0||photoWindow.duration!==(order.duration_minutes??60)||videoWindow.offset!==0||videoWindow.duration!==(order.duration_minutes??60);
+    const photoStart=!separateVideo&&order.videographer_id?new Date(Math.min(Date.parse(photoWindow.start!),Date.parse(videoWindow.start!))).toISOString():photoWindow.start!;
+    const photoEnd=!separateVideo&&order.videographer_id?new Date(Math.max(Date.parse(photoWindow.end!),Date.parse(videoWindow.end!))).toISOString():photoWindow.end!;
     const startIso = start.toISOString();
     const endIso = end.toISOString();
 
@@ -321,9 +326,12 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
         endIso,
         timezone: tz,
         transparency: 'transparent',
-        attendees: [...(guestEmail ? [{ email: guestEmail, responseStatus: rsvp }] : []), ...(videoGuest && videoGuest !== guestEmail ? [{email:videoGuest}] : [])],
+        attendees: timedCrew?[]:[...(guestEmail ? [{ email: guestEmail, responseStatus: rsvp }] : []), ...(videoGuest && videoGuest !== guestEmail ? [{email:videoGuest}] : [])],
       },
     });
+
+    if(timedCrew&&guestEmail)desired.push({calendarId:MASTER_CALENDAR_ID,role:'photographer',actorId,notify:true,payload:{summary:`Photography · ${shooterName} · ${address}`,description,location,startIso:photoStart,endIso:photoEnd,timezone:tz,transparency:'transparent',attendees:[{email:guestEmail,responseStatus:rsvp}]}});
+    if(timedCrew&&videoGuest&&videoGuest!==guestEmail)desired.push({calendarId:MASTER_CALENDAR_ID,role:'videographer',actorId,notify:true,payload:{summary:`Video · ${videoName} · ${address}`,description,location,startIso:videoWindow.start!,endIso:videoWindow.end!,timezone:tz,transparency:'transparent',attendees:[{email:videoGuest}]}});
 
     // Shooter's own calendar — a BUSY hold, written with their own token.
     if (ownConn) {
@@ -338,8 +346,8 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
             summary: `Shoot · ${address}${arch}`,
             description,
             location,
-            startIso,
-            endIso,
+            startIso:photoStart,
+            endIso:photoEnd,
             timezone: tz,
             transparency: 'opaque',
             attendees: [],
@@ -351,20 +359,21 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
       const videoCalendar = (videoConn.account_email || videoEmail || '').toLowerCase();
       if (videoCalendar && !desired.some(d=>d.calendarId === videoCalendar)) desired.push({
         calendarId:videoCalendar, role:'assignee', actorId:videoConn.team_member_id, notify:false,
-        payload:{summary:`Video · ${address}${arch}`,description,location,startIso,endIso,timezone:tz,transparency:'opaque',attendees:[]},
+        payload:{summary:`Video · ${address}${arch}`,description,location,startIso:videoWindow.start!,endIso:videoWindow.end!,timezone:tz,transparency:'opaque',attendees:[]},
       });
     }
 
   }
 
-  const desiredByCal = new Map(desired.map((d) => [d.calendarId, d]));
+  const desiredByCal = new Map(desired.map((d) => [`${d.calendarId}:${d.role}`, d]));
 
   // Remove events that are no longer desired (unscheduled, cancelled, reassigned
   // away, or the shooter has since connected their own calendar).
-  for (const [calId, row] of existing) {
-    if (!desiredByCal.has(calId)) {
+  for (const [key, row] of existing) {
+    const calId=row.calendarId;
+    if (!desiredByCal.has(key)) {
       const actor = await actorForCalendar(admin, calId, actorId);
-      await deleteEvent(actor, calId, row.event_id, row.role === 'master' ? 'all' : 'none').catch(
+      await deleteEvent(actor, calId, row.event_id, row.role === 'assignee' ? 'none' : 'all').catch(
         () => {}
       );
       await admin.from('order_calendar_events').delete().eq('id', row.id);
@@ -373,7 +382,7 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
 
   // Create or update the desired events.
   for (const d of desired) {
-    const ex = existing.get(d.calendarId);
+    const ex = existing.get(`${d.calendarId}:${d.role}`);
     const sendUpdates = d.notify ? 'all' : 'none';
 
     if (ex) {
@@ -397,13 +406,13 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
       await admin.from('order_calendar_events').delete().eq('id', ex.id);
     }
 
-    const ev = await insertEvent(d.actorId, d.calendarId, d.payload, sendUpdates, options.strict ? `${orderId}:${d.calendarId}` : undefined);
+    const ev = await insertEvent(d.actorId, d.calendarId, d.payload, sendUpdates, options.strict ? `${orderId}:${d.calendarId}${['photographer','videographer'].includes(d.role)?`:${d.role}`:''}` : undefined);
     if (ev?.id) {
       const { error: saveError } = await admin
         .from('order_calendar_events')
         .upsert(
           { order_id: orderId, calendar_id: d.calendarId, event_id: ev.id, role: d.role },
-          { onConflict: 'order_id,calendar_id' }
+          { onConflict: 'order_id,calendar_id,role' }
         );
       if (saveError) throw saveError;
     } else {

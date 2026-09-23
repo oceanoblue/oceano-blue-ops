@@ -1,3 +1,4 @@
+import {memberWindows} from './crew-windows';
 import { createAdminClient } from '@/lib/supabase/server';
 import { localToUtc, dayOfWeekInTz, fmtDateInTz } from '@/lib/utils/timezone';
 import { fetchBusyRanges } from '@/lib/google-calendar/api';
@@ -86,7 +87,7 @@ export async function getAvailability(dateStr: string, duration: number, photogr
   const [{ data: orders, error: ordersError }, { data: blocks, error: blocksError }] = await Promise.all([
     supabase
       .from('orders')
-      .select('photographer_id, videographer_id, scheduled_at, duration_minutes, status, contractors(team_member_id), listings(zip)')
+      .select('photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,photographer_id, videographer_id, scheduled_at, duration_minutes, status, contractors(team_member_id), listings(zip)')
       .gte('scheduled_at', new Date(dayStart).toISOString())
       .lte('scheduled_at', new Date(dayEnd).toISOString())
       .not('status', 'in', '("cancelled","draft")'),
@@ -122,8 +123,7 @@ export async function getAvailability(dateStr: string, duration: number, photogr
     for (const memberId of crewMemberIds(o)) {
       const ph = photographers.get(memberId);
       if (!ph) continue;
-      const s = new Date(o.scheduled_at).getTime();
-      ph.busy.push({ start: s, end: s + (o.duration_minutes ?? 60) * 60000, zip: o.listings?.zip });
+      for(const w of memberWindows(o,memberId))if(w.start&&w.end)ph.busy.push({start:Date.parse(w.start),end:Date.parse(w.end),zip:o.listings?.zip});
     }
   }
   for (const b of (blocks ?? []) as any[]) {

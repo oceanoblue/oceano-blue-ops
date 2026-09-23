@@ -1,3 +1,5 @@
+import {roleWindow} from '@/lib/booking/crew-windows';
+import {fmtTimeInTz} from '@/lib/utils/timezone';
 import Link from 'next/link';
 import { ResponseForm } from '@/components/field/ResponseForm';
 import { Check, X, CheckCircle2, XCircle, AlertTriangle, MapPin, CalendarDays } from 'lucide-react';
@@ -47,7 +49,7 @@ export default async function RespondPage(
     admin
       .from('orders')
       .select(
-        'id, status, archived_at, scheduled_at, timezone, contractor_id, assignment_round, assignment_state, assignment_confirmation_mode, contractor_response, contractor_response_note, dropbox_intake_url, listings(address_line1, city, state, zip, sqft)'
+        'photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,duration_minutes,id, status, archived_at, scheduled_at, timezone, contractor_id, assignment_round, assignment_state, assignment_confirmation_mode, contractor_response, contractor_response_note, dropbox_intake_url, listings(address_line1, city, state, zip, sqft)'
       )
       .eq('id', payload.o)
       .maybeSingle(),
@@ -81,7 +83,8 @@ export default async function RespondPage(
   const l = (order.listings ?? {}) as any;
   const address = l.address_line1 || 'Shoot';
   const cityStateZip = [l.city, l.state, l.zip].filter(Boolean).join(', ');
-  const when = order.scheduled_at ? fmtDateTimeTz(order.scheduled_at, order.timezone) : null;
+  const visit=roleWindow(order,'photographer');
+  const when = visit.start&&visit.end ? `${fmtDateTimeTz(visit.start,order.timezone)}–${fmtTimeInTz(visit.end,order.timezone)}` : null;
   const first = (contractor.full_name || '').split(' ')[0] || 'there';
   const action = `/api/field/respond/${encodeURIComponent(token)}`;
 
