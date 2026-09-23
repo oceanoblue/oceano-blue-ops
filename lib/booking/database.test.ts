@@ -50,7 +50,7 @@ beforeAll(async () => {
   await db.exec(readFileSync('supabase/migrations/20260923005028_photo_video_crew.sql','utf8'));
   await db.exec('create table order_calendar_events(order_id uuid,calendar_id text,role text,unique(order_id,calendar_id))');
   await db.exec(readFileSync('supabase/migrations/20260923104656_manual_assignment_review.sql','utf8'));
-  await db.exec(readFileSync('supabase/migrations/20260923110001_calendar_role_keys.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260923105506_calendar_role_keys.sql','utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
