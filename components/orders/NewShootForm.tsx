@@ -21,11 +21,13 @@ export function NewShootForm({
   clients,
   contractors,
   team,
+  videographers,
   products,
 }: {
   clients: ClientOpt[];
   contractors: ContractorOpt[];
   team: TeamOpt[];
+  videographers: TeamOpt[];
   products: ProductOpt[];
 }) {
   const router = useRouter();
@@ -47,6 +49,7 @@ export function NewShootForm({
 
   // Assignment — unified value encodes type: "contractor:<id>" | "team:<id>" | ''.
   const [assignee, setAssignee] = useState('');
+  const [videographer, setVideographer] = useState('');
 
   // Schedule.
   const [scheduledAt, setScheduledAt] = useState(''); // datetime-local
@@ -108,6 +111,7 @@ export function NewShootForm({
       list_price: numOrNull(addr.list_price),
       access_notes: addr.access_notes.trim(),
       assignee: type && id ? { type, id } : null,
+      videographer_id: videographer || null,
       scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
       duration_minutes: duration,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
@@ -286,7 +290,7 @@ export function NewShootForm({
       )}
 
       {/* Photographer */}
-      <Section icon={<Camera className="h-4 w-4" />} title="Schedule & photographer" step="04" description="Set the appointment now, or finish these details after booking.">
+      <Section icon={<Camera className="h-4 w-4" />} title="Schedule & crew" step="04" description="Set the appointment now, or finish these details after booking.">
         <label className="block text-sm font-medium text-slate-700">Photographer
         <select className="input" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
           <option value="">— Assign later —</option>
@@ -307,6 +311,10 @@ export function NewShootForm({
             </optgroup>
           )}
         </select></label>
+        <label className="mt-3 block text-sm font-medium text-slate-700">Videographer
+          <select className="input" value={videographer} onChange={e=>setVideographer(e.target.value)}><option value="">— Assign later —</option>{videographers.map(v=><option key={v.id} value={v.id}>{v.full_name}</option>)}</select>
+        </label>
+        <p className="mt-2 text-xs text-slate-500">Choose the same person for both roles or assign a separate video professional. Both reserve the appointment time.</p>
         {assigneeIsContractor && (
           <p className="mt-2 text-xs text-emerald-700">
             A Dropbox upload link is created automatically — you can send it to the photographer with one tap on the next screen.

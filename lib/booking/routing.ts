@@ -1,6 +1,7 @@
 export interface RoutingProfile {
   team_member_id: string;
   enabled: boolean;
+  capture_skills?: string[];
   priority: number;
   product_ids: string[] | null;
   service_zips: string[];

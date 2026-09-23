@@ -16,7 +16,7 @@ async function access(context:Context) {
   const {data:clientIds,error:identityError}=await client.rpc('current_client_ids');
   if(identityError)return {error:new Response('Access unavailable',{status:503})} as const;
   if(!clientIds?.length)return {error:new Response('Forbidden',{status:403})} as const;
-  const {data:order,error}=await client.from('orders').select('id,status,scheduled_at,photographer_id,duration_minutes,assignment_state,contractor_id,listings(zip),order_items(product_id)').eq('id',id).in('client_id',clientIds).maybeSingle();
+  const {data:order,error}=await client.from('orders').select('id,status,scheduled_at,photographer_id,videographer_id,duration_minutes,assignment_state,contractor_id,listings(zip),order_items(product_id)').eq('id',id).in('client_id',clientIds).maybeSingle();
   if(error)return {error:new Response('Order unavailable',{status:503})} as const;
   if(!order)return {error:new Response('Not found',{status:404})} as const;
   const admin=createAdminClient({noStore:true}) as any;

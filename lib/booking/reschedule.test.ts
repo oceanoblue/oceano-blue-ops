@@ -45,3 +45,12 @@ it('rejects malformed input and reports transactional conflicts',async()=>{
   expect((await POST(request({}),ctx)).status).toBe(400);expect(rpc).not.toHaveBeenCalled();
   rpc.mockResolvedValue({error:{message:'order_changed'}});expect((await POST(request(),ctx)).status).toBe(409);
 });
+
+it('routes split-crew appointment changes through the office while allowing one person in both roles',async()=>{
+  order.videographer_id='other';
+  expect((await GET(request(),ctx)).status).toBe(409);
+  expect((await POST(request(),ctx)).status).toBe(409);
+  expect(getAvailability).not.toHaveBeenCalled();
+  order.videographer_id='assigned';
+  expect((await POST(request(),ctx)).status).toBe(200);
+});

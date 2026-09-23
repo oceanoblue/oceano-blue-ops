@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Send, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -11,6 +11,7 @@ export type Shooter = {
   id: string;
   name: string;
   payRateCents?: number;
+  captureSkills: string[];
   teamMemberId?: string | null; // for a contractor: their linked team_member (scheduling identity)
 };
 
@@ -26,14 +27,22 @@ export function AssignShooterControl({
   orderId,
   currentContractorId,
   currentPhotographerId,
+  currentVideographerId,
+  updatedAt,
+  needsVideo,
   shooters,
 }: {
   orderId: string;
   currentContractorId: string | null;
   currentPhotographerId: string | null;
+  currentVideographerId: string | null;
+  updatedAt: string;
+  needsVideo: boolean;
   shooters: Shooter[];
 }) {
   const router = useRouter();
+  const saving = useRef(false);
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -57,10 +66,16 @@ export function AssignShooterControl({
     }
     return '';
   })();
+  const [photo, setPhoto] = useState(current);
+  const [video, setVideo] = useState(currentVideographerId || '');
+  const videoCrew = shooters.filter(s => s.captureSkills.includes('videography') && (s.kind === 'team' || s.teamMemberId));
+  const videoName = shooters.find(s => (s.kind === 'team' ? s.id : s.teamMemberId) === currentVideographerId)?.name;
   const assigned = shooters.find((s) => s.key === current);
   const contractorAssigned = assigned?.kind === 'contractor';
 
   async function assign(sel: string, allowOverlap = false) {
+    if (saving.current) return;
+    saving.current = true;
     setBusy(true);
     setError(null);
     setSentTo(null);
@@ -68,21 +83,22 @@ export function AssignShooterControl({
       const supabase = createClient();
       let photographerId: string | null = null;
       let contractorId: string | null = null;
-      let payCents = 0;
+
       const s = sel ? shooters.find((x) => x.key === sel) : null;
       if (s?.kind === 'contractor') {
         contractorId = s.id;
-        payCents = s.payRateCents ?? 0;
+
         photographerId = s.teamMemberId ?? null; // linked scheduling identity
       } else if (s?.kind === 'team') {
         photographerId = s.id;
       }
 
-      const { error } = await (supabase as any).rpc('assign_order_shooter', {
-        p_order_id: orderId,
-        p_photographer_id: photographerId,
-        p_contractor_id: contractorId,
-        p_pay_amount_cents: payCents,
+      const { error } = await (supabase as any).rpc('set_order_crew', {
+        p_order: orderId,
+        p_photographer: photographerId,
+        p_contractor: contractorId,
+        p_videographer: video || null,
+        p_expected_updated_at: updatedAt,
         p_allow_overlap: allowOverlap,
       });
       if (error) {
@@ -94,21 +110,21 @@ export function AssignShooterControl({
           return;
         }
         throw new Error(
-          conflict ? 'That photographer is already booked around this time.' : error.message
+          conflict ? 'A crew member is already booked around this time.' : error.message?.includes('order_changed') ? 'The order changed. Refresh before assigning the crew.' : error.message
         );
       }
       setNeedsOverride(false);
       setPendingSel(null);
+      setEditing(false);
 
-      // Reassigning moves the shoot between calendars (assignee busy-event flips
-      // to the new shooter; the master stays). Fire-and-forget.
-      fetch(`/api/orders/${orderId}/sync-calendar`, { method: 'POST' }).catch(() => {});
+      // Calendar synchronization is queued in the same database transaction.
 
       // Assignment notifications are queued atomically by the database.
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
@@ -137,16 +153,22 @@ export function AssignShooterControl({
     }
   }
 
-  const contractors = shooters.filter((s) => s.kind === 'contractor');
-  const team = shooters.filter((s) => s.kind === 'team');
+  const qualifiedPhotos = shooters.filter(s => s.captureSkills.some(skill => ['photography', 'tour_360'].includes(skill)));
+  const contractors = qualifiedPhotos.filter((s) => s.kind === 'contractor');
+  const team = qualifiedPhotos.filter((s) => s.kind === 'team');
 
   return (
     <div>
-      <label className="label flex items-center gap-2">
+      {!editing ? <div className="rounded-xl border border-slate-200 p-4">
+        <dl className="space-y-3 text-sm"><div className="flex justify-between gap-3"><dt className="text-slate-500">Photographer / 360</dt><dd className="font-medium">{assigned?.name || 'Unassigned'}</dd></div><div className="flex justify-between gap-3"><dt className="text-slate-500">Videographer</dt><dd className="font-medium">{videoName || 'Unassigned'}</dd></div></dl>
+        {needsVideo && !currentVideographerId && <p className="mt-3 text-xs text-amber-800">Video is booked. Assign a videographer before the shoot.</p>}
+        <button type="button" className="mt-4 text-sm font-medium text-ocean-700 underline" onClick={()=>{setPhoto(current);setVideo(currentVideographerId||'');setError(null);setNeedsOverride(false);setEditing(true);}}>Edit crew</button>
+      </div> : <div className="space-y-3 rounded-xl border border-ocean-200 bg-ocean-50/30 p-4">
+      <label htmlFor="crew-photo" className="label flex items-center gap-2">
         Photographer
         {busy && <Loader2 className="h-3 w-3 animate-spin text-slate-400" />}
       </label>
-      <select value={current} onChange={(e) => assign(e.target.value)} disabled={busy} className="input">
+      <select id="crew-photo" value={photo} onChange={(e) => {setPhoto(e.target.value);setNeedsOverride(false);}} disabled={busy} className="input">
         <option value="">— Unassigned —</option>
         {contractors.length > 0 && (
           <optgroup label="Contractors">
@@ -166,12 +188,16 @@ export function AssignShooterControl({
           </optgroup>
         )}
       </select>
+      <label htmlFor="crew-video" className="label">Videographer</label>
+      <select id="crew-video" value={video} disabled={busy} className="input" onChange={e=>{setVideo(e.target.value);setNeedsOverride(false);}}><option value="">— Unassigned —</option>{videoCrew.map(s=><option key={s.key} value={s.kind==='team'?s.id:s.teamMemberId!}>{s.name}</option>)}</select>
+      <p className="text-xs text-slate-600">One person can cover both roles. Both people reserve the appointment window. Video assignments are managed by the office; photographer acceptance is tracked separately.</p>
+      {!needsOverride && <div className="flex gap-2"><button disabled={busy} type="button" className="btn-primary" onClick={()=>assign(photo)}>{busy?'Saving…':'Save crew'}</button><button disabled={busy} type="button" className="btn-ghost" onClick={()=>setEditing(false)}>Cancel</button></div>}
 
       {needsOverride && (
         <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
           <p className="flex items-start gap-1.5 text-sm text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            This photographer already has a shoot inside the travel buffer of this one. Assign anyway?
+            A crew member has another shoot or a travel-buffer conflict. Assign anyway?
           </p>
           <div className="mt-2 flex items-center gap-2">
             <button
@@ -194,6 +220,7 @@ export function AssignShooterControl({
         </div>
       )}
 
+      </div>}
       {contractorAssigned && (
         <div className="mt-2">
           <button

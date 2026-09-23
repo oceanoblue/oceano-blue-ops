@@ -1,7 +1,8 @@
+import { CAPTURE_SKILLS } from '@/lib/booking/capture-skills';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-const Body=z.object({team_member_id:z.string().uuid(),enabled:z.boolean(),priority:z.number().int().min(1).max(1000),product_ids:z.array(z.string().uuid()).max(200).nullable(),service_zips:z.array(z.string().regex(/^\d{5}$/)).max(200),travel_minutes:z.number().int().min(0).max(240),cross_zip_minutes:z.number().int().min(0).max(240),color:z.string().regex(/^#[0-9a-fA-F]{6}$/)});
+const Body=z.object({team_member_id:z.string().uuid(),enabled:z.boolean(),capture_skills:z.array(z.enum(CAPTURE_SKILLS)).max(5),priority:z.number().int().min(1).max(1000),product_ids:z.array(z.string().uuid()).max(200).nullable(),service_zips:z.array(z.string().regex(/^\d{5}$/)).max(200),travel_minutes:z.number().int().min(0).max(240),cross_zip_minutes:z.number().int().min(0).max(240),color:z.string().regex(/^#[0-9a-fA-F]{6}$/)});
 export async function POST(request:Request) {
   const client=await createClient();const {data:{user}}=await client.auth.getUser();
   if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
