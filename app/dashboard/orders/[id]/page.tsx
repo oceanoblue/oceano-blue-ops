@@ -286,10 +286,16 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
             {order.assignment_round>0 && order.assignment_confirmation_mode!=='legacy' && !order.contractor_id && order.photographer_id===user?.id && ['booked','scheduled'].includes(order.status) && ['awaiting_response','confirmed'].includes(order.assignment_state) && <div className="mb-4"><RespondControl orderId={order.id} round={order.assignment_round} teamAssignment response={order.assignment_state==='confirmed' && order.assignment_confirmation_mode!=='automatic' ? 'accepted' : null} automaticallyConfirmed={order.assignment_state==='confirmed' && order.assignment_confirmation_mode==='automatic'} note={null}/></div>}
             <dl className="text-sm space-y-2">
               <Row label="Scheduled">{fmtDateTimeTz(order.scheduled_at, (order as any).timezone)}</Row>
-              <Row label="Duration">{order.duration_minutes} min</Row>
+              <Row label="Ends">{order.scheduled_at ? fmtDateTimeTz(new Date(Date.parse(order.scheduled_at) + order.duration_minutes * 60000).toISOString(), order.timezone) : 'Not scheduled'}</Row>
+              <Row label="Reserved time">{order.duration_minutes} min</Row>
             </dl>
+            {order.order_items?.length > 0 && <details className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+              <summary className="cursor-pointer font-medium">Service time estimates</summary>
+              <ul className="mt-2 space-y-1">{order.order_items.map((item: any) => <li key={item.id} className="flex justify-between gap-3"><span>{item.quantity > 1 ? `${item.quantity} × ` : ''}{item.description}</span><span className="shrink-0">{(item.duration_minutes ?? 0) * item.quantity} min</span></li>)}</ul>
+              <p className="mt-2">Booking adds these estimates together. You can adjust the reserved appointment independently.</p>
+            </details>}
             <div className="mt-3">
-              <RescheduleControl orderId={order.id} scheduledAt={order.scheduled_at} />
+              <RescheduleControl orderId={order.id} scheduledAt={order.scheduled_at} durationMinutes={order.duration_minutes} timezone={order.timezone || 'America/New_York'} />
             </div>
             <div className="mt-4 space-y-3">
               <AssignShooterControl

@@ -18,9 +18,10 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
   if (!isTeam) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   try {
-    await syncShootCalendar(params.id);
+    await syncShootCalendar(params.id, { strict: true });
   } catch (e) {
     console.error('[sync-calendar]', e);
+    return NextResponse.json({ error: 'calendar_sync_failed' }, { status: 502 });
   }
   return NextResponse.json({ ok: true });
 }
