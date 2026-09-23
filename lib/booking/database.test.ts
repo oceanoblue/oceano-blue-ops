@@ -409,6 +409,12 @@ describe('individual crew visits and manual request recovery',()=>{
    await split(id,false,60,75,45);
    await expect(split(id,true,60,90,60)).rejects.toThrow('crew_windows_inside_appointment');
  });
+ it('preserves acceptance when a legacy full photo visit is saved with explicit equal duration',async()=>{
+   const id=await setup();await db.query("update orders set contractor_response='accepted' where id=$1",[id]);await db.exec('delete from booking_followups');
+   await split(id,false,120,60,60);
+   expect((await db.query<any>('select assignment_round,contractor_response from orders where id=$1',[id])).rows[0]).toEqual({assignment_round:1,contractor_response:'accepted'});
+   expect((await db.query("select kind from booking_followups where kind in ('assignment_email','assignment_sms')")).rows).toHaveLength(0);
+ });
  it('does not invalidate photography acceptance when only the video visit changes',async()=>{
    const id=await setup();await split(id);await db.query("update orders set contractor_response='accepted' where id=$1",[id]);await db.exec('delete from booking_followups');
    await split(id,false,60,75,45);
