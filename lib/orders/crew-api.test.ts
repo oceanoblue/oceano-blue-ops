@@ -33,3 +33,8 @@ it('does not resend a renewal after a successful retry',async()=>{
  m.read.mockResolvedValue({data:{...order,assignment_round:4,assignment_state:'awaiting_response',auto_dispatch:false}});
  expect((await post({...body,action:'renew',round:3})).status).toBe(200);expect(m.rpc).toHaveBeenCalledTimes(1);expect(m.review).not.toHaveBeenCalled();
 });
+
+it('clears unused role durations so hidden fields cannot constrain a later client reschedule',async()=>{
+ expect((await post({...body,videographer_id:null})).status).toBe(200);
+ expect(m.rpc).toHaveBeenCalledWith('set_order_crew',expect.objectContaining({p_videographer:null,p_video_offset:0,p_video_duration:null}));
+});

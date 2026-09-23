@@ -26,7 +26,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     if(warnings.length&&!b.acknowledge_warnings)return NextResponse.json({error:'Review crew availability before continuing.',warnings},{status:409});
     const result=b.action==='renew'
       ?await (client as any).rpc('renew_order_assignment',{p_order:id,p_round:b.round,p_expected_updated_at:b.updated_at,p_availability_note:warnings.join(' ')})
-      :await (client as any).rpc('set_order_crew',{p_order:id,p_photographer:b.photographer_id||null,p_contractor:b.contractor_id||null,p_videographer:b.videographer_id||null,p_expected_updated_at:b.updated_at,p_allow_overlap:b.acknowledge_warnings,p_photo_offset:b.photo_offset,p_photo_duration:b.photo_duration,p_video_offset:b.video_offset,p_video_duration:b.video_duration});
+      :await (client as any).rpc('set_order_crew',{p_order:id,p_photographer:b.photographer_id||null,p_contractor:b.contractor_id||null,p_videographer:b.videographer_id||null,p_expected_updated_at:b.updated_at,p_allow_overlap:b.acknowledge_warnings,p_photo_offset:b.photographer_id?b.photo_offset:0,p_photo_duration:b.photographer_id?b.photo_duration:null,p_video_offset:b.videographer_id?b.video_offset:0,p_video_duration:b.videographer_id?b.video_duration:null});
     if(result.error){const conflict=result.error.code==='23P01';return NextResponse.json({error:conflict?'A crew member has a booking, travel, or working-hours conflict.':result.error.message,warnings:conflict?['A crew member has a booking, travel, or working-hours conflict.']:undefined},{status:409});}
     return NextResponse.json({ok:true});
   }catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Unable to check availability'},{status:503});}
