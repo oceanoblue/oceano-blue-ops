@@ -268,26 +268,31 @@ export async function insertEvent(
     logEvent('gcal.insertEvent', 'no_token', { actorTeamMemberId, calendarId });
     return null;
   }
-  const r = await fetch(calUrl(calendarId, `?sendUpdates=${sendUpdates}`), {
-    method: 'POST',
-    signal: AbortSignal.timeout(10000),
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ ...toBody(payload), ...(idempotencyKey ? { id: createHash('sha256').update(idempotencyKey).digest('hex') } : {}) }),
-  });
-  if (r.status === 409 && idempotencyKey) {
-    const id = createHash('sha256').update(idempotencyKey).digest('hex');
-    const existing = await getEvent(actorTeamMemberId, calendarId, id);
-    if (existing && existing.status !== 'cancelled') {
+  // Google retains deleted event IDs. Walk deterministic replacement IDs so a
+  // person removed and later reassigned gets a new hold, while retries converge.
+  for (let generation = 0; generation < 8; generation++) {
+    const key = generation === 0 ? idempotencyKey : `${idempotencyKey}:replacement:${generation}`;
+    const id = idempotencyKey ? createHash('sha256').update(key!).digest('hex') : undefined;
+    const r = await fetch(calUrl(calendarId, `?sendUpdates=${sendUpdates}`), {
+      method: 'POST',
+      signal: AbortSignal.timeout(10000),
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ ...toBody(payload), ...(id ? { id } : {}) }),
+    });
+    if (r.status === 409 && id) {
+      // A transient read error throws; only confirmed deletion allows rotation.
+      const existing = await getEvent(actorTeamMemberId, calendarId, id);
+      if (!existing || existing.status === 'cancelled') continue;
       return updateEvent(actorTeamMemberId, calendarId, id, payload, sendUpdates);
     }
-    throw new Error('calendar_event_id_conflict');
+    if (!r.ok) {
+      await reportApiFailure('insertEvent', r, { actorTeamMemberId, calendarId });
+      return null;
+    }
+    const data: any = await r.json();
+    return { id: data.id, htmlLink: data.htmlLink };
   }
-  if (!r.ok) {
-    await reportApiFailure('insertEvent', r, { actorTeamMemberId, calendarId });
-    return null;
-  }
-  const data: any = await r.json();
-  return { id: data.id, htmlLink: data.htmlLink };
+  throw new Error('calendar_event_id_conflict');
 }
 
 /** Patch an existing event on `calendarId` (retitle / move / free-busy change). */

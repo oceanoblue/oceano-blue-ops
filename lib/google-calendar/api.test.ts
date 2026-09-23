@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
-import { fetchBusyRanges, getAccessToken } from './api';
+import { fetchBusyRanges, getAccessToken, insertEvent } from './api';
 import { refreshAccessToken, GoogleTokenError } from './oauth';
 import { createAdminClient } from '@/lib/supabase/server';
 vi.mock('@/lib/supabase/server',()=>({createAdminClient:vi.fn()}));
@@ -58,4 +58,29 @@ it('keeps never-connected photographers on internal availability', async () => {
   row=null;
   expect(await fetchBusyRanges('person','2026-09-10T00:00:00Z','2026-09-11T00:00:00Z')).toEqual([]);
   expect(fetch).not.toHaveBeenCalled();
+});
+
+const hold={summary:'Video · Test property',startIso:'2026-09-30T19:30:00Z',endIso:'2026-09-30T21:30:00Z',timezone:'America/New_York',transparency:'opaque' as const,attendees:[]};
+it('recreates a deleted calendar hold with a deterministic replacement ID and reuses it on retry',async()=>{
+  const ids:string[]=[];
+  let replacement:string|undefined;
+  vi.mocked(fetch).mockImplementation(async(_url,init)=>{
+    const method=init?.method||'GET';
+    if(method==='POST'){
+      const id=JSON.parse(String(init?.body)).id;ids.push(id);
+      if(ids.length===1||ids.length===3)return new Response('{}',{status:409});
+      if(!replacement){replacement=id;return Response.json({id});}
+      return new Response('{}',{status:409});
+    }
+    if(method==='PATCH')return Response.json({id:replacement});
+    return Response.json({id:'old',status:ids.length===4?'confirmed':'cancelled'});
+  });
+  expect(await insertEvent('person','calendar',hold,'none','order:calendar')).toEqual({id:expect.any(String),htmlLink:undefined});
+  expect(await insertEvent('person','calendar',hold,'none','order:calendar')).toEqual({id:replacement,htmlLink:undefined});
+  expect(ids[0]).not.toBe(ids[1]);expect(ids[0]).toBe(ids[2]);expect(ids[1]).toBe(ids[3]);
+});
+it('does not invent replacement events when a conflicting event cannot be verified',async()=>{
+  vi.mocked(fetch).mockResolvedValueOnce(new Response('{}',{status:409})).mockResolvedValueOnce(new Response('{}',{status:503}));
+  await expect(insertEvent('person','calendar',hold,'none','order:calendar')).rejects.toThrow('calendar_read_503');
+  expect(fetch).toHaveBeenCalledTimes(2);
 });
