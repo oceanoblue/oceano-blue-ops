@@ -47,7 +47,7 @@ beforeAll(async () => {
   await db.exec(readFileSync('supabase/migrations/20260921170607_booking_confirmation_workflow.sql','utf8'));
   await db.exec("alter table products add column kind text default 'photo'; alter table orders add column package_name text, add column internal_notes text; create type order_status as enum ('draft','booked','scheduled','shooting','delivered','cancelled');");
   await db.exec(readFileSync('supabase/migrations/20260923002221_staff_appointment_window.sql','utf8'));
-  await db.exec(readFileSync('supabase/migrations/20260923010000_photo_video_crew.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260923005028_photo_video_crew.sql','utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
