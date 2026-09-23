@@ -1,4 +1,5 @@
 import archiver from 'archiver';
+import { deliveryFilename } from '@/lib/photos/order';
 import sharp from 'sharp';
 import { createAdminClient } from '@/lib/supabase/server';
 import { isDeliverable } from '@/lib/photos/deliverable';
@@ -78,7 +79,8 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
       archive.on('end', () => controller.close());
       archive.on('error', (e) => controller.error(e));
 
-      for (const p of ((photos ?? []) as any[]).filter(isDeliverable)) {
+      const downloadable = ((photos ?? []) as any[]).filter(isDeliverable);
+      for (const [index, p] of downloadable.entries()) {
         const { data } = await supabase.storage.from(p.bucket).download(p.storage_path);
         if (!data) continue;
         let bytes: Buffer = Buffer.from(await data.arrayBuffer());
@@ -95,7 +97,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
             // Fall back to the original bytes rather than dropping the photo.
           }
         }
-        archive.append(bytes, { name });
+        archive.append(bytes, { name: deliveryFilename(name, index, downloadable.length) });
       }
       archive.finalize();
     },

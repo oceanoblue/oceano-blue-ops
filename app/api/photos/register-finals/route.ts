@@ -20,6 +20,7 @@ const Body = z.object({
       byte_size: z.number().int().nonnegative(),
       width: z.number().int().positive().optional(),
       height: z.number().int().positive().optional(),
+      exif: z.record(z.unknown()).optional(),
     })
   ),
 });
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
     byte_size: f.byte_size,
     width: f.width ?? null,
     height: f.height ?? null,
+    exif: (f.exif ?? {}) as import('@/lib/supabase/database.types').Json,
     processing_status: 'complete' as const,
     ai_provider: 'fotello',
     uploaded_by: user.id,

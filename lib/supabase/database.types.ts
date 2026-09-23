@@ -4577,6 +4577,10 @@ export type Database = {
       }
     }
     Functions: {
+      set_gallery_photo_order: {
+        Args: { p_order: string; p_ids: string[]; p_expected: Json }
+        Returns: undefined
+      }
       add_order_items_priced: {
         Args: { p_items: Json; p_order_id: string; p_sqft: number }
         Returns: number

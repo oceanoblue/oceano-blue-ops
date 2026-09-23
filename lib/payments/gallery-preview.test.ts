@@ -111,3 +111,25 @@ it('global watermark setting never adds overlays to paid gallery master URLs',as
   const body=await (await gallery(req,params)).json();
   expect(body.paywall.watermarked).toBe(false);expect(body.photos[0].url).toBe('https://storage.test/signed-master');
 });
+
+
+it('exports selected photos with unique sequential filenames in the saved gallery order', async () => {
+  rows.orders.download_paid_at = new Date().toISOString();
+  rows.photos = [
+    {id:'later', filename:'DSC10.jpg',bucket:'processed',storage_path:'10.jpg'},
+    {id:'earlier', filename:'DSC2.jpg',bucket:'processed',storage_path:'2.jpg'},
+    {id:'duplicate-name', filename:'DSC2.jpg',bucket:'processed',storage_path:'2-copy.jpg'},
+  ];
+  storageDownload.mockResolvedValue({data:new Blob(['photo bytes'])});
+  const response = await download(req, params);
+  expect(response.status).toBe(200);
+  const zip = Buffer.from(await response.arrayBuffer());
+  const names: string[] = [];
+  for (let i=0; i < zip.length-46; i++) {
+    if (zip.readUInt32LE(i) === 0x02014b50) {
+      const length = zip.readUInt16LE(i+28);
+      names.push(zip.subarray(i+46,i+46+length).toString());
+    }
+  }
+  expect(names).toEqual(['001-DSC10.jpg','002-DSC2.jpg','003-DSC2.jpg']);
+});
