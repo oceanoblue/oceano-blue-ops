@@ -14,7 +14,7 @@ beforeAll(async () => {
   `);
   await db.exec(readFileSync('supabase/migrations/0078_double_book_override.sql','utf8'));
   await db.exec('create trigger no_overlap before insert or update on orders for each row execute function check_order_no_double_book()');
-  await db.exec(readFileSync('supabase/migrations/20260922220000_staff_appointment_window.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260923002221_staff_appointment_window.sql','utf8'));
 },30000);
 afterAll(async()=>{await db?.close();});
 beforeEach(async()=>{
