@@ -26,7 +26,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
     .maybeSingle();
   if (!shoot) notFound();
 
-  const {data:version}=await createAdminClient().from('orders').select('assignment_round,assignment_state,assignment_confirmation_mode').eq('id',shoot.id).single();
+  const {data:version}=await (createAdminClient() as any).from('orders').select('assignment_round,assignment_state,assignment_confirmation_mode,photographer_id,videographer_id,videographer:team_members!orders_videographer_id_fkey(full_name)').eq('id',shoot.id).single();
   const l = (shoot.listing ?? {}) as any;
 
   return (
@@ -45,6 +45,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
         {(['booked', 'scheduled'].includes(shoot.status) || shoot.contractor_response) && (
           <section className="card p-5">
             <h2 className="mb-3 font-semibold">This assignment</h2>
+            {version?.videographer_id && version.videographer_id !== version.photographer_id && <p className="mb-4 rounded-lg bg-ocean-50 p-3 text-sm text-ocean-900">Your role: photography / 360. Video: {version.videographer?.full_name || 'a separate crew member'}. Your response below applies to the photography assignment.</p>}
             <RespondControl
               orderId={shoot.id}
               round={version?.assignment_round ?? 0}

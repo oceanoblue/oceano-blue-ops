@@ -18,7 +18,7 @@ export async function deliverFollowup(job: Followup): Promise<void> {
   const base=process.env.NEXT_PUBLIC_APP_URL || 'https://app.oceanoblue.net';
   if(job.kind==='assignment_email'||job.kind==='assignment_sms'||b.event==='assignment_pending'||b.event==='assignment_confirmed'||b.event==='rescheduled'||job.kind==='office_attention') {
     const admin=createAdminClient() as any;
-    const {data:order,error}=await admin.from('orders').select('assignment_round,assignment_state,assignment_confirmation_mode,assignment_due_at,photographer_id,contractor_id,archived_at,status,pay_amount_cents,contractors(full_name),order_items(description,quantity)').eq('id',job.order_id).maybeSingle();
+    const {data:order,error}=await admin.from('orders').select('assignment_round,assignment_state,assignment_confirmation_mode,assignment_due_at,photographer_id,videographer_id,contractor_id,archived_at,status,pay_amount_cents,contractors(full_name),order_items(description,quantity)').eq('id',job.order_id).maybeSingle();
     if(error)throw error;
     if(!order||order.archived_at||['cancelled','draft','delivered'].includes(order.status))return;
     if(job.kind==='office_attention' && (order.assignment_round!==b.assignment_round||order.assignment_state!==b.assignment_state))return;
@@ -36,13 +36,14 @@ export async function deliverFollowup(job: Followup): Promise<void> {
         if(!token)throw new Error('assignment_link_not_configured');
         respondUrl=respondPageUrl(base,token);
       }
+      const splitCrew = order.videographer_id && order.videographer_id !== order.photographer_id;
       if(job.kind==='assignment_sms') {
-        const result=await sendSms({to:job.recipient,text:`Oceano Blue: ${automatic ? 'shoot confirmed automatically' : 'shoot request'} at ${b.address_line1}, ${fmtDateTimeTz(b.scheduled_at,b.timezone)}. ${automatic ? 'No acceptance required. Review details or report a change' : 'Please accept or decline'}: ${respondUrl}`});
+        const result=await sendSms({to:job.recipient,text:`Oceano Blue${splitCrew ? ' photography / 360' : ''}: ${automatic ? 'shoot confirmed automatically' : 'shoot request'} at ${b.address_line1}, ${fmtDateTimeTz(b.scheduled_at,b.timezone)}. ${automatic ? 'No acceptance required. Review details or report a change' : 'Please accept or decline'}: ${respondUrl}${splitCrew ? ' Video is assigned separately.' : ''}`});
         if(result.status!=='sent')throw new Error(result.status==='failed'?result.error:result.status);
         return;
       }
       if(Date.now()-Date.parse(job.created_at)>23*3600000)throw new Error('email_delivery_review_required');
-      const details={name:order.contractors?.full_name||'Photographer',address:b.address_line1,when:fmtDateTimeTz(b.scheduled_at,b.timezone),deadline:order.assignment_due_at?fmtDateTimeTz(order.assignment_due_at,b.timezone):'',services:(order.order_items||[]).map((i:any)=>`${i.quantity} × ${i.description}`).join(', '),pay:order.pay_amount_cents?fmtCents(order.pay_amount_cents):'',respondUrl,portalUrl};
+      const details={name:order.contractors?.full_name||'Photographer',address:b.address_line1,when:fmtDateTimeTz(b.scheduled_at,b.timezone),deadline:order.assignment_due_at?fmtDateTimeTz(order.assignment_due_at,b.timezone):'',services:(splitCrew ? 'Your role: photography / 360. Video is assigned separately. Full order: ' : '')+(order.order_items||[]).map((i:any)=>`${i.quantity} × ${i.description}`).join(', '),pay:order.pay_amount_cents?fmtCents(order.pay_amount_cents):'',respondUrl,portalUrl};
       const email=automatic ? assignmentConfirmedEmail(details) : assignmentRequestEmail(details);
       const sent=await sendEmail({to:job.recipient,...email,idempotencyKey:job.id});
       if(sent.status!=='sent')throw new Error(sent.status==='failed'?sent.error:sent.status);

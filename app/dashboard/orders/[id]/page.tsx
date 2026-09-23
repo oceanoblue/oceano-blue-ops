@@ -1,3 +1,4 @@
+import { productCaptureSkills } from '@/lib/booking/capture-skills';
 import { RespondControl } from '@/components/field/RespondControl';
 import { assignmentLabel } from '@/lib/booking/routing';
 import Link from 'next/link';
@@ -200,6 +201,8 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
     .from('team_members')
     .select('id, full_name, role')
     .eq('is_active', true);
+  const { data: crewProfiles } = await (supabase as any).from('photographer_routing').select('team_member_id,capture_skills');
+  const skillsFor = (id: string) => crewProfiles?.find((p: any) => p.team_member_id === id)?.capture_skills || [];
   const photographers = ((team ?? []) as any[]).filter((t) => t.role === 'photographer' || t.role === 'admin');
   const editors = ((team ?? []) as any[]).filter((t) => t.role === 'editor' || t.role === 'admin');
 
@@ -220,13 +223,16 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
       id: c.id,
       name: c.full_name,
       payRateCents: c.pay_rate_cents,
+      captureSkills: skillsFor(c.team_member_id),
       teamMemberId: c.team_member_id ?? null,
     })),
     ...photographers
       .filter((p) => !contractors.some((c) => c.team_member_id === p.id))
-      .map((p) => ({ key: `team:${p.id}`, kind: 'team' as const, id: p.id, name: p.full_name })),
+      .map((p) => ({ key: `team:${p.id}`, kind: 'team' as const, id: p.id, name: p.full_name, captureSkills: skillsFor(p.id) })),
   ];
 
+  const {data: bookedProducts} = await supabase.from('products').select('id,name,kind').in('id', (order.order_items || []).map((i:any)=>i.product_id).filter(Boolean));
+  const needsVideo = (bookedProducts || []).some(p => productCaptureSkills(p).includes('videography'));
   const serviceItems = (order.order_items?.length ? order.order_items : order.order_services) ?? [];
   const facts = { status: order.status, archived: !!order.archived_at, scheduled: !!order.scheduled_at,
     assigned: !!(order.contractor_id || order.photographer_id), originals: originalsCount,
@@ -282,7 +288,7 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
             </details>
           </div>
           <div className="min-w-0 space-y-6">
-            <section className="card p-5 sm:p-6"><h2 className="mb-4 text-xl font-semibold">Schedule & team</h2><p className={`mb-4 rounded-lg p-3 text-sm ${assignmentLabel(order).startsWith('Confirmed')?'bg-emerald-50 text-emerald-800':'bg-amber-50 text-amber-900'}`}>{assignmentLabel(order)}{order.assignment_due_at&&order.assignment_state==='awaiting_response'&&<span className="mt-1 block text-xs">Response due {fmtDateTimeTz(order.assignment_due_at,order.timezone)}{order.auto_dispatch?' · Backup will be checked automatically.':' · Office-managed assignment.'}</span>}</p>
+            <section className="card p-5 sm:p-6"><h2 className="mb-4 text-xl font-semibold">Schedule & team</h2><p className={`mb-4 rounded-lg p-3 text-sm ${assignmentLabel(order).startsWith('Confirmed')?'bg-emerald-50 text-emerald-800':'bg-amber-50 text-amber-900'}`}>{`Photographer · ${assignmentLabel(order)}`}{order.assignment_due_at&&order.assignment_state==='awaiting_response'&&<span className="mt-1 block text-xs">Response due {fmtDateTimeTz(order.assignment_due_at,order.timezone)}{order.auto_dispatch?' · Backup will be checked automatically.':' · Office-managed assignment.'}</span>}</p>
             {order.assignment_round>0 && order.assignment_confirmation_mode!=='legacy' && !order.contractor_id && order.photographer_id===user?.id && ['booked','scheduled'].includes(order.status) && ['awaiting_response','confirmed'].includes(order.assignment_state) && <div className="mb-4"><RespondControl orderId={order.id} round={order.assignment_round} teamAssignment response={order.assignment_state==='confirmed' && order.assignment_confirmation_mode!=='automatic' ? 'accepted' : null} automaticallyConfirmed={order.assignment_state==='confirmed' && order.assignment_confirmation_mode==='automatic'} note={null}/></div>}
             <dl className="text-sm space-y-2">
               <Row label="Scheduled">{fmtDateTimeTz(order.scheduled_at, (order as any).timezone)}</Row>
@@ -302,6 +308,9 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
                 orderId={order.id}
                 currentContractorId={(order as any).contractor_id ?? null}
                 currentPhotographerId={order.photographer_id}
+                currentVideographerId={order.videographer_id ?? null}
+                updatedAt={order.updated_at}
+                needsVideo={needsVideo}
                 shooters={shooters}
               />
               <AssignTeamControl

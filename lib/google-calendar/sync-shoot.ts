@@ -152,7 +152,7 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
   const { data: order, error: orderError } = await admin
     .from('orders')
     .select(
-      'id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, contractor_id, contractor_response, assignment_round, assignment_state, assignment_confirmation_mode, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
+      'id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, videographer_id, contractor_id, contractor_response, assignment_round, assignment_state, assignment_confirmation_mode, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
     )
     .eq('id', orderId)
     .maybeSingle();
@@ -241,6 +241,22 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
       ownConn = c ?? null;
     }
 
+    const separateVideo = order.videographer_id && order.videographer_id !== photographerId;
+    let videoMember: {email: string | null; full_name: string | null} | null = null;
+    let videoConn: {team_member_id: string; account_email: string | null} | null = null;
+    if (separateVideo) {
+      const [{data: member, error: memberError}, {data: connection, error: connectionError}] = await Promise.all([
+        admin.from('team_members').select('email,full_name').eq('id',order.videographer_id).maybeSingle(),
+        admin.from('team_calendar_connections').select('team_member_id,account_email').eq('team_member_id',order.videographer_id).eq('provider','google').eq('is_active',true).maybeSingle(),
+      ]);
+      if (memberError || connectionError) throw memberError || connectionError;
+      videoMember = member; videoConn = connection;
+    }
+    const videoEmail = videoMember?.email?.trim().toLowerCase() || null;
+    const videoGuest = videoEmail && !videoConn ? videoEmail : null;
+    const videoName = separateVideo ? videoMember?.full_name || 'Assigned videographer' : order.videographer_id ? shooterName : '';
+    const crewName = separateVideo ? [shooterName, videoName].filter(Boolean).map(n=>n.split(' ')[0]).join(' + ') : shooterName.split(' ')[0];
+
     const client = (order.clients as any)?.full_name;
     const arch = order.project_type === 'architectural' ? ' [Architectural]' : '';
     const services = order.internal_notes
@@ -270,7 +286,7 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
       guestEmail && order.contractor_id
         ? signRespondToken(orderId, order.contractor_id, respondTokenExpiry(order.scheduled_at), (order as any).assignment_round || undefined)
         : null;
-    const respondUrl = respondToken ? respondPageUrl(base, respondToken) : null;
+    const respondUrl = separateVideo ? `${base}/field/shoots/${orderId}` : respondToken ? respondPageUrl(base, respondToken) : null;
 
     const description = [
       client ? `Client: ${client}` : null,
@@ -280,6 +296,7 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
       respondUrl ? `${(order as any).assignment_confirmation_mode==='automatic' ? 'Review shoot or decline' : 'Accept or decline'}: ${respondUrl}` : null,
       guestEmail && order.dropbox_intake_url ? `Upload RAWs: ${order.dropbox_intake_url}` : null,
       `Assignment version: ${(order as any).assignment_round || 0}`,
+      videoName ? `Videographer: ${videoName}` : null,
       'Booked via Oceano Blue Ops',
     ]
       .filter(Boolean)
@@ -297,14 +314,14 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
       actorId,
       notify: true, // guests (when any) get invites / updates / cancellations
       payload: {
-        summary: `${shooterName ? shooterName.split(' ')[0] + ' · ' : ''}${address}${arch}`,
+        summary: `${crewName ? crewName + ' · ' : ''}${address}${arch}`,
         description,
         location,
         startIso,
         endIso,
         timezone: tz,
         transparency: 'transparent',
-        attendees: guestEmail ? [{ email: guestEmail, responseStatus: rsvp }] : [],
+        attendees: [...(guestEmail ? [{ email: guestEmail, responseStatus: rsvp }] : []), ...(videoGuest && videoGuest !== guestEmail ? [{email:videoGuest}] : [])],
       },
     });
 
@@ -330,6 +347,14 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
         });
       }
     }
+    if (videoConn) {
+      const videoCalendar = (videoConn.account_email || videoEmail || '').toLowerCase();
+      if (videoCalendar && !desired.some(d=>d.calendarId === videoCalendar)) desired.push({
+        calendarId:videoCalendar, role:'assignee', actorId:videoConn.team_member_id, notify:false,
+        payload:{summary:`Video · ${address}${arch}`,description,location,startIso,endIso,timezone:tz,transparency:'opaque',attendees:[]},
+      });
+    }
+
   }
 
   const desiredByCal = new Map(desired.map((d) => [d.calendarId, d]));

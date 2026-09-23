@@ -3,6 +3,7 @@ import { localToUtc, dayOfWeekInTz, fmtDateInTz } from '@/lib/utils/timezone';
 import { fetchBusyRanges } from '@/lib/google-calendar/api';
 import { validDate } from './validation';
 import { routingEligible, travelBuffer, type RoutingProfile } from './routing';
+import { productCaptureSkills, coversSkills, crewMemberIds } from './capture-skills';
 import { captureError } from '@/lib/observability/report';
 
 const SLOT_MINUTES = 30;
@@ -56,8 +57,14 @@ export async function getAvailability(dateStr: string, duration: number, photogr
   if (routingError) throw routingError;
   const profiles = new Map<string,RoutingProfile>((routing || []).map((p:RoutingProfile) => [p.team_member_id,p]));
   const routed = (settings as any)?.scheduling_dispatch_enabled && !!options.productIds;
+  const { data: requestedProducts, error: productError } = options.productIds?.length
+    ? await supabase.from('products').select('id,name,kind').in('id', options.productIds)
+    : { data: [], error: null };
+  if (productError) throw productError;
+  if (options.productIds?.some(id => !requestedProducts?.some(p => p.id === id))) throw new Error('invalid_products');
+  const requiredSkills = (requestedProducts ?? []).flatMap(productCaptureSkills);
   const memberIds = (members ?? [])
-    .filter(m => (!photographerId || m.id === photographerId) && (!routed || routingEligible(profiles.get(m.id),options.productIds || [],options.zip)))
+    .filter(m => (!photographerId || m.id === photographerId) && (!routed || routingEligible(profiles.get(m.id),options.productIds || [],options.zip)) && coversSkills(profiles.get(m.id)?.capture_skills, requiredSkills))
     .sort((a,b) => (profiles.get(a.id)?.priority ?? 100)-(profiles.get(b.id)?.priority ?? 100) || a.id.localeCompare(b.id))
     .map(m => m.id);
   if (!memberIds.length) return { slots: [], calendarDegraded: false };
@@ -79,7 +86,7 @@ export async function getAvailability(dateStr: string, duration: number, photogr
   const [{ data: orders, error: ordersError }, { data: blocks, error: blocksError }] = await Promise.all([
     supabase
       .from('orders')
-      .select('photographer_id, scheduled_at, duration_minutes, status, contractors(team_member_id), listings(zip)')
+      .select('photographer_id, videographer_id, scheduled_at, duration_minutes, status, contractors(team_member_id), listings(zip)')
       .gte('scheduled_at', new Date(dayStart).toISOString())
       .lte('scheduled_at', new Date(dayEnd).toISOString())
       .not('status', 'in', '("cancelled","draft")'),
@@ -112,12 +119,12 @@ export async function getAvailability(dateStr: string, duration: number, photogr
     photographers.set(a.team_member_id, ph);
   }
   for (const o of (orders ?? []) as any[]) {
-    const memberId = o.contractors?.team_member_id || o.photographer_id;
-    if (!memberId) continue;
-    const ph = photographers.get(memberId);
-    if (!ph) continue;
-    const s = new Date(o.scheduled_at).getTime();
-    ph.busy.push({ start: s, end: s + (o.duration_minutes ?? 60) * 60 * 1000, zip: o.listings?.zip });
+    for (const memberId of crewMemberIds(o)) {
+      const ph = photographers.get(memberId);
+      if (!ph) continue;
+      const s = new Date(o.scheduled_at).getTime();
+      ph.busy.push({ start: s, end: s + (o.duration_minutes ?? 60) * 60000, zip: o.listings?.zip });
+    }
   }
   for (const b of (blocks ?? []) as any[]) {
     const ph = photographers.get(b.team_member_id);

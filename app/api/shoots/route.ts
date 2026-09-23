@@ -47,6 +47,8 @@ const Body = z.object({
     .nullable()
     .optional(),
 
+  videographer_id: z.string().uuid().nullable().optional(),
+
   // Schedule (optional — a shoot can be arranged before a time is locked).
   scheduled_at: z.string().datetime().nullable().optional(),
   duration_minutes: z.number().int().min(15).max(600).optional(),
@@ -172,6 +174,7 @@ export async function POST(request: Request) {
     timezone: b.timezone,
     package_name: b.package_name || null,
     internal_notes: b.instructions || null,
+    videographer_id: b.videographer_id ?? null,
   };
   if (isContractor) orderInsert.contractor_id = b.assignee!.id;
   if (isTeam) orderInsert.photographer_id = b.assignee!.id;

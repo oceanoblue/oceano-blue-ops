@@ -38,6 +38,8 @@ export default async function NewShootPage() {
         .order('sort_order'),
     ]);
 
+  const {data: profiles} = await (supabase as any).from('photographer_routing').select('team_member_id,capture_skills');
+  const videographers = (team || []).filter(t => profiles?.some((p:any)=>p.team_member_id===t.id&&p.capture_skills.includes('videography')));
   const photographers = ((team ?? []) as any[])
     .filter((t) => t.role === 'photographer' || t.role === 'admin')
     .map((t) => ({ id: t.id, full_name: t.full_name }));
@@ -65,6 +67,7 @@ export default async function NewShootPage() {
         clients={(clients ?? []) as any}
         contractors={(contractorRows ?? []) as any}
         team={photographers}
+        videographers={videographers}
         products={(productRows ?? []) as any}
       />
     </div>

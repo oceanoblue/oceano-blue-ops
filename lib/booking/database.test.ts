@@ -1,5 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';
+import { productCaptureSkills } from './capture-skills';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 
 let db: PGlite;
@@ -44,13 +45,17 @@ beforeAll(async () => {
   await db.exec(readFileSync('supabase/migrations/20260921155310_photographer_dispatch.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20260921165524_booking_auto_confirmation.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20260921170607_booking_confirmation_workflow.sql','utf8'));
+  await db.exec("alter table products add column kind text default 'photo'; alter table orders add column package_name text, add column internal_notes text; create type order_status as enum ('draft','booked','scheduled','shooting','delivered','cancelled');");
+  await db.exec(readFileSync('supabase/migrations/20260923002221_staff_appointment_window.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260923005028_photo_video_crew.sql','utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
   await db.exec(`truncate booking_followups,booking_requests,orders,order_items,order_services,listings,clients,activity_log,products,business_settings,team_members,team_availability,schedule_blocks,contractors cascade;
     insert into business_settings(id,buffer_minutes,min_notice_hours,max_notice_days,default_timezone) values(true,30,4,30,'America/New_York');
     insert into team_members values('${photographer}',true,'admin','office@example.test','+12025550123');
-    insert into products values('${product}','Photo',60,true,array['real_estate']);
+    insert into photographer_routing(team_member_id,enabled,capture_skills) values('${photographer}',true,array['photography','tour_360']);
+    insert into products(id,name,duration_minutes,is_active,audiences) values('${product}','Photo',60,true,array['real_estate']);
     insert into team_availability select '${photographer}',true,d,'09:00','17:00','America/New_York' from generate_series(0,6) d;`);
   await db.exec('create or replace function is_team_member() returns boolean language sql as $$select true$$;');
   const { rows } = await db.query<{at: string}>(`select (((now() at time zone 'America/New_York')::date+2+time '10:00') at time zone 'America/New_York')::text as at`);
@@ -149,7 +154,7 @@ const backup='55555555-5555-4555-8555-555555555555';
 const contractor='66666666-6666-4666-8666-666666666666';
 async function enableDispatch(){
   await db.exec(`update business_settings set scheduling_dispatch_enabled=true;
-    insert into photographer_routing(team_member_id,enabled,priority,product_ids) values('${photographer}',true,10,array['${product}'::uuid]);
+    insert into photographer_routing(team_member_id,enabled,priority,product_ids) values('${photographer}',true,10,array['${product}'::uuid]) on conflict(team_member_id) do update set priority=10,product_ids=excluded.product_ids;
     insert into contractors(id,team_member_id,is_active,pay_rate_cents,full_name,email,phone) values('${contractor}','${photographer}',true,6000,'Photographer','photographer@example.test','+12025550124');
     insert into team_members values('${backup}',true,'photographer','backup@example.test',null);
     insert into photographer_routing(team_member_id,enabled,priority) values('${backup}',true,100);
@@ -301,5 +306,69 @@ describe('automatic confirmation policy',()=>{
     expect((await db.query<any>("select respond_to_team_assignment($1,3,$2,'accepted') as ok",[id,backup])).rows[0].ok).toBe(false);
     const rights=(await db.query<any>("select has_function_privilege('authenticated','respond_to_team_assignment(uuid,integer,uuid,text)','EXECUTE') as authenticated, has_function_privilege('anon','respond_to_team_assignment(uuid,integer,uuid,text)','EXECUTE') as anon")).rows[0];
     expect(rights).toEqual({authenticated:false,anon:false});
+  });
+});
+
+describe('photography and video crew',()=>{
+  async function crewReady() {
+    await enableDispatch();
+    await db.exec(`update photographer_routing set capture_skills=array['photography','videography','tour_360','drone','floor_plan'] where team_member_id='${backup}'`);
+  }
+  async function setCrew(id:string,photo=photographer,video:string|null=backup,override=false,expected?:string|null) {
+    const stamp=(await db.query<{at:string|null}>('select updated_at::text as at from orders where id=$1',[id])).rows[0].at;
+    return db.query('select set_order_crew($1,$2,$3,$4,$5,$6)',[id,photo,photo===photographer?contractor:null,video,expected===undefined?stamp:expected,override]);
+  }
+  it('assigns Karen-style photo/360 and a separate video member atomically, queuing one calendar update',async()=>{
+    await crewReady(); const id=(await book({...payload,photographer_id:backup})).rows[0].id;
+    await db.exec('delete from booking_followups');
+    await setCrew(id);await setCrew(id);
+    const row=(await db.query('select photographer_id,videographer_id,contractor_id,auto_dispatch,assignment_state from orders where id=$1',[id])).rows[0];
+    expect(row).toEqual({photographer_id:photographer,videographer_id:backup,contractor_id:contractor,auto_dispatch:false,assignment_state:'awaiting_response'});
+    expect((await db.query("select kind from booking_followups where kind='calendar'")).rows).toHaveLength(1);
+    expect((await db.query("select kind from booking_followups where kind='assignment_email'")).rows).toHaveLength(1);
+  });
+  it('supports the same qualified person in both roles without a self-conflict',async()=>{
+    await crewReady();const id=(await book({...payload,photographer_id:backup})).rows[0].id;
+    await setCrew(id,backup,backup);
+    expect((await db.query<{same:boolean}>('select photographer_id=videographer_id as same from orders where id=$1',[id])).rows[0].same).toBe(true);
+  });
+  it('rejects an unqualified video assignment even when travel conflicts are overridden',async()=>{
+    await crewReady();const id=(await book()).rows[0].id;
+    await expect(setCrew(id,photographer,photographer,true)).rejects.toThrow('videographer_not_qualified');
+    expect((await db.query<{videographer_id:string|null}>('select videographer_id from orders where id=$1',[id])).rows[0].videographer_id).toBe(null);
+  });
+  it('prevents a video crew member from being double booked as a photographer',async()=>{
+    await crewReady();const id=(await book()).rows[0].id;await setCrew(id);
+    await expect(db.query("insert into orders(id,photographer_id,status,scheduled_at,duration_minutes) values(gen_random_uuid(),$1,'booked',$2,60)",[backup,payload.scheduled_at])).rejects.toThrow('slot_unavailable');
+    const later=new Date(Date.parse(String(payload.scheduled_at))+3*3600000).toISOString();
+    await db.query("insert into orders(id,photographer_id,status,scheduled_at,duration_minutes) values(gen_random_uuid(),$1,'booked',$2,60)",[backup,later]);
+    await expect(db.query('select set_order_schedule_window($1,$2,$3,$4,60,false)',[id,later,new Date(Date.parse(later)+3600000).toISOString(),payload.scheduled_at])).rejects.toThrow('slot_unavailable');
+  });
+  it('protects stale crew edits and prevents client callers from assigning crew',async()=>{
+    await crewReady();const id=(await book()).rows[0].id;
+    await expect(setCrew(id,photographer,backup,false,'2020-01-01T00:00:00Z')).rejects.toThrow('order_changed');
+    await db.exec('create or replace function is_team_member() returns boolean language sql as $$select false$$');
+    await expect(setCrew(id)).rejects.toThrow('forbidden');
+  });
+  it('blocks video online booking for photo-only staff even when all products are enabled',async()=>{
+    await crewReady();await db.exec(`update products set kind='video',name='Cinematic Videography'; update photographer_routing set product_ids=null`);
+    await expect(book()).rejects.toThrow('capture skills');
+    const id=(await book({...payload,photographer_id:backup})).rows[0].id;
+    expect((await db.query<{videographer_id:string|null}>('select videographer_id from orders where id=$1',[id])).rows[0].videographer_id).toBe(backup);
+    expect((await db.query("select id from booking_followups where order_id=$1 and kind='calendar'",[id])).rows).toHaveLength(1);
+    await db.query('update orders set videographer_id=null where id=$1',[id]);
+    await book({...payload,photographer_id:backup});
+    expect((await db.query<{videographer_id:string|null}>('select videographer_id from orders where id=$1',[id])).rows[0].videographer_id).toBe(null);
+  });
+  it('requires the office to coordinate client rescheduling for a split crew',async()=>{
+    await crewReady();const id=(await book()).rows[0].id;await setCrew(id);
+    await expect(db.query('select commit_client_reschedule($1,$2,$3::uuid[],$4,$5,$6,60)',[requestId,id,[],payload.scheduled_at,new Date(Date.parse(String(payload.scheduled_at))+86400000).toISOString(),photographer])).rejects.toThrow('order_not_found');
+    const cl=(await db.query<{client_id:string}>('select client_id from orders where id=$1',[id])).rows[0].client_id;
+    await expect(db.query('select commit_client_reschedule($1,$2,$3::uuid[],$4,$5,$6,60)',[requestId,id,[cl],payload.scheduled_at,new Date(Date.parse(String(payload.scheduled_at))+86400000).toISOString(),photographer])).rejects.toThrow('crew_reschedule_requires_office');
+  });
+  it('keeps client and database skill classification consistent for real catalogue variants',async()=>{
+    for(const p of [{name:'Interior/Exterior Photography',kind:'photo'},{name:'Drone Photos + Video',kind:'photo'},{name:'Virtual Twilight',kind:'addon'},{name:'Floor Plan',kind:'floor_plan'},{name:'3D Home + Floor Plan',kind:'addon'},{name:'Cinematic Videography',kind:'video'},{name:'Same-Day Delivery',kind:'addon'}]) {
+      expect((await db.query<{skills:string[]}>('select product_capture_skills($1,$2) as skills',[p.kind,p.name])).rows[0].skills).toEqual(productCaptureSkills(p));
+    }
   });
 });
