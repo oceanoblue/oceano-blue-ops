@@ -79,3 +79,11 @@ it('sends internal staff requests to their authenticated assignment page',async(
   await deliverFollowup(event);
   expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({html:expect.stringContaining('/field/assignments/order1')}));
 });
+
+it('labels a split-crew photographer request without implying responsibility for video',async()=>{
+  const event=job();event.kind='assignment_email';event.payload.assignment_round=1;event.payload.contractor_id='contractor';
+  readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'awaiting_response',assignment_round:1,contractor_id:'contractor',photographer_id:'photo',videographer_id:'video',assignment_due_at:new Date(Date.now()+3600000).toISOString(),order_items:[{quantity:1,description:'Cinematic Videography'}]}});
+  vi.mocked(sendEmail).mockResolvedValue({status:'sent',id:'sent'} as any);
+  await deliverFollowup(event);
+  expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({html:expect.stringContaining('Your role: photography / 360. Video is assigned separately. Full order:')}));
+});
