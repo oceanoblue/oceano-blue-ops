@@ -47,10 +47,13 @@ it('does not count teammates’ shared calendars, the master bookings calendar o
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(String(vi.mocked(fetch).mock.calls[1][0])).toContain('/calendars/person%40example.com/events');
 });
-it('rejects per-calendar free/busy errors even on HTTP 200', async () => {
-  vi.mocked(fetch).mockResolvedValueOnce(list([{id:'family@example.com',accessRole:'freeBusyReader'}]))
-    .mockResolvedValueOnce(Response.json({calendars:{'family@example.com':{errors:[{reason:'notFound'}]}}}));
-  await expect(fetchBusyRanges(...range)).rejects.toThrow('calendar_freebusy_incomplete');
+it('does not count calendars someone else shared as free/busy only', async () => {
+  const home='home-hash@group.calendar.google.com';
+  vi.mocked(fetch).mockResolvedValueOnce(list([{id:'person@example.com',accessRole:'owner'},{id:home,accessRole:'freeBusyReader'}]))
+    .mockResolvedValueOnce(Response.json({items:[]}));
+  expect(await fetchBusyRanges(...range)).toEqual([]);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('freeBusy'))).toBe(false);
 });
 it('does not treat an unreadable owned calendar as empty', async () => {
   vi.mocked(fetch).mockResolvedValueOnce(list([{id:'person@example.com',accessRole:'owner'}])).mockResolvedValueOnce(new Response('{}',{status:500}));
@@ -84,6 +87,11 @@ describe('a photographer who shared their calendar instead of connecting', () =>
       .mockResolvedValueOnce(Response.json({calendars:{'Karen@example.com':{busy}}}));
     expect(await fetchMemberBusy(...karen)).toEqual({source:'shared',busy});
     expect(JSON.parse(String(vi.mocked(fetch).mock.calls[1][1]?.body)).items).toEqual([{id:'Karen@example.com'}]);
+  });
+  it('rejects per-calendar free/busy errors even on HTTP 200', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(list([{id:'karen@example.com',accessRole:'freeBusyReader'}]))
+      .mockResolvedValueOnce(Response.json({calendars:{'karen@example.com':{errors:[{reason:'notFound'}]}}}));
+    await expect(fetchMemberBusy(...karen)).rejects.toThrow('calendar_shared_unavailable');
   });
   it('stays on internal availability when nobody can see the calendar', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(list([{id:'person@example.com',accessRole:'owner'}]));

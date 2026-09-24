@@ -244,11 +244,13 @@ export async function fetchMemberBusy(
   const token = await getAccessToken(teamMemberId);
   if (!token) throw new Error('calendar_reconnect_required');
 
-  // The person's own calendars (primary, HOME, HoneyBook, ...). Teammates'
-  // shared calendars, the master bookings calendar and Google's holiday
-  // subscriptions are not this person's conflicts.
+  // The person's own calendars (primary, HoneyBook, ...). Teammates' shared
+  // calendars, the master bookings calendar and Google's holiday subscriptions
+  // are not this person's conflicts. Neither is any calendar they can only see
+  // as free/busy: someone else owns it and shared just their availability
+  // (e.g. a crew member's second calendar shared with the office).
   const [calendars, others] = await Promise.all([listCalendars(token), otherPeoplesCalendars(teamMemberId)]);
-  const own = calendars.filter((c) => !isVirtualCalendar(c.id) && !others.has(c.id.toLowerCase()));
+  const own = calendars.filter((c) => READABLE_ROLES.has(c.accessRole) && !isVirtualCalendar(c.id) && !others.has(c.id.toLowerCase()));
   const busy = await busyFromCalendars(token, own, startIso, endIso, teamMemberId);
   logEvent('gcal.freeBusy', 'ok', { teamMemberId, source: 'own', calendars: own.length, busyCount: busy.length });
   return { source: 'own', busy };
