@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/payment-alerts",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/daily-operations",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

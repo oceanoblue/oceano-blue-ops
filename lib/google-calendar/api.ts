@@ -1,3 +1,4 @@
+import { encryptionConfigured, encryptedToken, openToken, sealToken } from './token-encryption';
 import { createHash } from 'node:crypto';
 import { calendarNeedsReconnect } from './health';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -21,16 +22,25 @@ export async function getAccessToken(teamMemberId: string): Promise<string | nul
   if (readError) throw readError;
   if (!row || !(row as any).is_active) return null;
   const r = row as any;
+  const accessToken = r.access_token ? openToken(r.access_token, teamMemberId, 'access') : null;
+  const refreshToken = r.refresh_token ? openToken(r.refresh_token, teamMemberId, 'refresh') : null;
+  if (encryptionConfigured() && ((accessToken && !encryptedToken(r.access_token)) || (refreshToken && !encryptedToken(r.refresh_token)))) {
+    const { error } = await supabase.from('team_calendar_connections').update({
+      access_token: accessToken ? sealToken(accessToken, teamMemberId, 'access') : null,
+      refresh_token: refreshToken ? sealToken(refreshToken, teamMemberId, 'refresh') : null,
+    }).eq('id', r.id);
+    if (error) throw new Error('Google credentials could not be protected.');
+  }
   const expiresAt = r.expires_at ? new Date(r.expires_at).getTime() : 0;
-  if (expiresAt > Date.now() + 60_000 && r.access_token) return r.access_token;
-  if (!r.refresh_token) return null;
+  if (expiresAt > Date.now() + 60_000 && accessToken) return accessToken;
+  if (!refreshToken) return null;
 
   try {
-    const t = await refreshAccessToken(r.refresh_token);
+    const t = await refreshAccessToken(refreshToken);
     const newExpires = new Date(Date.now() + t.expires_in * 1000).toISOString();
     await supabase
       .from('team_calendar_connections')
-      .update({ access_token: t.access_token, expires_at: newExpires })
+      .update({ access_token: encryptionConfigured() ? sealToken(t.access_token, teamMemberId, 'access') : t.access_token, expires_at: newExpires })
       .eq('id', r.id);
     return t.access_token;
   } catch (e) {

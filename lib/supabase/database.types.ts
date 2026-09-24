@@ -590,6 +590,18 @@ export type Database = {
           },
         ]
       }
+      ops_agent_settings: {
+        Row: { user_id: string; enabled: boolean; timezone: string; brief_time: string; agents: Json; updated_at: string }
+        Insert: { user_id: string; enabled?: boolean; timezone?: string; brief_time?: string; agents?: Json; updated_at?: string }
+        Update: { enabled?: boolean; timezone?: string; brief_time?: string; agents?: Json; updated_at?: string }
+        Relationships: []
+      }
+      ops_brief_runs: {
+        Row: { id: string; user_id: string; local_date: string; run_key: string; status: string; snapshot: Json | null; outputs: Json; error: string | null; created_at: string; completed_at: string | null }
+        Insert: { id?: string; user_id: string; local_date: string; run_key: string; status?: string; snapshot?: Json | null; outputs?: Json; error?: string | null; created_at?: string; completed_at?: string | null }
+        Update: { status?: string; snapshot?: Json | null; outputs?: Json; error?: string | null; completed_at?: string | null }
+        Relationships: []
+      }
       assets: {
         Row: {
           asset_type: string

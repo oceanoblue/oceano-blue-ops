@@ -1,3 +1,4 @@
+import { openToken } from '@/lib/google-calendar/token-encryption';
 import { NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { revokeToken } from '@/lib/google-calendar/oauth';
@@ -5,6 +6,7 @@ import { revokeToken } from '@/lib/google-calendar/oauth';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+  if (request.headers.get('origin') !== new URL(request.url).origin) return new Response('Forbidden', { status: 403 });
   const supabase = await createClient();
   const {
     data: { user },
@@ -20,7 +22,8 @@ export async function POST(request: Request) {
     .eq('provider', 'google')
     .maybeSingle();
   if (row) {
-    const token = (row as any).refresh_token || (row as any).access_token;
+    const stored = row.refresh_token || row.access_token;
+    const token = stored ? openToken(stored, user.id, row.refresh_token ? 'refresh' : 'access') : null;
     if (token) await revokeToken(token).catch(() => {});
     await admin
       .from('team_calendar_connections')
