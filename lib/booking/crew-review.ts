@@ -1,5 +1,5 @@
 import {createAdminClient} from '@/lib/supabase/server';
-import {fetchBusyRanges} from '@/lib/google-calendar/api';
+import {fetchMemberBusy} from '@/lib/google-calendar/api';
 import {fmtDateInTz,fmtTimeInTz,localToUtc,dayOfWeekInTz} from '@/lib/utils/timezone';
 
 export function workingHoursWarning(name:string,at:string,duration:number,hours:any[]) {
@@ -25,13 +25,17 @@ export async function reviewCrew(at:string|null,duration:number,members:string[]
     const name=results[0].data?.full_name||'Crew member';
     const hoursWarning=workingHoursWarning(name,at,duration,results[1].data||[]);
     if(hoursWarning)warnings.push(hoursWarning);
-    const blocks=results[3].data||[];
+    let live:Awaited<ReturnType<typeof fetchMemberBusy>>|null=null;
+    if(results[2].data&&!results[2].data.is_active)warnings.push(`${name}: Google Calendar needs reconnecting. Availability is not verified.`);
+    else try{live=await fetchMemberBusy(id,at,new Date(end).toISOString());}catch{warnings.push(`${name}: live calendar is unavailable. Availability is not verified.`);}
+    // Imported sync: blocks are only a fallback when Google cannot be read live.
+    const blocks=(results[3].data||[]).filter((b:any)=>!live||live.source==='none'||!b.reason?.startsWith('sync:'));
     if(blocks.length)warnings.push(`${name}: saved calendar or time-off data marks this window busy${orderId?' (it may include this existing shoot)':''}. Check the shared calendar before confirming.`);
-    if(!results[2].data?.is_active)warnings.push(`${name}: no direct calendar connection. Shared-calendar imports alone do not verify live availability.`);
-    else try {
-      const busy=await fetchBusyRanges(id,at,new Date(end).toISOString());
+    if(live?.source==='none')warnings.push(`${name}: no Google Calendar connection or shared calendar. Availability is not verified.`);
+    else if(live) {
+      const busy=live.busy;
       if(busy.some(b=>Date.parse(b.start)<end&&Date.parse(b.end)>start))warnings.push(`${name}: Google Calendar shows busy time during ${fmtTimeInTz(at,'America/New_York')}–${fmtTimeInTz(new Date(end),'America/New_York')}${orderId?' (this may be the existing shoot hold)':''}. Review before confirming.`);
-    } catch {warnings.push(`${name}: live calendar is unavailable. Availability is not verified.`);}
+    }
   }
   return warnings;
 }

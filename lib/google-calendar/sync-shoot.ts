@@ -13,7 +13,7 @@ import { signRespondToken, respondPageUrl, respondTokenExpiry } from '@/lib/fiel
 
 // The master "office" calendar that shows EVERY shoot. Shared with the connected
 // admin account so one token can write it. Override with env if it ever changes.
-const MASTER_CALENDAR_ID = process.env.MASTER_CALENDAR_ID || 'info@oceanoblue.net';
+import { MASTER_CALENDAR_ID } from './calendars';
 
 // Statuses / states that mean "this shoot should NOT be on any calendar".
 const DEAD_STATUSES = new Set(['cancelled', 'draft']);
