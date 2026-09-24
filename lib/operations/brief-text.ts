@@ -11,7 +11,7 @@ export function factualBrief(role: AgentRole, s: OperationsSnapshot) {
           .join("\n")
       : empty;
   if (role === "planner")
-    return `${s.inbox ? `${s.inbox.messages.length} recent inbox preview(s). ${s.inbox.message}\n` : ""}${s.events.length} scheduled commitment(s), ${s.items.filter((i) => i.due === s.day).length} item(s) due today, ${s.items.filter((i) => i.overdue).length} overdue.\n${s.calendar.status !== "connected" ? `${s.calendar.message}\n` : ""}${s.conflicts.length ? `${s.conflicts.length} overlapping commitment(s) need review.\n` : ""}\n${list(
+    return `${s.events.length} scheduled commitment(s), ${s.items.filter((i) => i.due === s.day).length} item(s) due today, ${s.items.filter((i) => i.overdue).length} overdue.\n${s.calendar.status !== "connected" ? `${s.calendar.message}\n` : ""}${s.conflicts.length ? `${s.conflicts.length} overlapping commitment(s) need review.\n` : ""}\n${list(
       s.items.filter((i) => i.overdue || i.rush || i.due === s.day),
       "No dated priorities found. Review undated production items before planning free time.",
     )}`;

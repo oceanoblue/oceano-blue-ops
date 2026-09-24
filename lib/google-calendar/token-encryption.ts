@@ -18,8 +18,8 @@ export function sealToken(value: string, userId: string, kind: "access" | "refre
   return PREFIX + Buffer.concat([nonce, cipher.getAuthTag(), ciphertext]).toString("base64url");
 }
 export function openToken(value: string, userId: string, kind: "access" | "refresh") {
-  // Legacy calendar connections remain usable during staged deployment. Gmail
-  // requires the encryption key; getAccessToken upgrades legacy rows before use.
+  // Legacy calendar connections remain usable during staged deployment.
+  // With a key configured, getAccessToken upgrades legacy rows before use.
   if (!encryptedToken(value)) return value;
   try {
     const data = Buffer.from(value.slice(PREFIX.length), "base64url");

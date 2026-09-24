@@ -29,15 +29,15 @@ export function redirectUri() {
   return `${base}/api/auth/google/callback`;
 }
 
-export function buildConsentUrl(state: string, includeGmail = false, includeDrafts = false): string {
+export function buildConsentUrl(state: string): string {
   const params = new URLSearchParams({
     client_id: clientId(),
     redirect_uri: redirectUri(),
     response_type: 'code',
     access_type: 'offline',
-    include_granted_scopes: 'true',
+    include_granted_scopes: 'false',
     prompt: 'consent',
-    scope: [...SCOPES, ...(includeGmail ? ['https://www.googleapis.com/auth/gmail.readonly'] : []), ...(includeDrafts ? ['https://www.googleapis.com/auth/gmail.compose'] : [])].join(' '),
+    scope: SCOPES.join(' '),
     state,
   });
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;

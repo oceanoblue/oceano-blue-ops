@@ -26,7 +26,6 @@ import {
 import { factualBrief } from "@/lib/operations/brief-text";
 import { fmtDate, fmtTime } from "@/lib/utils/format";
 import { MorningBrief } from "./MorningBrief";
-import { InboxBrief } from "./InboxBrief";
 import { DraftDialog } from "./DraftDialog";
 import { editorDraft, workAction } from "@/lib/operations/actions";
 import { AgentSettings } from "./AgentSettings";
@@ -203,7 +202,7 @@ export function DailyOperations({
     : "Today";
   return (
     <div className="mx-auto max-w-[1600px] space-y-6 pb-8">
-      {draft && <DraftDialog initial={draft} canSave={snapshot?.inbox?.canDraft ?? false} onClose={() => setDraft(null)}/>}
+      {draft && <DraftDialog initial={draft} onClose={() => setDraft(null)}/>}
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-slate-500">
@@ -485,7 +484,6 @@ export function DailyOperations({
               </ul>
             )}
           </section>
-          <InboxBrief inbox={snapshot.inbox} timezone={settings.timezone} onDraft={setDraft}/>
           <section id="handoffs" className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

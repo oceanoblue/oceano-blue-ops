@@ -1,4 +1,3 @@
-import { encryptionConfigured } from '@/lib/google-calendar/token-encryption';
 import { calendarNeedsReconnect } from '@/lib/google-calendar/health';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
@@ -26,8 +25,6 @@ export default async function IntegrationsPage(
     .eq('provider', 'google')
     .maybeSingle();
 
-  const gmailEnabled = process.env.GMAIL_INTEGRATION_ENABLED === 'true' && encryptionConfigured();
-  const draftsEnabled = gmailEnabled && process.env.GMAIL_DRAFTS_ENABLED === 'true';
   return (
     <div className="space-y-8">
       <div>
@@ -91,14 +88,6 @@ export default async function IntegrationsPage(
             <CalendarBackfillButton />
           </div>
         )}
-      </section>
-      <section className="card p-6">
-        <h2 className="font-semibold text-ocean-900">Gmail for your morning brief</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">Bring recent inbox previews into My Day. Your day planner can connect them to your calendar and production work. Prepare replies and editor handoffs, then save drafts to Gmail for review and sending.</p>
-        <p className="mt-3 text-sm text-slate-600">{gcal?.is_active && gcal.scope?.split(/\s+/).includes('https://www.googleapis.com/auth/gmail.readonly') ? 'Inbox permission connected' : 'Gmail permission needed'} · {gcal?.scope?.split(/\s+/).includes('https://www.googleapis.com/auth/gmail.compose') ? 'Draft permission connected' : 'Draft permission needed'}</p>
-        {gmailEnabled ? <div className="mt-4 flex flex-wrap gap-2"><a className="btn-primary" href="/api/auth/google/connect?gmail=1">Connect Gmail read-only</a>{draftsEnabled && <a className="btn-secondary" href="/api/auth/google/connect?gmail=1&drafts=1">Enable Gmail draft saving</a>}</div> : <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Gmail is disabled pending security setup. Your existing calendar connection remains available.</p>}
-        <p className="mt-3 max-w-2xl text-xs leading-relaxed text-slate-500">Read-only is the default. Saving directly to Gmail requires a separate Google permission that also allows sending mail. Enable it only if you accept that added access; copying drafts needs no Gmail write permission.</p>
-        <p className="mt-3 max-w-2xl text-xs leading-relaxed text-slate-500">Uses the same Google account as your calendar. Recent message previews are included in your private saved briefs and shared with your selected day-planner API provider when it runs. The app saves drafts only; send them in Gmail. Disconnecting Google above disconnects both services.</p>
       </section>
     </div>
   );

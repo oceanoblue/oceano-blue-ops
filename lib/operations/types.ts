@@ -52,31 +52,12 @@ export type DayEvent = {
   href: string | null;
   location?: string;
 };
-export type InboxMessage = {
-  id: string;
-  threadId: string;
-  subject: string;
-  from: string;
-  replyTo: string;
-  snippet: string;
-  receivedAt: string;
-  unread: boolean;
-  href: string;
-};
-export type InboxSnapshot = {
-  status: "connected" | "disconnected" | "error";
-  message: string;
-  account: string | null;
-  canDraft: boolean;
-  messages: InboxMessage[];
-};
-export type EmailDraft = { to: string; subject: string; body: string; sourceId?: string };
+export type EmailDraft = { to: string; subject: string; body: string };
 export type OperationsSnapshot = {
   capturedAt: string;
   day: string;
   timezone: string;
   calendar: { status: "connected" | "disconnected" | "error"; message: string };
-  inbox?: InboxSnapshot;
   items: WorkItem[];
   events: DayEvent[];
   conflicts: string[][];

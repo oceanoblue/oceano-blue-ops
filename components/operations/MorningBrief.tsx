@@ -36,7 +36,7 @@ export function MorningBrief({ name, snapshot, text, output, savedAt, role, onRo
         <span className="flex items-center gap-2"><Sparkles className="h-4 w-4"/>{output && output.provider !== "rules" && output.status !== "fallback" ? `${output.provider === "openai" ? "OpenAI" : "Claude"} · ${output.model}` : "Built-in operations rules"}</span>
         <button type="button" onClick={onCopy} className="flex min-h-10 items-center gap-2 font-medium"><Copy className="h-4 w-4"/>Copy brief</button>
       </div>
-      {savedAt && <p className="mt-2 text-xs text-[#667269]">Assistant text reflects the saved brief. Counts, calendar and inbox reflect the latest refresh.</p>}
+      {savedAt && <p className="mt-2 text-xs text-[#667269]">Assistant text reflects the saved brief. Counts and calendar reflect the latest refresh.</p>}
     </div>
   </section>;
 }
