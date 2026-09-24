@@ -56,10 +56,10 @@ the live audit.
 ## Required before enabling Gmail
 
 1. Complete the production review and normal code deployment. The My Day schema
-   migration is still pending. Because the independent security hotfix has a
-   later migration version, the normal migration dry run must explicitly account
-   for the earlier pending operations migration (`--include-all` if required by
-   the CLI); do not repair or delete the live security migration history.
+   migration was applied and verified on 2026-09-24 as
+   `20260924110921_daily_operations_agents.sql`, after the independent token
+   permission hotfix. Local filenames match the recorded live migration versions.
+   Do not repair or delete the live security migration history.
 2. Create a base64-encoded 32-byte random encryption key using a trusted local
    secret generator. Store it only in protected server environment variables.
    Back it up securely. Never paste it into chat, job records or the repository.

@@ -15,7 +15,7 @@ beforeAll(async () => {
  insert into team_members values('${alice}',true,'admin'),('${bob}',true,'editor'),('${field}',true,'photographer');`);
   await db.exec(
     readFileSync(
-      "supabase/migrations/20260924085744_daily_operations_agents.sql",
+      "supabase/migrations/20260924110921_daily_operations_agents.sql",
       "utf8",
     ),
   );

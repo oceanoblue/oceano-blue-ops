@@ -24,7 +24,7 @@
 ## Activate in the existing deployment
 
 1. Review this branch and the additive migration
-   `20260924085744_daily_operations_agents.sql`. Apply it to the intended database
+   `20260924110921_daily_operations_agents.sql`. Apply it to the intended database
    using the existing `DB_MIGRATIONS_RUNBOOK.md` procedure, including its dry run
    and exact project-reference confirmation. Existing office users receive free
    daily settings; new staff can initialize theirs with Save assistant settings.
@@ -43,9 +43,9 @@
 
 The migration and secrets must be applied before calling the daily system live.
 Without the migration the page can still show live production facts, but clearly
-marks settings/history setup as required. The operations migration and feature activation are still pending. The standalone
-Google token permission hotfix below was applied to the live Ops database. No
-production code merge or Gmail activation has been performed.
+marks settings/history setup as required. The operations migration was applied and verified on 2026-09-24. The standalone
+Google token permission hotfix was also applied to the live Ops database.
+Gmail activation remains separately gated; deployment does not enable it.
 
 ## Execution and safety
 
