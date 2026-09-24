@@ -29,16 +29,26 @@ it('does not treat a failed calendar list request as empty availability', async 
   vi.mocked(fetch).mockResolvedValue(new Response('{}',{status:403}));
   await expect(fetchBusyRanges(...range)).rejects.toThrow('calendar_list_unavailable');
 });
-it('ignores all-day, free, declined and cancelled events on a UTC HoneyBook calendar', async () => {
+it('blocks busy all-day events for the whole business-timezone day and ignores free, declined and cancelled events', async () => {
   const honeybook='c_honeybook@group.calendar.google.com';
   vi.mocked(fetch).mockResolvedValueOnce(list([{id:honeybook,accessRole:'owner'}])).mockResolvedValueOnce(Response.json({items:[
-    {status:'confirmed',start:{date:'2026-09-26T00:00:00Z'},end:{date:'2026-09-27T00:00:00Z'}},
+    {status:'confirmed',start:{date:'2026-09-26'},end:{date:'2026-09-27'}},
+    {status:'confirmed',transparency:'transparent',start:{date:'2026-09-26'},end:{date:'2026-09-27'}},
     {status:'confirmed',transparency:'transparent',start:{dateTime:'2026-09-25T20:30:00Z'},end:{dateTime:'2026-09-25T21:30:00Z'}},
     {status:'cancelled',start:{dateTime:'2026-09-25T15:00:00Z'},end:{dateTime:'2026-09-25T16:00:00Z'}},
     {status:'confirmed',start:{dateTime:'2026-09-25T12:00:00-04:00'},end:{dateTime:'2026-09-25T13:00:00-04:00'},attendees:[{self:true,responseStatus:'declined'}]},
     {status:'confirmed',start:{dateTime:'2026-09-25T20:30:00Z',timeZone:'America/New_York'},end:{dateTime:'2026-09-25T21:30:00Z'}},
   ]}));
-  expect(await fetchBusyRanges(...range)).toEqual([{start:'2026-09-25T20:30:00.000Z',end:'2026-09-25T21:30:00.000Z'}]);
+  expect(await fetchBusyRanges(...range)).toEqual([
+    {start:'2026-09-26T04:00:00.000Z',end:'2026-09-27T04:00:00.000Z'},
+    {start:'2026-09-25T20:30:00.000Z',end:'2026-09-25T21:30:00.000Z'},
+  ]);
+});
+it('uses the configured business timezone for all-day events', async () => {
+  tables.business_settings=[{id:true,default_timezone:'America/Los_Angeles'}];
+  vi.mocked(fetch).mockResolvedValueOnce(list([{id:'person@example.com',accessRole:'owner'}]))
+    .mockResolvedValueOnce(Response.json({items:[{start:{date:'2026-09-26'},end:{date:'2026-09-28'}}]}));
+  expect(await fetchBusyRanges(...range)).toEqual([{start:'2026-09-26T07:00:00.000Z',end:'2026-09-28T07:00:00.000Z'}]);
 });
 it('does not count teammates’ shared calendars, the master bookings calendar or holidays as personal busy time', async () => {
   vi.mocked(fetch).mockResolvedValueOnce(list([{id:'person@example.com',accessRole:'owner'},{id:'karen@example.com',accessRole:'freeBusyReader'},{id:'info@oceanoblue.net',accessRole:'writer'},{id:'en.usa#holiday@group.v.calendar.google.com',accessRole:'reader'}]))

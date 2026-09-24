@@ -5,6 +5,7 @@ import { MASTER_CALENDAR_ID } from './calendars';
 import { createAdminClient } from '@/lib/supabase/server';
 import { refreshAccessToken, GoogleTokenError } from './oauth';
 import { captureError, logEvent } from '@/lib/observability/report';
+import { localToUtc } from '@/lib/utils/timezone';
 
 /**
  * Returns a valid access token for the given team_member. Refreshes if
@@ -108,14 +109,21 @@ async function otherPeoplesCalendars(teamMemberId: string): Promise<Set<string>>
   return ids;
 }
 
+async function businessTimezone(): Promise<string> {
+  const { data, error } = await (createAdminClient() as any)
+    .from('business_settings').select('default_timezone').eq('id', true).maybeSingle();
+  if (error) throw error;
+  return data?.default_timezone || 'America/New_York';
+}
+
 /**
- * Busy time from a calendar we can read event details on. Unlike FreeBusy this
- * lets us drop all-day events: Google places them at midnight in the CALENDAR's
- * timezone (HoneyBook calendars are UTC, so an all-day project became an
- * 8 PM–8 PM Eastern block), and all-day entries are project markers or
- * reminders, not timed conflicts. Real time off belongs in Ops time-off.
+ * Busy time from a calendar we can read event details on. Busy all-day events
+ * block the whole day in the BUSINESS timezone. FreeBusy places them at
+ * midnight in the calendar's own timezone instead (HoneyBook calendars are
+ * UTC), which turned a Saturday event into an 8 PM Fri to 8 PM Sat block.
+ * All-day events marked Free are skipped like any other free event.
  */
-async function readableBusy(token: string, calendarId: string, startIso: string, endIso: string): Promise<FreeBusyRange[]> {
+async function readableBusy(token: string, calendarId: string, startIso: string, endIso: string, timezone: string): Promise<FreeBusyRange[]> {
   const busy: FreeBusyRange[] = [];
   let pageToken: string | undefined;
   for (let page = 0; page < 5; page++) {
@@ -134,10 +142,12 @@ async function readableBusy(token: string, calendarId: string, startIso: string,
     const data: any = await r.json();
     for (const e of data.items ?? []) {
       if (e.status === 'cancelled' || e.transparency === 'transparent') continue;
-      if (!e.start?.dateTime || !e.end?.dateTime) continue; // all-day
       if (e.eventType === 'workingLocation' || e.eventType === 'birthday') continue;
       if ((e.attendees ?? []).some((a: any) => a.self && a.responseStatus === 'declined')) continue;
-      const start = Date.parse(e.start.dateTime), end = Date.parse(e.end.dateTime);
+      const allDay = !e.start?.dateTime && e.start?.date;
+      const start = allDay ? localToUtc(String(e.start.date).slice(0, 10), '00:00', timezone).getTime() : Date.parse(e.start?.dateTime);
+      // An all-day event's end date is exclusive: midnight starting that day.
+      const end = allDay ? localToUtc(String(e.end?.date ?? e.start.date).slice(0, 10), '00:00', timezone).getTime() : Date.parse(e.end?.dateTime);
       if (Number.isFinite(start) && end > start) busy.push({ start: new Date(start).toISOString(), end: new Date(end).toISOString() });
     }
     pageToken = data.nextPageToken;
@@ -178,8 +188,9 @@ async function busyFromCalendars(token: string, calendars: CalendarListEntry[], 
   if (calendars.length > 50) throw new Error('calendar_list_limit');
   const readable = calendars.filter((c) => READABLE_ROLES.has(c.accessRole));
   const freeBusyOnly = calendars.filter((c) => !READABLE_ROLES.has(c.accessRole)).map((c) => c.id);
+  const timezone = readable.length ? await businessTimezone() : '';
   const results = await Promise.all([
-    ...readable.map((c) => readableBusy(token, c.id, startIso, endIso)),
+    ...readable.map((c) => readableBusy(token, c.id, startIso, endIso, timezone)),
     freeBusyRanges(token, freeBusyOnly, startIso, endIso, teamMemberId),
   ]);
   return results.flat();
