@@ -1,9 +1,11 @@
 import { encryptionConfigured, encryptedToken, openToken, sealToken } from './token-encryption';
 import { createHash } from 'node:crypto';
 import { calendarNeedsReconnect } from './health';
+import { MASTER_CALENDAR_ID } from './calendars';
 import { createAdminClient } from '@/lib/supabase/server';
 import { refreshAccessToken, GoogleTokenError } from './oauth';
 import { captureError, logEvent } from '@/lib/observability/report';
+import { localToUtc } from '@/lib/utils/timezone';
 
 /**
  * Returns a valid access token for the given team_member. Refreshes if
@@ -57,95 +59,217 @@ export async function getAccessToken(teamMemberId: string): Promise<string | nul
 
 export interface FreeBusyRange { start: string; end: string }
 
-/** Returns busy ranges from the user's primary calendar in [start, end]. */
-export async function fetchBusyRanges(
-  teamMemberId: string,
-  startIso: string,
-  endIso: string
-): Promise<FreeBusyRange[]> {
-  const admin = createAdminClient();
-  const { data: connection, error } = await admin.from('team_calendar_connections')
-    .select('is_active, scope').eq('team_member_id', teamMemberId).eq('provider', 'google').maybeSingle();
-  if (error) throw error;
-  // Never-connected photographers are scheduled through internal hours/blocks.
-  // Once a calendar is connected, a broken connection must never look empty.
-  if (!connection) return [];
-  if (calendarNeedsReconnect(connection)) throw new Error('calendar_reconnect_required');
-  const token = await getAccessToken(teamMemberId);
-  if (!token) {
-    throw new Error('calendar_reconnect_required');
-  }
+/**
+ * Where a person's busy time came from: their own OAuth connection, a calendar
+ * they shared with a connected Ops account, or nowhere (internal hours only).
+ */
+export type BusySource = 'own' | 'shared' | 'none';
 
-  // Enumerate the user's calendars so events on ANY calendar (not just
-  // 'primary') block availability. An incomplete response blocks these slots.
-  let calendarIds: string[] = ['primary'];
+interface CalendarListEntry { id: string; accessRole: string }
+
+const READABLE_ROLES = new Set(['reader', 'writer', 'owner']);
+
+// Google's virtual calendars (holidays, birthdays, contacts). They are all-day
+// and never a personal conflict, and FreeBusy often cannot read them anyway.
+const isVirtualCalendar = (id: string) => id.endsWith('@group.v.calendar.google.com');
+
+async function listCalendars(token: string): Promise<CalendarListEntry[]> {
   try {
-    const lr = await fetch(
+    const r = await fetch(
       'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250&fields=items(id,accessRole),nextPageToken',
       { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) }
     );
-    if (!lr.ok) throw new Error(`calendar_list_${lr.status}`);
-    if (lr.ok) {
-      const ld: any = await lr.json();
-      const ids = (ld.items ?? [])
-        .filter((c: any) => c.accessRole && c.accessRole !== 'none')
-        .map((c: any) => c.id)
-        .filter(Boolean);
-      if (ld.nextPageToken || ids.length > 50) throw new Error('calendar_list_limit');
-      if (ids.length) calendarIds = ids;
-    }
+    if (!r.ok) throw new Error(`calendar_list_${r.status}`);
+    const ld: any = await r.json();
+    if (ld.nextPageToken) throw new Error('calendar_list_limit');
+    return (ld.items ?? [])
+      .filter((c: any) => c.id && c.accessRole && c.accessRole !== 'none')
+      .map((c: any) => ({ id: String(c.id), accessRole: String(c.accessRole) }));
   } catch {
     throw new Error('calendar_list_unavailable');
   }
+}
 
+/**
+ * Calendars that appear in someone's Google list but describe OTHER people:
+ * a teammate's shared calendar, or the master bookings calendar (which holds
+ * every crew member's shoots). Counting them made one person's row show the
+ * whole team's commitments.
+ */
+async function otherPeoplesCalendars(teamMemberId: string): Promise<Set<string>> {
+  const admin = createAdminClient() as any;
+  const [members, contractors] = await Promise.all([
+    admin.from('team_members').select('id,email'),
+    admin.from('contractors').select('team_member_id,email'),
+  ]);
+  if (members.error || contractors.error) throw members.error || contractors.error;
+  const ids = new Set<string>([MASTER_CALENDAR_ID.toLowerCase()]);
+  for (const m of members.data ?? []) if (m.id !== teamMemberId && m.email) ids.add(String(m.email).toLowerCase());
+  for (const c of contractors.data ?? []) if (c.team_member_id !== teamMemberId && c.email) ids.add(String(c.email).toLowerCase());
+  return ids;
+}
+
+async function businessTimezone(): Promise<string> {
+  const { data, error } = await (createAdminClient() as any)
+    .from('business_settings').select('default_timezone').eq('id', true).maybeSingle();
+  if (error) throw error;
+  return data?.default_timezone || 'America/New_York';
+}
+
+/**
+ * Busy time from a calendar we can read event details on. Busy all-day events
+ * block the whole day in the BUSINESS timezone. FreeBusy places them at
+ * midnight in the calendar's own timezone instead (HoneyBook calendars are
+ * UTC), which turned a Saturday event into an 8 PM Fri to 8 PM Sat block.
+ * All-day events marked Free are skipped like any other free event.
+ */
+async function readableBusy(token: string, calendarId: string, startIso: string, endIso: string, timezone: string): Promise<FreeBusyRange[]> {
+  const busy: FreeBusyRange[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < 5; page++) {
+    const url = new URL(calUrl(calendarId));
+    url.searchParams.set('timeMin', startIso);
+    url.searchParams.set('timeMax', endIso);
+    url.searchParams.set('singleEvents', 'true');
+    url.searchParams.set('maxResults', '2500');
+    url.searchParams.set('fields', 'items(status,transparency,eventType,start,end,attendees(self,responseStatus)),nextPageToken');
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+    const r = await fetch(url, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) });
+    if (!r.ok) {
+      await reportApiFailure('listEvents', r, { calendarType: calendarId.endsWith('.google.com') ? 'group' : 'standard' });
+      throw new Error(`calendar_events_${r.status}`);
+    }
+    const data: any = await r.json();
+    for (const e of data.items ?? []) {
+      if (e.status === 'cancelled' || e.transparency === 'transparent') continue;
+      if (e.eventType === 'workingLocation' || e.eventType === 'birthday') continue;
+      if ((e.attendees ?? []).some((a: any) => a.self && a.responseStatus === 'declined')) continue;
+      const allDay = !e.start?.dateTime && e.start?.date;
+      const start = allDay ? localToUtc(String(e.start.date).slice(0, 10), '00:00', timezone).getTime() : Date.parse(e.start?.dateTime);
+      // An all-day event's end date is exclusive: midnight starting that day.
+      const end = allDay ? localToUtc(String(e.end?.date ?? e.start.date).slice(0, 10), '00:00', timezone).getTime() : Date.parse(e.end?.dateTime);
+      if (Number.isFinite(start) && end > start) busy.push({ start: new Date(start).toISOString(), end: new Date(end).toISOString() });
+    }
+    pageToken = data.nextPageToken;
+    if (!pageToken) return busy;
+  }
+  throw new Error('calendar_events_limit');
+}
+
+/** Busy time from calendars shared as "See only free/busy". */
+async function freeBusyRanges(token: string, calendarIds: string[], startIso: string, endIso: string, teamMemberId: string): Promise<FreeBusyRange[]> {
+  if (!calendarIds.length) return [];
   const r = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
     method: 'POST',
     signal: AbortSignal.timeout(10000),
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      timeMin: startIso,
-      timeMax: endIso,
-      items: calendarIds.map((id) => ({ id })),
-    }),
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ timeMin: startIso, timeMax: endIso, items: calendarIds.map((id) => ({ id })) }),
   });
   if (!r.ok) {
     const body = await r.text().catch(() => '');
-    captureError('gcal.freeBusy', new Error(`freebusy_${r.status}: ${body.slice(0, 300)}`), {
-      teamMemberId,
-    });
+    captureError('gcal.freeBusy', new Error(`freebusy_${r.status}: ${body.slice(0, 300)}`), { teamMemberId });
     throw new Error(`calendar_freebusy_${r.status}`);
   }
-  const data: any = await r.json();
-  const cals = data?.calendars ?? {};
+  const cals = ((await r.json()) as any)?.calendars ?? {};
   const busy: FreeBusyRange[] = [];
   for (const key of calendarIds) {
-    // Google's virtual subscription calendars (holidays, birthdays, etc.) can
-    // be listed successfully but return notFound from FreeBusy. They must not
-    // invalidate working personal/shared calendars. Other errors still block.
-    const errors = cals[key]?.errors;
-    if (key.endsWith('@group.v.calendar.google.com') && errors?.length &&
-        errors.every((error: { reason?: string }) => error.reason === 'notFound')) {
-      logEvent('gcal.freeBusy', 'unsupported_subscription', { teamMemberId });
-      continue;
-    }
     if (!cals[key] || cals[key].errors?.length || !Array.isArray(cals[key].busy)) {
       logEvent('gcal.freeBusy', 'incomplete', {
-        calendarType: key.endsWith('@group.v.calendar.google.com') ? 'subscription' : 'standard',
         reasons: (cals[key]?.errors ?? []).map((error: { reason?: string }) => error.reason),
       });
       throw new Error('calendar_freebusy_incomplete');
     }
-    for (const b of cals[key]?.busy ?? []) busy.push(b);
+    busy.push(...cals[key].busy);
   }
-  logEvent('gcal.freeBusy', 'ok', {
-    teamMemberId,
-    calendars: calendarIds.length,
-    busyCount: busy.length,
-  });
   return busy;
+}
+
+async function busyFromCalendars(token: string, calendars: CalendarListEntry[], startIso: string, endIso: string, teamMemberId: string) {
+  if (calendars.length > 50) throw new Error('calendar_list_limit');
+  const readable = calendars.filter((c) => READABLE_ROLES.has(c.accessRole));
+  const freeBusyOnly = calendars.filter((c) => !READABLE_ROLES.has(c.accessRole)).map((c) => c.id);
+  const timezone = readable.length ? await businessTimezone() : '';
+  const results = await Promise.all([
+    ...readable.map((c) => readableBusy(token, c.id, startIso, endIso, timezone)),
+    freeBusyRanges(token, freeBusyOnly, startIso, endIso, teamMemberId),
+  ]);
+  return results.flat();
+}
+
+/**
+ * A photographer without their own Ops connection can still be verified when
+ * they shared their Google Calendar with a connected Ops account (e.g. Karen
+ * sharing with gustavo@). Read-only access to that share is enough; they do
+ * not need to authorize Ops themselves.
+ */
+async function sharedCalendarBusy(teamMemberId: string, startIso: string, endIso: string): Promise<FreeBusyRange[] | null> {
+  const admin = createAdminClient() as any;
+  const [member, contractors, viewers] = await Promise.all([
+    admin.from('team_members').select('email').eq('id', teamMemberId).maybeSingle(),
+    admin.from('contractors').select('email').eq('team_member_id', teamMemberId),
+    admin.from('team_calendar_connections').select('team_member_id,is_active,scope').eq('provider', 'google').eq('is_active', true),
+  ]);
+  if (member.error || contractors.error || viewers.error) throw member.error || contractors.error || viewers.error;
+  const emails = new Set<string>(
+    [member.data?.email, ...(contractors.data ?? []).map((c: any) => c.email)]
+      .filter(Boolean).map((e: string) => e.toLowerCase())
+  );
+  if (!emails.size) return null;
+  let failed = false;
+  for (const viewer of (viewers.data ?? []).filter((v: any) => v.team_member_id !== teamMemberId && !calendarNeedsReconnect(v))) {
+    try {
+      const token = await getAccessToken(viewer.team_member_id);
+      if (!token) { failed = true; continue; }
+      const shared = (await listCalendars(token)).filter((c) => emails.has(c.id.toLowerCase()));
+      if (!shared.length) continue;
+      const busy = await busyFromCalendars(token, shared, startIso, endIso, teamMemberId);
+      logEvent('gcal.freeBusy', 'ok', { teamMemberId, source: 'shared', calendars: shared.length, busyCount: busy.length });
+      return busy;
+    } catch {
+      failed = true;
+    }
+  }
+  // A share we could not check must not look like an empty calendar.
+  if (failed) throw new Error('calendar_shared_unavailable');
+  return null;
+}
+
+/** Returns a person's busy ranges in [start, end] and where they came from. */
+export async function fetchMemberBusy(
+  teamMemberId: string,
+  startIso: string,
+  endIso: string
+): Promise<{ source: BusySource; busy: FreeBusyRange[] }> {
+  const admin = createAdminClient();
+  const { data: connection, error } = await admin.from('team_calendar_connections')
+    .select('is_active, scope').eq('team_member_id', teamMemberId).eq('provider', 'google').maybeSingle();
+  if (error) throw error;
+  if (!connection) {
+    // Never-connected photographers fall back to a shared calendar, then to
+    // internal hours/blocks.
+    const shared = await sharedCalendarBusy(teamMemberId, startIso, endIso);
+    return shared ? { source: 'shared', busy: shared } : { source: 'none', busy: [] };
+  }
+  // Once a calendar is connected, a broken connection must never look empty.
+  if (calendarNeedsReconnect(connection)) throw new Error('calendar_reconnect_required');
+  const token = await getAccessToken(teamMemberId);
+  if (!token) throw new Error('calendar_reconnect_required');
+
+  // The person's own calendars (primary, HoneyBook, ...). Teammates' shared
+  // calendars, the master bookings calendar and Google's holiday subscriptions
+  // are not this person's conflicts. Neither is any calendar they can only see
+  // as free/busy: someone else owns it and shared just their availability
+  // (e.g. a crew member's second calendar shared with the office).
+  const [calendars, others] = await Promise.all([listCalendars(token), otherPeoplesCalendars(teamMemberId)]);
+  const own = calendars.filter((c) => READABLE_ROLES.has(c.accessRole) && !isVirtualCalendar(c.id) && !others.has(c.id.toLowerCase()));
+  const busy = await busyFromCalendars(token, own, startIso, endIso, teamMemberId);
+  logEvent('gcal.freeBusy', 'ok', { teamMemberId, source: 'own', calendars: own.length, busyCount: busy.length });
+  return { source: 'own', busy };
+}
+
+/** Returns busy ranges for a person in [start, end]. */
+export async function fetchBusyRanges(teamMemberId: string, startIso: string, endIso: string): Promise<FreeBusyRange[]> {
+  return (await fetchMemberBusy(teamMemberId, startIso, endIso)).busy;
 }
 
 export interface CalendarEvent {

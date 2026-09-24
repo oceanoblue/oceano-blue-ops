@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 vi.mock('@/lib/supabase/server',()=>({createAdminClient:vi.fn()}));
-vi.mock('@/lib/google-calendar/api',()=>({fetchBusyRanges:vi.fn()}));
+vi.mock('@/lib/google-calendar/api',()=>({fetchMemberBusy:vi.fn()}));
 import {roleWindow,memberWindows} from './crew-windows';
 import {workingHoursWarning} from './crew-review';
 import {assignmentLabel} from './routing';

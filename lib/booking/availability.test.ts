@@ -2,7 +2,7 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {getAvailability} from './availability';
 const {tables,busy}=vi.hoisted(()=>({tables:{} as Record<string,any>,busy:vi.fn()}));
 vi.mock('@/lib/supabase/server',()=>({createAdminClient:()=>({from:(table:string)=>{let ids:string[]|undefined;const q:any={then:(resolve:any)=>Promise.resolve({data:table==='products'&&ids?tables[table].filter((row:any)=>ids!.includes(row.id)):tables[table],error:null}).then(resolve)};for(const k of ['select','eq','gte','lte','lt','gt','not','maybeSingle'])q[k]=()=>q;q.in=(column:string,values:string[])=>{if(table==='products'&&column==='id')ids=values;return q;};return q;}})}));
-vi.mock('@/lib/google-calendar/api',()=>({fetchBusyRanges:busy}));
+vi.mock('@/lib/google-calendar/api',()=>({fetchMemberBusy:async(...args:[string,string,string])=>({source:'own',busy:await busy(...args)})}));
 vi.mock('@/lib/observability/report',()=>({captureError:vi.fn()}));
 beforeEach(()=>{
  vi.useFakeTimers();vi.setSystemTime(new Date('2026-09-21T00:00:00Z'));busy.mockReset();busy.mockResolvedValue([]);

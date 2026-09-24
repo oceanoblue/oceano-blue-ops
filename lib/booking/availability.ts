@@ -1,7 +1,7 @@
 import {memberWindows} from './crew-windows';
 import { createAdminClient } from '@/lib/supabase/server';
 import { localToUtc, dayOfWeekInTz, fmtDateInTz } from '@/lib/utils/timezone';
-import { fetchBusyRanges } from '@/lib/google-calendar/api';
+import { fetchMemberBusy } from '@/lib/google-calendar/api';
 import { validDate } from './validation';
 import { routingEligible, travelBuffer, type RoutingProfile } from './routing';
 import { productCaptureSkills, coversSkills, crewMemberIds } from './capture-skills';
@@ -93,7 +93,7 @@ export async function getAvailability(dateStr: string, duration: number, photogr
       .not('status', 'in', '("cancelled","draft")'),
     supabase
       .from('schedule_blocks')
-      .select('team_member_id, starts_at, ends_at, is_available')
+      .select('team_member_id, starts_at, ends_at, is_available, reason')
       .lt('starts_at', new Date(dayEnd).toISOString())
       .gt('ends_at', new Date(dayStart).toISOString())
       .eq('is_available', false),
@@ -126,9 +126,12 @@ export async function getAvailability(dateStr: string, duration: number, photogr
       for(const w of memberWindows(o,memberId))if(w.start&&w.end)ph.busy.push({start:Date.parse(w.start),end:Date.parse(w.end),zip:o.listings?.zip});
     }
   }
+  // Imported `sync:` blocks are a stale copy of Google busy time, used only
+  // when the calendar cannot be read live below.
+  const imported = ((blocks ?? []) as any[]).filter((b) => b.reason?.startsWith('sync:'));
   for (const b of (blocks ?? []) as any[]) {
     const ph = photographers.get(b.team_member_id);
-    if (!ph) continue;
+    if (!ph || b.reason?.startsWith('sync:')) continue;
     ph.busy.push({ start: new Date(b.starts_at).getTime(), end: new Date(b.ends_at).getTime(), external: true });
   }
 
@@ -137,11 +140,16 @@ export async function getAvailability(dateStr: string, duration: number, photogr
   await Promise.all(
     Array.from(photographers.values()).map(async (ph) => {
       try {
-        const ranges = await fetchBusyRanges(
+        const { source, busy: ranges } = await fetchMemberBusy(
           ph.id,
           new Date(dayStart).toISOString(),
           new Date(dayEnd).toISOString()
         );
+        if (source === 'none') {
+          for (const b of imported.filter((b) => b.team_member_id === ph.id)) {
+            ph.busy.push({ start: new Date(b.starts_at).getTime(), end: new Date(b.ends_at).getTime(), external: true });
+          }
+        }
         for (const r of ranges) {
           ph.busy.push({ start: new Date(r.start).getTime(), end: new Date(r.end).getTime(), external: true });
         }
