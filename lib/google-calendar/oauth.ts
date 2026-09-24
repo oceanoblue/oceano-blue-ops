@@ -29,7 +29,7 @@ export function redirectUri() {
   return `${base}/api/auth/google/callback`;
 }
 
-export function buildConsentUrl(state: string): string {
+export function buildConsentUrl(state: string, includeGmail = false, includeDrafts = false): string {
   const params = new URLSearchParams({
     client_id: clientId(),
     redirect_uri: redirectUri(),
@@ -37,7 +37,7 @@ export function buildConsentUrl(state: string): string {
     access_type: 'offline',
     include_granted_scopes: 'true',
     prompt: 'consent',
-    scope: SCOPES.join(' '),
+    scope: [...SCOPES, ...(includeGmail ? ['https://www.googleapis.com/auth/gmail.readonly'] : []), ...(includeDrafts ? ['https://www.googleapis.com/auth/gmail.compose'] : [])].join(' '),
     state,
   });
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;
@@ -66,7 +66,7 @@ export async function exchangeCodeForTokens(code: string): Promise<TokenResponse
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body,
   });
-  if (!r.ok) throw new Error(`Google token exchange failed: ${await r.text()}`);
+  if (!r.ok) throw new Error(`Google token exchange failed (${r.status}). Reconnect to try again.`);
   return r.json();
 }
 

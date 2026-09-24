@@ -1,3 +1,4 @@
+import { encryptionConfigured, openToken, sealToken } from '@/lib/google-calendar/token-encryption';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
@@ -38,7 +39,24 @@ export async function GET(request: Request) {
   }
 
   const supabase = createAdminClient();
-  const accountEmail = emailFromIdToken(tokens.id_token);
+  const { data: previous, error: previousError } = await supabase.from('team_calendar_connections')
+    .select('refresh_token,account_email').eq('team_member_id', teamMemberId).eq('provider', 'google').maybeSingle();
+  if (previousError) return NextResponse.redirect(`${back}?gcal_error=connection_read_failed`);
+  // userinfo is authorized by the existing email scope. Never reuse a refresh
+  // token from a different Google account when incremental consent omits one.
+  let accountEmail = emailFromIdToken(tokens.id_token);
+  if (!accountEmail) {
+    try {
+      const profile = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { authorization: `Bearer ${tokens.access_token}` },
+        signal: AbortSignal.timeout(8000), cache: 'no-store',
+      });
+      if (profile.ok) accountEmail = (await profile.json()).email ?? null;
+    } catch { /* Require a fresh refresh token when account identity is unknown. */ }
+  }
+  const refreshToken = tokens.refresh_token ||
+    (accountEmail && accountEmail === previous?.account_email ? (previous.refresh_token ? openToken(previous.refresh_token, teamMemberId, 'refresh') : null) : null);
+  if (!refreshToken) return NextResponse.redirect(`${back}?gcal_error=offline_access_required`);
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
   // Guard against the foreign-key failure when the auth user isn't a team_member yet.
@@ -59,8 +77,8 @@ export async function GET(request: Request) {
         team_member_id: teamMemberId,
         provider: 'google',
         account_email: accountEmail,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token ?? null,
+        access_token: encryptionConfigured() ? sealToken(tokens.access_token, teamMemberId, 'access') : tokens.access_token,
+        refresh_token: encryptionConfigured() ? sealToken(refreshToken, teamMemberId, 'refresh') : refreshToken,
         expires_at: expiresAt,
         scope: tokens.scope,
         primary_calendar_id: 'primary',
@@ -72,7 +90,7 @@ export async function GET(request: Request) {
 
   if (upsertErr) {
     return NextResponse.redirect(
-      `${back}?gcal_error=${encodeURIComponent(upsertErr.message)}`
+      `${back}?gcal_error=connection_save_failed`
     );
   }
   return NextResponse.redirect(`${back}?gcal_connected=1`);

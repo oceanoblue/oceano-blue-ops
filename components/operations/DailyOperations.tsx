@@ -7,36 +7,38 @@ import {
   CalendarDays,
   CircleAlert,
   Clock3,
-  Copy,
   FileCheck2,
   ListChecks,
   Loader2,
   RefreshCw,
   Send,
   Settings2,
-  Sparkles,
-  Sunrise,
   Users,
 } from "lucide-react";
 import {
   AGENT_LABELS,
   type AgentSettings as Settings,
   type BriefRun,
+  type EmailDraft,
   type OperationsSnapshot,
   type WorkItem,
 } from "@/lib/operations/types";
 import { factualBrief } from "@/lib/operations/brief-text";
 import { fmtDate, fmtTime } from "@/lib/utils/format";
+import { MorningBrief } from "./MorningBrief";
+import { InboxBrief } from "./InboxBrief";
+import { DraftDialog } from "./DraftDialog";
+import { editorDraft, workAction } from "@/lib/operations/actions";
 import { AgentSettings } from "./AgentSettings";
 
 function WorkCard({
   item,
   timezone,
-  onCopy,
+  onDraft,
 }: {
   item: WorkItem;
   timezone: string;
-  onCopy: (text: string) => void;
+  onDraft: (draft: EmailDraft) => void;
 }) {
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300">
@@ -85,20 +87,14 @@ function WorkCard({
         </span>
         <span className="text-slate-600">{item.editor || "Editor needed"}</span>
       </div>
-      {item.lane === "prepare" && (
-        <button
-          type="button"
-          className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-blue-700 hover:underline"
-          onClick={() =>
-            onCopy(
-              `EDITOR HANDOFF DRAFT\n${item.title}\nClient: ${item.client}\nEditor: ${item.editor || "[choose editor]"}\nRoute: ${item.route}\nDue: ${item.due || "[set deadline]"}\nNext: ${item.next}\nTo confirm: ${item.blockers.join("; ") || "Recipient, media access, brief, and return location"}\nRequirements / references: [confirm]\nReturn location: [confirm]\nWorkspace: ${window.location.origin}${item.href}`,
-            )
-          }
-        >
-          <Copy className="h-4 w-4" />
-          Copy handoff draft
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" className="btn-secondary min-h-10 text-sm" onClick={() => onDraft(editorDraft(item))}>
+          <Send className="h-4 w-4"/>{item.lane === "prepare" ? "Prepare handoff" : "Draft editor follow-up"}
         </button>
-      )}
+        <Link href={workAction(item).href} className="inline-flex min-h-10 items-center gap-1 text-sm font-medium text-ocean-700">
+          {workAction(item).label}<ArrowUpRight className="h-4 w-4"/>
+        </Link>
+      </div>
     </article>
   );
 }
@@ -124,6 +120,7 @@ export function DailyOperations({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<EmailDraft | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [route, setRoute] = useState("all");
@@ -206,6 +203,7 @@ export function DailyOperations({
     : "Today";
   return (
     <div className="mx-auto max-w-[1600px] space-y-6 pb-8">
+      {draft && <DraftDialog initial={draft} canSave={snapshot?.inbox?.canDraft ?? false} onClose={() => setDraft(null)}/>}
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-slate-500">
@@ -342,87 +340,7 @@ export function DailyOperations({
             ))}
           </div>
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
-            <section className="overflow-hidden rounded-2xl border border-blue-900 bg-[#0b2345] text-white">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-6 py-4">
-                <span className="flex items-center gap-2 text-sm font-medium text-blue-100">
-                  <Sunrise className="h-5 w-5 text-blue-300" />
-                  Morning brief
-                </span>
-                <span className="text-sm text-blue-200">
-                  {todayRun
-                    ? `Saved ${fmtTime(todayRun.created_at, settings.timezone)}`
-                    : "Live operational summary"}
-                </span>
-              </div>
-              <div className="p-6">
-                <h2 className="font-display text-2xl leading-snug">
-                  Hello, {name}.
-                </h2>
-                <p className="mt-2 text-base leading-relaxed text-blue-100">
-                  {overdue.length
-                    ? `${overdue.length} overdue item${overdue.length === 1 ? " needs" : "s need"} attention first.`
-                    : handoffs.length
-                      ? `${handoffs.length} handoff${handoffs.length === 1 ? " is" : "s are"} waiting to move into production.`
-                      : "Let’s keep production moving."}{" "}
-                  {dueToday.length
-                    ? `${dueToday.length} due today.`
-                    : "Check your calendar and undated work before making new commitments."}
-                </p>
-                <div
-                  role="group"
-                  aria-label="Briefing assistant"
-                  className="mt-5 flex flex-wrap gap-2"
-                >
-                  {(["planner", "handoff", "delivery"] as const).map((role) => (
-                    <button
-                      type="button"
-                      key={role}
-                      aria-pressed={activeRole === role}
-                      onClick={() => setActiveRole(role)}
-                      className={`rounded-full px-3 py-2 text-sm font-medium transition ${activeRole === role ? "bg-white text-blue-950" : "bg-white/10 text-blue-100 hover:bg-white/20"}`}
-                    >
-                      {AGENT_LABELS[role]}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-5 max-h-80 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-7 text-blue-50">
-                  {output?.text ?? factualBrief(activeRole, snapshot)}
-                </div>
-                {output?.error && (
-                  <p className="mt-3 rounded-lg bg-amber-100/10 p-3 text-sm text-amber-100">
-                    {output.error} Showing the factual briefing.
-                  </p>
-                )}
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/15 pt-4 text-sm">
-                  <span className="flex items-center gap-2 text-blue-200">
-                    <Sparkles className="h-4 w-4" />
-                    {output &&
-                    output.provider !== "rules" &&
-                    output.status !== "fallback"
-                      ? `${output.provider === "openai" ? "OpenAI" : "Claude"} · ${output.model}`
-                      : "Built-in operations rules"}
-                  </span>
-                  <button
-                    type="button"
-                    className="flex min-h-10 items-center gap-2 text-white hover:text-blue-200"
-                    onClick={() =>
-                      void copy(
-                        output?.text ?? factualBrief(activeRole, snapshot),
-                      )
-                    }
-                  >
-                    <Copy className="h-4 w-4" />
-                    Copy brief
-                  </button>
-                </div>
-                {todayRun && (
-                  <p className="mt-2 text-xs text-blue-200">
-                    Brief reflects its saved snapshot. Queues below reflect the
-                    latest page refresh.
-                  </p>
-                )}
-              </div>
-            </section>
+            <MorningBrief name={name} snapshot={snapshot} text={output?.text ?? factualBrief(activeRole, snapshot)} output={output} savedAt={todayRun?.created_at} role={activeRole} onRole={setActiveRole} onCopy={() => void copy(output?.text ?? factualBrief(activeRole, snapshot))}/>
             <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-950">
@@ -567,6 +485,7 @@ export function DailyOperations({
               </ul>
             )}
           </section>
+          <InboxBrief inbox={snapshot.inbox} timezone={settings.timezone} onDraft={setDraft}/>
           <section id="handoffs" className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -627,7 +546,7 @@ export function DailyOperations({
                     key={`${item.kind}:${item.id}`}
                     item={item}
                     timezone={settings.timezone}
-                    onCopy={(text) => void copy(text)}
+                    onDraft={setDraft}
                   />
                 ))}
               </div>

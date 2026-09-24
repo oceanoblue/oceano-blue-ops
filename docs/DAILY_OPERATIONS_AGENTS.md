@@ -9,7 +9,9 @@
   editor assignments, and outsourced editing batches. Linked records are deduplicated.
 - Today's primary Google Calendar and scheduled shoots, with overlapping events,
   dated priorities, overdue work, missing deadlines and failed-tool warnings.
-- Handoff drafts that can be copied for review. Queue cards open existing workspaces.
+- An editorial morning brief inspired by the supplied reference, with calendar commitments, a numbered inbox list, and action buttons.
+- Editable editor handoffs and follow-ups, AI-assisted email replies, and optional Gmail draft saving. Queue cards open the correct editing, review or delivery step.
+- Read-only Gmail is separately opt-in and disabled until security setup is complete.
 - Three configurable assistants: day planner, editor handoffs, delivery monitor.
   Each can use built-in factual rules, OpenAI Responses, or Anthropic Messages.
 - Available model IDs are retrieved from the configured provider account and
@@ -41,8 +43,9 @@
 
 The migration and secrets must be applied before calling the daily system live.
 Without the migration the page can still show live production facts, but clearly
-marks settings/history setup as required. No production migration, credential
-change, or production merge is performed by this source change.
+marks settings/history setup as required. The operations migration and feature activation are still pending. The standalone
+Google token permission hotfix below was applied to the live Ops database. No
+production code merge or Gmail activation has been performed.
 
 ## Execution and safety
 
@@ -69,7 +72,7 @@ change, or production merge is performed by this source change.
 ## Current limits
 
 - Calendar coverage is the connected primary Google Calendar. Secondary calendars,
-  Outlook, Apple Calendar, inbox triage, automatic editor messaging, and automatic
+  Outlook, Apple Calendar, full-mailbox triage, automatic editor messaging, and automatic
   client delivery are not implemented by this change.
 - Missing production deadlines stay unknown. No turnaround/SLA is fabricated for
   orders without a linked job or assignment deadline.
@@ -80,6 +83,11 @@ change, or production merge is performed by this source change.
   assignment/batch records each, with a visible truncation warning. Model input
   includes the first 100 prioritized items and 80 calendar events and reports omitted
   counts. The factual briefing lists the first 12 matching items.
+- Gmail reads at most 20 recent inbox previews from the last 14 days, excluding promotions and social categories. It does not read full bodies or attachments. Unread does not mean unanswered.
+- Email previews go only to the configured day planner, never the handoff/delivery assistants. Reply generation uses that same model and one source preview.
+- Saved snapshots omit raw inbox previews and calendar events. Generated summaries may contain derived details; scheduled cleanup deletes briefing runs older than seven days from the active table. Backups and AI-provider retention are separate.
+- Optional Gmail saving creates or updates a draft, never sends. Sending happens explicitly in Gmail; this does not automatically change job assignment/status. Fotello remains its existing manual upload flow.
+- Draft actions are authenticated, staff-only, same-origin, and limited to 30 requests per user/hour with a durable fail-closed limiter.
 - Live cards refresh on page refresh. A saved brief shows its generation timestamp;
   it is not silently regenerated on page loads. AI outputs are reviewed drafts.
 - No dollar estimate is guessed from token counts. Set spending limits in each API
@@ -101,3 +109,17 @@ Official integration references:
 - https://platform.claude.com/docs/en/api/messages/create
 - https://platform.claude.com/docs/en/api/models/list
 - https://vercel.com/docs/cron-jobs/manage-cron-jobs
+
+## Google security rollout
+
+See `GOOGLE_INTEGRATION_SECURITY.md` for the verified permission hotfix, threat
+model, encryption deployment steps, and remaining production gates. Gmail is OFF
+by default. Do not enable it solely because the feature builds successfully.
+
+Gmail draft saving needs the broad `gmail.compose` scope, which also authorizes
+sending at Google even though this application never calls the send endpoint.
+Read-only users can prepare and copy drafts without granting that permission.
+
+Official Gmail references:
+- https://developers.google.com/workspace/gmail/api/auth/scopes
+- https://developers.google.com/workspace/gmail/api/guides/drafts

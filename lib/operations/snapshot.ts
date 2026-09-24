@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { getAccessToken } from "@/lib/google-calendar/api";
 import { calendarNeedsReconnect } from "@/lib/google-calendar/health";
+import { loadInbox } from "./gmail";
 import { dayBounds, localClock } from "./time";
 import type { DayEvent, OperationsSnapshot, WorkItem } from "./types";
 
@@ -117,8 +118,9 @@ export async function loadSnapshot(
   now = new Date(),
 ): Promise<OperationsSnapshot> {
   const day = localClock(now, timezone).date;
-  const [orders, jobs, assignments, batches, team, connection, failures] =
+  const [orders, jobs, assignments, batches, team, connection, failures, inbox] =
     await Promise.all([
+
       db
         .from("orders")
         .select(
@@ -162,6 +164,7 @@ export async function loadSnapshot(
         .select("id", { head: true, count: "exact" })
         .eq("status", "failed")
         .gte("created_at", new Date(now.getTime() - 86400000).toISOString()),
+      loadInbox(userId),
     ]);
   // A partial production query must never be presented as an empty pipeline.
   const sources = [orders, jobs, assignments, batches, team];
@@ -399,6 +402,7 @@ export async function loadSnapshot(
     day,
     timezone,
     calendar,
+    inbox,
     items: prioritize(items),
     events,
     conflicts: findConflicts(events),
