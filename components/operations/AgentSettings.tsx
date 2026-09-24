@@ -250,7 +250,7 @@ export function AgentSettings({
         Runs within 15 minutes of your chosen time, including weekends, after
         production deployment. Built-in rules have no AI usage charges. AI
         assistants use separately billed OpenAI or Anthropic APIs and can read
-        the calendar, production facts, and connected Gmail previews in your briefing. Only the day planner receives email previews. They prepare drafts;
+        the calendar and production facts in your briefing. They prepare drafts;
         they do not send messages or change commitments. Briefing history is kept for seven days in the active database; summaries can contain private details.
       </p>
       <details className="mt-4 rounded-lg border border-slate-200 p-3 text-sm">
@@ -259,7 +259,7 @@ export function AgentSettings({
         </summary>
         <div className="mt-3 space-y-2 text-slate-600">
           <p>
-            Google Calendar and Gmail connect through{" "}
+            Google Calendar connects through{" "}
             <a
               href="/dashboard/settings/integrations"
               className="text-blue-700 underline"

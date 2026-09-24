@@ -87,7 +87,6 @@ export async function runBrief(
     const status =
       outputs.some((o) => o.status === "fallback") ||
       snapshot.calendar.status !== "connected" ||
-      snapshot.inbox?.status === "error" ||
       snapshot.warnings.length
         ? "partial"
         : "completed";
@@ -95,9 +94,8 @@ export async function runBrief(
       .from("ops_brief_runs")
       .update({
         status,
-        // Keep generated text, but do not duplicate raw inbox previews or calendar
-        // event details into persistent snapshot storage.
-        snapshot: { ...snapshot, events: [], inbox: snapshot.inbox ? { ...snapshot.inbox, messages: [] } : undefined } as unknown as Json,
+        // Keep generated text without duplicating raw calendar event details.
+        snapshot: { ...snapshot, events: [] } as unknown as Json,
         outputs: outputs as unknown as Json,
         completed_at: new Date().toISOString(),
       })
