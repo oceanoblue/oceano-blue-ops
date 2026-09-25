@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { UserRound } from 'lucide-react';
 import { z } from 'zod';
 import { StepHeader } from '@/components/booking/StepHeader';
 import { BrandLogo } from '@/components/ui/BrandLogo';
@@ -178,15 +179,33 @@ export function BookingWizard({
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between xl:gap-6">
-          <Link href="/" className="flex shrink-0 items-center gap-3 self-start xl:self-auto">
-            <BrandLogo variant="dark" className="h-7 w-auto shrink-0" />
-            {label && (
-              <span className="hidden sm:inline border-l border-slate-200 pl-3 text-sm font-medium text-slate-500">
-                {label}
-              </span>
-            )}
-          </Link>
-          <StepHeader current={state.step} />
+          <div className="flex items-center justify-between gap-3 xl:justify-start">
+            <Link href="/" className="flex shrink-0 items-center gap-3">
+              <BrandLogo variant="dark" className="h-7 w-auto shrink-0" />
+              {label && (
+                <span className="hidden sm:inline border-l border-slate-200 pl-3 text-sm font-medium text-slate-500">
+                  {label}
+                </span>
+              )}
+            </Link>
+            {/* Returning clients: /portal signs them in or drops them straight
+                into their listings, galleries, and invoices. */}
+            <Link
+              href="/portal"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-ocean-700 ring-1 ring-ocean-200 transition hover:bg-ocean-50 xl:hidden"
+            >
+              <UserRound className="h-4 w-4" /> Client portal
+            </Link>
+          </div>
+          <div className="flex items-center gap-4">
+            <StepHeader current={state.step} />
+            <Link
+              href="/portal"
+              className="hidden shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-ocean-700 ring-1 ring-ocean-200 transition hover:bg-ocean-50 xl:inline-flex"
+            >
+              <UserRound className="h-4 w-4" /> Client portal
+            </Link>
+          </div>
         </div>
       </header>
 
