@@ -49,7 +49,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
         {(['booked', 'scheduled'].includes(shoot.status) || shoot.contractor_response) && (
           <section className="card p-5">
             <h2 className="mb-3 font-semibold">This assignment</h2>
-            {version?.videographer_id && version.videographer_id !== version.photographer_id && <p className="mb-4 rounded-lg bg-ocean-50 p-3 text-sm text-ocean-900">Your role: photography / 360. Video: {version.videographer?.full_name || 'a separate crew member'}. Your response below applies to the photography assignment.</p>}
+            {version?.videographer_id && version.videographer_id !== version.photographer_id && <p className="mb-4 rounded-lg bg-ocean-50 p-3 text-sm text-ocean-900">You&rsquo;re on photography for this shoot. Video: {version.videographer?.full_name || 'a separate crew member'}. Your response below applies to the photography assignment.</p>}
             <RespondControl
               orderId={shoot.id}
               round={version?.assignment_round ?? 0}
