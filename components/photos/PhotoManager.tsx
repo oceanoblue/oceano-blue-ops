@@ -31,6 +31,8 @@ import {
   ShieldCheck,
   Archive,
   X,
+  Check,
+  Undo2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { AiJobType, Photo } from '@/lib/supabase/database.types';
@@ -1700,6 +1702,57 @@ function Stage3({
     if (showArchived && archivedPhotos.length === 0) setShowArchived(false);
   }, [showArchived, archivedPhotos.length]);
 
+  // Multi-select for bulk remove / delete. Selection is per view (gallery vs
+  // archived) and drops ids that disappear after a refresh.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState<'remove' | 'restore' | 'delete' | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  useEffect(() => { setSelected(new Set()); }, [showArchived]);
+  useEffect(() => {
+    setSelected((prev) => {
+      const ids = new Set(shown.map((p) => p.id));
+      const next = new Set([...prev].filter((id) => ids.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [shown]);
+  const toggleSelected = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const selecting = selected.size > 0;
+
+  async function runBulk(action: 'remove' | 'restore' | 'delete') {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const noun = `${ids.length} photo${ids.length === 1 ? '' : 's'}`;
+    if (action === 'delete' && !window.confirm(`Permanently delete ${noun}? The files are removed from storage and can't be recovered.`)) return;
+    setBulkBusy(action); setBulkError(null); setBulkMessage(null);
+    try {
+      const r = await fetch('/api/photos/bulk', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId, photo_ids: ids, action }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `error_${r.status}`);
+      setSelected(new Set());
+      setBulkMessage(
+        action === 'delete' ? `Deleted ${noun}.`
+          : action === 'remove' ? `Removed ${noun} from the gallery. Find them under Archived to restore.`
+          : `Restored ${noun} to the gallery.`
+      );
+      await onChange();
+    } catch (err: any) {
+      setBulkError(err?.message || 'network_error');
+    } finally {
+      setBulkBusy(null);
+    }
+  }
+
   const hasRooms = activePhotos.some((p) => (p as any).room_type);
   const roomGroups = useMemo(() => groupByRoom(shown as any[]), [shown]);
 
@@ -1882,6 +1935,68 @@ function Stage3({
         {sortError && <p role="alert" className="mt-2 text-sm text-rose-700">{sortError}</p>}
       </section>
 
+      {shown.length > 0 && (
+        <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2.5 shadow-sm backdrop-blur">
+          <span className="px-1 text-sm font-medium text-slate-700">
+            {selecting ? `${selected.size} selected` : 'Tick photos to remove or delete them'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelected(selected.size === shown.length ? new Set() : new Set(shown.map((p) => p.id)))}
+            disabled={bulkBusy !== null}
+            className="text-xs font-medium px-2.5 py-1.5 rounded-md ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50"
+          >
+            {selected.size === shown.length ? 'Clear selection' : `Select all (${shown.length})`}
+          </button>
+          {selecting && selected.size !== shown.length && (
+            <button type="button" onClick={() => setSelected(new Set())} disabled={bulkBusy !== null} className="text-xs font-medium px-2.5 py-1.5 rounded-md text-slate-500 hover:bg-slate-50">
+              Clear
+            </button>
+          )}
+          {selecting && (
+            <div className="ml-auto flex flex-wrap gap-2">
+              {showArchived ? (
+                <button
+                  type="button"
+                  onClick={() => runBulk('restore')}
+                  disabled={bulkBusy !== null}
+                  className="text-xs font-medium px-2.5 py-1.5 rounded-md ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60 inline-flex items-center gap-1.5"
+                >
+                  {bulkBusy === 'restore' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} Restore to gallery
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => runBulk('remove')}
+                  disabled={bulkBusy !== null}
+                  title="Hide from the gallery and leave out of delivery. You can restore them from Archived."
+                  className="text-xs font-medium px-2.5 py-1.5 rounded-md ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60 inline-flex items-center gap-1.5"
+                >
+                  {bulkBusy === 'remove' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />} Remove from gallery
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => runBulk('delete')}
+                disabled={bulkBusy !== null}
+                className="text-xs font-medium px-2.5 py-1.5 rounded-md bg-rose-600 text-white hover:bg-rose-500 disabled:opacity-60 inline-flex items-center gap-1.5"
+              >
+                {bulkBusy === 'delete' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete permanently
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {bulkError && (
+        <div role="alert" className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          Couldn&apos;t update the selected photos: {bulkError}
+        </div>
+      )}
+      {bulkMessage && (
+        <div role="status" className="card border-ocean-200 bg-ocean-50 p-3 text-sm text-ocean-900">{bulkMessage}</div>
+      )}
+
       {organizeError && (
         <div className="card border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
           Couldn&apos;t organize by room: {organizeError}
@@ -2000,6 +2115,9 @@ function Stage3({
                     key={p.id}
                     photo={p}
                     onOpen={() => openViewer(indexById.get(p.id) ?? 0)}
+                    selected={selected.has(p.id)}
+                    selecting={selecting}
+                    onToggleSelect={() => toggleSelected(p.id)}
                     urls={photoUrls}
                     setUrls={setPhotoUrls}
                     onChange={onChange}
@@ -2016,6 +2134,9 @@ function Stage3({
               key={p.id}
               photo={p}
               onOpen={() => openViewer(indexById.get(p.id) ?? 0)}
+              selected={selected.has(p.id)}
+              selecting={selecting}
+              onToggleSelect={() => toggleSelected(p.id)}
               urls={photoUrls}
               setUrls={setPhotoUrls}
               onChange={onChange}
@@ -2375,12 +2496,18 @@ function QcReportPanel({
 function ProcessedCard({
   photo,
   onOpen,
+  selected,
+  selecting,
+  onToggleSelect,
   urls,
   setUrls,
   onChange,
 }: {
   photo: Photo;
   onOpen: () => void;
+  selected: boolean;
+  selecting: boolean;
+  onToggleSelect: () => void;
   urls: Record<string, string | null>;
   setUrls: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
   onChange: () => void;
@@ -2478,14 +2605,18 @@ function ProcessedCard({
   return (
     <div
       ref={ref}
-      className={`group relative aspect-[3/2] overflow-hidden rounded-md ring-2 transition cursor-zoom-in ${
-        isApproved
+      className={`group relative aspect-[3/2] overflow-hidden rounded-md ring-2 transition ${selecting ? 'cursor-pointer' : 'cursor-zoom-in'} ${
+        selected
+          ? 'ring-ocean-600 ring-4'
+          : isApproved
           ? 'ring-emerald-500'
           : isRejected
           ? 'ring-rose-300 opacity-60'
           : 'ring-transparent hover:ring-slate-300'
       }`}
-      onClick={onOpen}
+      // Once anything is ticked, clicks select instead of opening the loupe so
+      // picking a batch is quick.
+      onClick={selecting ? onToggleSelect : onOpen}
     >
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -2496,7 +2627,21 @@ function ProcessedCard({
         </div>
       )}
 
-      <div title={photo.filename} className="pointer-events-none absolute left-1.5 top-1.5 max-w-[62%] truncate rounded bg-slate-950/70 px-1.5 py-0.5 text-[10px] text-white">{photo.filename}</div>
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selected}
+        aria-label={`Select ${photo.filename}`}
+        onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
+        className={`absolute left-1.5 top-1.5 z-10 grid h-5 w-5 place-items-center rounded border-2 shadow transition ${
+          selected
+            ? 'border-ocean-600 bg-ocean-600 text-white'
+            : `border-white bg-slate-950/40 text-transparent hover:bg-slate-950/60 ${selecting ? '' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}`
+        }`}
+      >
+        <Check className="h-3.5 w-3.5" strokeWidth={3} />
+      </button>
+      <div title={photo.filename} className="pointer-events-none absolute left-8 top-1.5 max-w-[55%] truncate rounded bg-slate-950/70 px-1.5 py-0.5 text-[10px] text-white">{photo.filename}</div>
       {isApproved && (
         <div className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-600 text-white px-1.5 py-0.5 rounded shadow">
           <CheckCircle2 className="h-3 w-3" /> Approved
@@ -2509,7 +2654,7 @@ function ProcessedCard({
           only the buttons do — so clicking the empty gradient still opens the
           loupe instead of being swallowed. */}
       <div
-        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-2 opacity-0 transition pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
+        className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-2 opacity-0 transition pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto ${selecting ? 'hidden' : ''}`}
       >
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex gap-1">
