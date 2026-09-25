@@ -30,6 +30,7 @@ import { AssignShooterControl } from '@/components/orders/AssignShooterControl';
 import { RescheduleControl } from '@/components/orders/RescheduleControl';
 import { ContractorResponseNotice } from '@/components/orders/ContractorResponseNotice';
 import { ArchiveOrderControl } from '@/components/orders/ArchiveOrderControl';
+import { ResendConfirmationControl } from '@/components/orders/ResendConfirmationControl';
 import { DeliverablesManager, type DeliverableRow } from '@/components/orders/DeliverablesManager';
 import { ReelFootageList, type FootageView } from '@/components/orders/ReelFootageList';
 import { REEL_TYPES, ASPECTS } from '@/lib/reels/types';
@@ -329,7 +330,7 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
             </section>
             <section className="card p-5 sm:p-6"><h2 className="mb-4 text-xl font-semibold">Client details</h2><dl className="space-y-3 text-sm">
               <Row label="Name">{order.clients?.full_name || '—'}</Row><Row label="Email">{order.clients?.email || '—'}</Row><Row label="Phone">{order.clients?.phone || '—'}</Row>{order.clients?.brokerage && <Row label="Brokerage">{order.clients.brokerage}</Row>}
-            </dl><Link className="mt-4 inline-flex min-h-10 items-center text-sm font-medium text-ocean-700 hover:underline" href={`/dashboard/clients/${order.client_id}`}>Open client record →</Link></section>
+            </dl>{!['cancelled','draft'].includes(order.status) && order.scheduled_at && <ResendConfirmationControl orderId={order.id} email={order.clients?.email || null} />}<Link className="mt-4 inline-flex min-h-10 items-center text-sm font-medium text-ocean-700 hover:underline" href={`/dashboard/clients/${order.client_id}`}>Open client record →</Link></section>
           </div>
         </div>
       </OrderWorkspacePanel>

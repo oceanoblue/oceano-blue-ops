@@ -22,3 +22,21 @@ export function coversSkills(skills: string[] | undefined, required: CaptureSkil
 export function crewMemberIds(order: { photographer_id?: string | null; videographer_id?: string | null; contractors?: { team_member_id?: string | null } | null }) {
   return [...new Set([order.contractors?.team_member_id || order.photographer_id, order.videographer_id].filter((id): id is string => !!id))];
 }
+
+type ScopeItem = { description: string; quantity?: number | null; products?: { name: string; kind: string } | null };
+
+/**
+ * What the photographer is actually shooting on an order, as plain labels
+ * ("Interior/Exterior Photography", "360 Virtual Tour"). Office-side add-ons
+ * (virtual staging, rush…) are left out, and so is video when a separate crew
+ * member has it, so a photo-only crew member never reads "video" or "360"
+ * unless it's really theirs.
+ */
+export function photographerScope(items: ScopeItem[] | null | undefined, splitCrew: boolean): string[] {
+  return (items ?? []).flatMap((item) => {
+    const skills = productCaptureSkills(item.products ?? { name: item.description, kind: '' });
+    if (skills.length === 0) return [];
+    if (splitCrew && skills.includes('videography')) return [];
+    return [(item.quantity ?? 1) > 1 ? `${item.quantity} × ${item.description}` : item.description];
+  });
+}

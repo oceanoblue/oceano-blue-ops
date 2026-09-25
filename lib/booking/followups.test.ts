@@ -82,10 +82,27 @@ it('sends internal staff requests to their authenticated assignment page',async(
 
 it('labels a split-crew photographer request without implying responsibility for video',async()=>{
   const event=job();event.kind='assignment_email';event.payload.assignment_round=1;event.payload.contractor_id='contractor';
-  readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'awaiting_response',assignment_round:1,contractor_id:'contractor',photographer_id:'photo',videographer_id:'video',assignment_due_at:new Date(Date.now()+3600000).toISOString(),order_items:[{quantity:1,description:'Cinematic Videography'}]}});
+  readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'awaiting_response',assignment_round:1,contractor_id:'contractor',photographer_id:'photo',videographer_id:'video',assignment_due_at:new Date(Date.now()+3600000).toISOString(),order_items:[{quantity:1,description:'Interior/Exterior Photography',products:{name:'Interior/Exterior Photography',kind:'photo'}},{quantity:1,description:'Cinematic Videography',products:{name:'Cinematic Videography',kind:'video'}}]}});
   vi.mocked(sendEmail).mockResolvedValue({status:'sent',id:'sent'} as any);
+  vi.mocked(sendSms).mockResolvedValue({status:'sent'} as any);
   await deliverFollowup(event);
-  expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({html:expect.stringContaining('Your role: photography / 360. Video is assigned separately. Full order:')}));
+  const html=vi.mocked(sendEmail).mock.calls[0][0].html;
+  expect(html).toContain('You&#39;re shooting: Interior/Exterior Photography. Video is handled by another crew member.');
+  expect(html).not.toContain('360');expect(html).not.toContain('Cinematic');
+  await deliverFollowup({...event,kind:'assignment_sms'});
+  const text=vi.mocked(sendSms).mock.calls[0][0].text;
+  expect(text).toMatch(/^Oceano Blue: photography request at /);
+  expect(text).toContain("You're shooting: Interior/Exterior Photography.");
+  expect(text).not.toContain('360');
+});
+it('lists 360 for the photographer only when the order includes it',async()=>{
+  const event=job();event.kind='assignment_sms';event.payload.assignment_round=1;event.payload.contractor_id='contractor';
+  readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'awaiting_response',assignment_round:1,contractor_id:'contractor',photographer_id:'photo',videographer_id:null,assignment_due_at:new Date(Date.now()+3600000).toISOString(),order_items:[{quantity:1,description:'Interior/Exterior Photography',products:{name:'Interior/Exterior Photography',kind:'photo'}},{quantity:1,description:'360 Virtual Tour',products:{name:'360 Virtual Tour',kind:'tour'}},{quantity:1,description:'Virtual Staging',products:{name:'Virtual Staging',kind:'addon'}}]}});
+  vi.mocked(sendSms).mockResolvedValue({status:'sent'} as any);
+  await deliverFollowup(event);
+  const text=vi.mocked(sendSms).mock.calls[0][0].text;
+  expect(text).toContain("You're shooting: Interior/Exterior Photography, 360 Virtual Tour.");
+  expect(text).not.toContain('Virtual Staging');expect(text).not.toContain('Video');
 });
 it('sends the photographer only their one-hour visit in both email and SMS',async()=>{
  const event=job();Object.assign(event,{kind:'assignment_email'});Object.assign(event.payload,{assignment_round:4,contractor_id:'contractor'});
