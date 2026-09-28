@@ -65,7 +65,7 @@ export interface FreeBusyRange { start: string; end: string }
  */
 export type BusySource = 'own' | 'shared' | 'none';
 
-interface CalendarListEntry { id: string; accessRole: string }
+export interface CalendarListEntry { id: string; accessRole: string; summary?: string }
 
 const READABLE_ROLES = new Set(['reader', 'writer', 'owner']);
 
@@ -73,10 +73,10 @@ const READABLE_ROLES = new Set(['reader', 'writer', 'owner']);
 // and never a personal conflict, and FreeBusy often cannot read them anyway.
 const isVirtualCalendar = (id: string) => id.endsWith('@group.v.calendar.google.com');
 
-async function listCalendars(token: string): Promise<CalendarListEntry[]> {
+export async function listCalendars(token: string): Promise<CalendarListEntry[]> {
   try {
     const r = await fetch(
-      'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250&fields=items(id,accessRole),nextPageToken',
+      'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250&fields=items(id,accessRole,summary),nextPageToken',
       { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) }
     );
     if (!r.ok) throw new Error(`calendar_list_${r.status}`);
@@ -84,7 +84,7 @@ async function listCalendars(token: string): Promise<CalendarListEntry[]> {
     if (ld.nextPageToken) throw new Error('calendar_list_limit');
     return (ld.items ?? [])
       .filter((c: any) => c.id && c.accessRole && c.accessRole !== 'none')
-      .map((c: any) => ({ id: String(c.id), accessRole: String(c.accessRole) }));
+      .map((c: any) => ({ id: String(c.id), accessRole: String(c.accessRole), summary: c.summary ? String(c.summary) : undefined }));
   } catch {
     throw new Error('calendar_list_unavailable');
   }
@@ -98,14 +98,16 @@ async function listCalendars(token: string): Promise<CalendarListEntry[]> {
  */
 async function otherPeoplesCalendars(teamMemberId: string): Promise<Set<string>> {
   const admin = createAdminClient() as any;
-  const [members, contractors] = await Promise.all([
+  const [members, contractors, assignments] = await Promise.all([
     admin.from('team_members').select('id,email'),
     admin.from('contractors').select('team_member_id,email'),
+    admin.from('team_shared_calendar_assignments').select('team_member_id,viewer_team_member_id,calendar_id').eq('viewer_team_member_id',teamMemberId),
   ]);
-  if (members.error || contractors.error) throw members.error || contractors.error;
+  if (members.error || contractors.error || assignments.error) throw members.error || contractors.error || assignments.error;
   const ids = new Set<string>([MASTER_CALENDAR_ID.toLowerCase()]);
   for (const m of members.data ?? []) if (m.id !== teamMemberId && m.email) ids.add(String(m.email).toLowerCase());
   for (const c of contractors.data ?? []) if (c.team_member_id !== teamMemberId && c.email) ids.add(String(c.email).toLowerCase());
+  for (const a of assignments.data ?? []) if (a.team_member_id !== teamMemberId) ids.add(String(a.calendar_id).toLowerCase());
   return ids;
 }
 
@@ -204,23 +206,26 @@ async function busyFromCalendars(token: string, calendars: CalendarListEntry[], 
  */
 async function sharedCalendarBusy(teamMemberId: string, startIso: string, endIso: string): Promise<FreeBusyRange[] | null> {
   const admin = createAdminClient() as any;
-  const [member, contractors, viewers] = await Promise.all([
+  const [member, contractors, viewers, assignments] = await Promise.all([
     admin.from('team_members').select('email').eq('id', teamMemberId).maybeSingle(),
     admin.from('contractors').select('email').eq('team_member_id', teamMemberId),
     admin.from('team_calendar_connections').select('team_member_id,is_active,scope').eq('provider', 'google').eq('is_active', true),
+    admin.from('team_shared_calendar_assignments').select('viewer_team_member_id,calendar_id').eq('team_member_id',teamMemberId),
   ]);
-  if (member.error || contractors.error || viewers.error) throw member.error || contractors.error || viewers.error;
+  if (member.error || contractors.error || viewers.error || assignments.error) throw member.error || contractors.error || viewers.error || assignments.error;
   const emails = new Set<string>(
     [member.data?.email, ...(contractors.data ?? []).map((c: any) => c.email)]
       .filter(Boolean).map((e: string) => e.toLowerCase())
   );
-  if (!emails.size) return null;
+  if (!emails.size && !assignments.data?.length) return null;
   let failed = false;
   for (const viewer of (viewers.data ?? []).filter((v: any) => v.team_member_id !== teamMemberId && !calendarNeedsReconnect(v))) {
     try {
       const token = await getAccessToken(viewer.team_member_id);
       if (!token) { failed = true; continue; }
-      const shared = (await listCalendars(token)).filter((c) => emails.has(c.id.toLowerCase()));
+      const assigned = new Set((assignments.data ?? []).filter((a: any) => a.viewer_team_member_id === viewer.team_member_id).map((a: any) => String(a.calendar_id).toLowerCase()));
+      const shared = (await listCalendars(token)).filter((c) => emails.has(c.id.toLowerCase()) || assigned.has(c.id.toLowerCase()));
+      if ([...assigned].some(id => !shared.some(c => c.id.toLowerCase() === id))) throw new Error('assigned_calendar_missing');
       if (!shared.length) continue;
       const busy = await busyFromCalendars(token, shared, startIso, endIso, teamMemberId);
       logEvent('gcal.freeBusy', 'ok', { teamMemberId, source: 'shared', calendars: shared.length, busyCount: busy.length });
@@ -230,7 +235,7 @@ async function sharedCalendarBusy(teamMemberId: string, startIso: string, endIso
     }
   }
   // A share we could not check must not look like an empty calendar.
-  if (failed) throw new Error('calendar_shared_unavailable');
+  if (failed || assignments.data?.length) throw new Error('calendar_shared_unavailable');
   return null;
 }
 

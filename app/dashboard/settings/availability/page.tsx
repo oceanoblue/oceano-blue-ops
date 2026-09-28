@@ -4,6 +4,7 @@ import { calendarNeedsReconnect } from '@/lib/google-calendar/health';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { SettingsNav } from '@/components/layout/SettingsNav';
 import { AvailabilityEditor } from '@/components/settings/AvailabilityEditor';
+import { SharedCalendarAssignments } from '@/components/scheduling/SharedCalendarAssignments';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +58,8 @@ export default async function AvailabilitySettingsPage() {
         Bookings are offered to clients only during these working hours. Days that aren&apos;t
         listed here are treated as days off.
       </p>
+
+      {isAdmin && <SharedCalendarAssignments members={visible.map(m => ({ id: m.id, full_name: m.full_name }))} />}
 
       <div className="space-y-8">
         {visible.map((m: any) => (
