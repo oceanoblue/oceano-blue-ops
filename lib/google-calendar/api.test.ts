@@ -109,9 +109,17 @@ describe('a photographer who shared their calendar instead of connecting', () =>
       .mockResolvedValueOnce(Response.json({items:[]}));
     expect(await fetchBusyRanges(...range)).toEqual([]);
   });
-  it('fails closed when Karen’s assigned calendar disappears from the connected account', async () => {
+  it('reads an assigned SCAD calendar through freeBusy before it is added to Google’s calendar list', async () => {
     tables.team_shared_calendar_assignments=[{team_member_id:'karen',viewer_team_member_id:'person',calendar_id:'scad-hash@group.calendar.google.com'}];
-    vi.mocked(fetch).mockResolvedValueOnce(list([{id:'person@example.com',accessRole:'owner'}]));
+    const busy=[{start:'2026-09-28T12:00:00Z',end:'2026-09-28T14:30:00Z'}];
+    vi.mocked(fetch).mockResolvedValueOnce(list([{id:'person@example.com',accessRole:'owner'}]))
+      .mockResolvedValueOnce(Response.json({calendars:{'scad-hash@group.calendar.google.com':{busy}}}));
+    expect(await fetchMemberBusy(...karen)).toEqual({source:'shared',busy});
+  });
+  it('fails closed when Karen’s assigned calendar cannot be read', async () => {
+    tables.team_shared_calendar_assignments=[{team_member_id:'karen',viewer_team_member_id:'person',calendar_id:'scad-hash@group.calendar.google.com'}];
+    vi.mocked(fetch).mockResolvedValueOnce(list([{id:'person@example.com',accessRole:'owner'}]))
+      .mockResolvedValueOnce(Response.json({calendars:{'scad-hash@group.calendar.google.com':{errors:[{reason:'notFound'}]}}}));
     await expect(fetchMemberBusy(...karen)).rejects.toThrow('calendar_shared_unavailable');
   });
   it('rejects per-calendar free/busy errors even on HTTP 200', async () => {

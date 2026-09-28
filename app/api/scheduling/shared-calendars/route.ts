@@ -45,7 +45,16 @@ export async function POST(request: Request) {
   if (!member?.is_active) return NextResponse.json({ error: 'Crew member unavailable.' }, { status: 400 });
   try {
     const token = await getAccessToken(viewer_team_member_id);
-    if (!token || !(await listCalendars(token)).some(c => c.id === calendar_id))
+    if (!token) return NextResponse.json({ error: 'Connected account unavailable.' }, { status: 503 });
+    const now = new Date();
+    const response = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({ timeMin: now.toISOString(), timeMax: new Date(now.getTime() + 86400000).toISOString(), items: [{ id: calendar_id }] }),
+    });
+    const data = response.ok ? await response.json() : null;
+    if (!response.ok || !Array.isArray(data?.calendars?.[calendar_id]?.busy) || data.calendars[calendar_id].errors?.length)
       return NextResponse.json({ error: 'The connected account cannot read that calendar.' }, { status: 400 });
   } catch {
     return NextResponse.json({ error: 'Could not verify access to the shared calendar.' }, { status: 503 });

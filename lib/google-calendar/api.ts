@@ -223,9 +223,13 @@ async function sharedCalendarBusy(teamMemberId: string, startIso: string, endIso
     try {
       const token = await getAccessToken(viewer.team_member_id);
       if (!token) { failed = true; continue; }
-      const assigned = new Set((assignments.data ?? []).filter((a: any) => a.viewer_team_member_id === viewer.team_member_id).map((a: any) => String(a.calendar_id).toLowerCase()));
-      const shared = (await listCalendars(token)).filter((c) => emails.has(c.id.toLowerCase()) || assigned.has(c.id.toLowerCase()));
-      if ([...assigned].some(id => !shared.some(c => c.id.toLowerCase() === id))) throw new Error('assigned_calendar_missing');
+      const assigned: string[] = (assignments.data ?? []).filter((a: any) => a.viewer_team_member_id === viewer.team_member_id).map((a: any) => String(a.calendar_id));
+      const listed = await listCalendars(token);
+      const shared = listed.filter((c) => emails.has(c.id.toLowerCase()) || assigned.some(id => id.toLowerCase() === c.id.toLowerCase()));
+      // A Google share can be readable through freeBusy before the invitation
+      // is added to calendarList. The explicit assignment is still verifiable.
+      for (const id of assigned) if (!shared.some(c => c.id.toLowerCase() === id.toLowerCase()))
+        shared.push({ id, accessRole: 'freeBusyReader' });
       if (!shared.length) continue;
       const busy = await busyFromCalendars(token, shared, startIso, endIso, teamMemberId);
       logEvent('gcal.freeBusy', 'ok', { teamMemberId, source: 'shared', calendars: shared.length, busyCount: busy.length });
