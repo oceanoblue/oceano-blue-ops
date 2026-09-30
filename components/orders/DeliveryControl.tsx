@@ -72,9 +72,17 @@ export function DeliveryControl({orderId}:{orderId:string}) {
   try{
    const r=await fetch('/api/delivery-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...JSON.parse(body),request_id:requestRef.current.id})});
    const j=await r.json();if(!r.ok)throw new Error(j.error);
-   setNotice(j.dispatch.status==='sent'?`${test?'Test delivery':'Delivery'} sent. See each channel’s result below.`:'Some messages need attention. Check the delivery history before sending again.');
-   requestRef.current=null;setResend(false);await load();router.refresh();
-  }catch(e){setError(e instanceof Error?e.message:'Delivery response was interrupted. Refresh the history before retrying.');}
+   if(j.dispatch?.status==='sent'){
+    setData(current=>current?{...current,history:[j.dispatch,...current.history.filter(h=>h.id!==j.dispatch.id)]}:current);
+    setNotice(`${test?'Test delivery':'Delivery'} sent. The selected providers accepted the messages. Open delivery history for channel details.`);
+    setOpen(false);setBusy(false);
+   }else{
+    setError('Some messages need attention. Check the delivery history before sending again.');
+   }
+   requestRef.current=null;setResend(false);
+   try{await load();router.refresh();}
+   catch{setError('Delivery history could not refresh. Check its status before sending again.');}
+  }catch(e){setError(`${e instanceof Error?e.message:'Delivery response was interrupted.'} Refresh the history to confirm the outcome before retrying.`);}
   finally{setBusy(false);}
  }
  const latest=data?.history.find(h=>!h.is_test);
@@ -87,11 +95,12 @@ export function DeliveryControl({orderId}:{orderId:string}) {
   photoCount:test?6:data?.photoCount,locked:test?false:data?.paywall.active,message,isTest:test};
  const emailPreview=galleryReadyEmail(content);
  return <div className="space-y-3 text-sm">
+  {notice&&!open&&<p role="status" className="text-ocean-800">{notice}</p>}
   {error&&!open&&<p role="alert" className="text-rose-700">{error} <button className="underline" onClick={()=>void load().then(()=>setError('')).catch(e=>setError(e.message))}>Refresh</button></p>}
   {data?<>
    <div className="rounded-xl bg-slate-50 p-3"><div className="flex items-center gap-2 font-medium text-ocean-950"><ImageIcon className="h-4 w-4"/>{data.photoCount} photos · {data.mediaCount} media files</div>
     <p className="mt-1 text-xs text-slate-500">{latest?statusLabel(latest.status):'Preview, then send the gallery by email and text.'}</p></div>
-   <button className="btn-primary w-full" onClick={()=>setOpen(true)}><Send className="h-4 w-4"/>Prepare delivery</button>
+   <button className="btn-primary w-full" onClick={()=>{setNotice('');setOpen(true);}}><Send className="h-4 w-4"/>Prepare delivery</button>
    {url&&<a className="inline-flex items-center gap-1 text-ocean-700 hover:underline" href={url} target="_blank" rel="noopener"><ExternalLink className="h-3 w-3"/>Open client gallery</a>}
   </>:!error&&<p className="text-slate-500">Loading delivery…</p>}
   {open&&data&&createPortal(<div className="fixed inset-0 z-[100] bg-slate-950/60 p-2 backdrop-blur-sm sm:p-6 grid place-items-center">

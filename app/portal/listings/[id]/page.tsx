@@ -1,3 +1,4 @@
+import { signDeliverableFile } from '@/lib/deliverables/files';
 import { RescheduleAppointment } from '@/components/portal/RescheduleAppointment';
 import { rescheduleEligibility } from '@/lib/booking/reschedule';
 import Link from 'next/link';
@@ -92,9 +93,9 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
   const deliverables: DeliverableView[] = await Promise.all(
     (dvRows ?? []).map(async (d: any) => {
       let url: string | null = d.external_url ?? null;
+      let downloadUrl: string | null = null;
       if (d.source === 'file' && d.bucket && d.storage_path) {
-        const { data } = await admin.storage.from(d.bucket).createSignedUrl(d.storage_path, 3600);
-        url = data?.signedUrl ?? null;
+        ({ url, downloadUrl } = await signDeliverableFile(admin, d));
       }
       return {
         id: d.id,
@@ -102,6 +103,7 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
         title: d.title,
         source: d.source,
         url,
+        downloadUrl,
         embedUrl: d.source === 'url' && d.external_url ? toEmbedUrl(d.external_url) : null,
         mime: d.mime_type,
         filename: d.filename,

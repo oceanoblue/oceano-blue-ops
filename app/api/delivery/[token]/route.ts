@@ -1,3 +1,4 @@
+import { signDeliverableFile } from '@/lib/deliverables/files';
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { isDeliverable } from '@/lib/photos/deliverable';
@@ -112,9 +113,9 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
   const deliverables = await Promise.all(
     (dvRows ?? []).map(async (d: any) => {
       let url: string | null = pay.active ? null : d.external_url ?? null;
+      let downloadUrl: string | null = null;
       if (!pay.active && d.source === 'file' && d.bucket && d.storage_path) {
-        const { data } = await supabase.storage.from(d.bucket).createSignedUrl(d.storage_path, 3600);
-        url = data?.signedUrl ?? null;
+        ({ url, downloadUrl } = await signDeliverableFile(supabase, d));
       }
       return {
         id: d.id,
@@ -123,6 +124,7 @@ export async function GET(_req: Request, props: { params: Promise<{ token: strin
         source: d.source,
         locked: pay.active,
         url,
+        downloadUrl,
         embedUrl: !pay.active && d.source === 'url' && d.external_url ? toEmbedUrl(d.external_url) : null,
         mime: d.mime_type,
         filename: d.filename,

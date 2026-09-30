@@ -167,13 +167,14 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
     finalsCount = (finished ?? []).filter(isDeliverable).length;
   }
 
-  // Non-photo deliverables (video / 360 tour / floor plan) for this listing.
+  // Non-photo deliverables for this order, matching the client gallery.
   let deliverables: DeliverableRow[] = [];
   {
     const { data: dv } = await supabase
       .from('listing_deliverables')
       .select('id, kind, title, source, external_url, filename, is_published')
       .eq('listing_id', order.listing_id)
+      .eq('order_id', order.id)
       .order('created_at', { ascending: true });
     deliverables = (dv ?? []) as DeliverableRow[];
   }
@@ -408,7 +409,7 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
       <OrderWorkspacePanel id="review">
         <div className="space-y-6">
           {!isReel && <section className="card p-5 sm:p-7"><QcVerdictSummary summary={(latestQc as any)?.summary} createdAt={(latestQc as any)?.created_at}/><PhotoManager orderId={order.id} view="review" autoEnhanceOnUpload={false} aiEditingEnabled={false} externalFinalsCount={finalsCount}/></section>}
-          <section className="card p-5 sm:p-7"><h2 className="text-xl font-semibold">{isReel?'Finished media':'Video, tours & floor plans'}</h2><p className="mb-5 mt-2 text-sm text-slate-500">Add links or files to include alongside the photos. Publish each item when it’s ready for the client.</p><DeliverablesManager orderId={order.id} listingId={order.listing_id} initial={deliverables}/></section>
+          <section className="card p-5 sm:p-7"><h2 className="text-xl font-semibold">{isReel?'Finished media':'Video, tours & floor plans'}</h2><p className="mb-5 mt-2 text-sm text-slate-500">Add a 3D tour link or upload a floor plan (PDF/JPG) alongside the photos. New items are published; use the eye button to hide them. Payment settings still control client access.</p><DeliverablesManager orderId={order.id} listingId={order.listing_id} initial={deliverables}/></section>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-5 ring-1 ring-slate-200"><p className="text-sm text-slate-600">Happy with the finished work? Preview the client experience next.</p><OrderWorkspaceLink area="delivery">Continue to delivery</OrderWorkspaceLink></div>
         </div>
       </OrderWorkspacePanel>

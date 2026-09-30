@@ -11,7 +11,10 @@ const Body = z.object({
   kind: z.enum(['video', 'tour_360', 'floor_plan', 'other']),
   title: z.string().optional(),
   source: z.enum(['url', 'file']),
-  external_url: z.string().url().optional(),
+  external_url: z.string().trim().url().refine(
+    (url) => /^https?:\/\//i.test(url),
+    'Use an http or https media link',
+  ).optional(),
   storage_path: z.string().optional(),
   filename: z.string().optional(),
   mime_type: z.string().optional(),
@@ -35,7 +38,7 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
     .maybeSingle();
   if (!teamRow) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
-  const parsed = Body.safeParse(await request.json());
+  const parsed = Body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'validation_failed', issues: parsed.error.issues },
@@ -56,6 +59,17 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
     .eq('id', params.id)
     .maybeSingle();
   if (!order) return NextResponse.json({ error: 'order_not_found' }, { status: 404 });
+
+  if (b.source === 'file' && (
+    !b.storage_path?.startsWith(`${order.listing_id}/`) ||
+    b.storage_path.split('/').some((part) => !part || part === '.' || part === '..')
+  )) {
+    return NextResponse.json({ error: 'File must belong to this listing' }, { status: 400 });
+  }
+  if (b.source === 'file' && b.kind === 'floor_plan' &&
+    !['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(b.mime_type ?? '')) {
+    return NextResponse.json({ error: 'Choose a PDF, JPG, PNG, or WebP floor plan' }, { status: 400 });
+  }
 
   const { data, error } = await admin
     .from('listing_deliverables')

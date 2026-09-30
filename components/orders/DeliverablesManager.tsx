@@ -21,8 +21,8 @@ export type DeliverableRow = {
 
 const KIND_META: Record<DeliverableKind, { label: string; icon: any; accept: string; urlHint: string }> = {
   video: { label: 'Video', icon: Video, accept: 'video/mp4,video/quicktime,video/webm', urlHint: 'YouTube / Vimeo URL' },
-  tour_360: { label: '360° Tour', icon: Box, accept: '', urlHint: 'Matterport / Kuula URL' },
-  floor_plan: { label: 'Floor plan', icon: Map, accept: 'application/pdf,image/*', urlHint: 'Link to floor plan' },
+  tour_360: { label: '3D / 360° Tour', icon: Box, accept: '', urlHint: 'Matterport / Kuula URL' },
+  floor_plan: { label: 'Floor plan', icon: Map, accept: 'application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp', urlHint: 'Link to floor plan' },
   other: { label: 'Other', icon: FileText, accept: 'application/pdf,image/*,video/*', urlHint: 'Link' },
 };
 
@@ -71,6 +71,10 @@ export function DeliverablesManager({
   }
 
   async function addFile(file: File) {
+    if (kind === 'floor_plan' && !['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Choose a PDF, JPG, PNG, or WebP floor plan.');
+      return;
+    }
     setBusy('add');
     setError(null);
     try {
@@ -170,12 +174,13 @@ export function DeliverablesManager({
                 <button
                   onClick={() => togglePublish(row)}
                   disabled={busy === `pub-${row.id}`}
+                  aria-label={row.is_published ? 'Hide from client' : 'Publish for client'}
                   title={row.is_published ? 'Visible to client — click to hide' : 'Hidden — click to publish'}
                   className={row.is_published ? 'text-emerald-600' : 'text-slate-300'}
                 >
                   {busy === `pub-${row.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : row.is_published ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                 </button>
-                <button onClick={() => remove(row)} disabled={busy === `del-${row.id}`} className="text-slate-300 hover:text-rose-600">
+                <button aria-label="Remove deliverable" onClick={() => remove(row)} disabled={busy === `del-${row.id}`} className="text-slate-300 hover:text-rose-600">
                   {busy === `del-${row.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 </button>
               </li>
@@ -193,7 +198,7 @@ export function DeliverablesManager({
                 <button
                   key={k}
                   type="button"
-                  onClick={() => setKind(k)}
+                  onClick={() => { setKind(k); setMode(k === 'floor_plan' ? 'file' : 'url'); setError(null); }}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ring-1 transition ${
                     kind === k ? 'bg-ocean-600 text-white ring-ocean-600' : 'bg-white text-slate-600 ring-slate-200'
                   }`}
@@ -213,11 +218,11 @@ export function DeliverablesManager({
             </button>
           </div>
 
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (optional)" className="input" />
+          <input aria-label="Media title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (optional)" className="input" />
 
           {mode === 'url' ? (
             <div className="flex gap-2">
-              <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={meta.urlHint} className="input flex-1" />
+              <input aria-label="Media URL" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder={meta.urlHint} className="input flex-1" />
               <button onClick={addUrl} disabled={busy === 'add'} className="btn-primary inline-flex items-center gap-1.5 disabled:opacity-50">
                 {busy === 'add' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add
               </button>
@@ -227,6 +232,7 @@ export function DeliverablesManager({
               {busy === 'add' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               {busy === 'add' ? 'Uploading…' : `Choose ${meta.label.toLowerCase()} file`}
               <input
+                aria-label="Upload media file"
                 type="file"
                 accept={meta.accept}
                 className="hidden"
@@ -243,7 +249,7 @@ export function DeliverablesManager({
         </div>
       ) : (
         <button onClick={() => setAdding(true)} className="btn-secondary inline-flex items-center gap-1.5">
-          <Plus className="h-4 w-4" /> Add video, tour, or floor plan
+          <Plus className="h-4 w-4" /> Add video, 3D tour, or floor plan
         </button>
       )}
 

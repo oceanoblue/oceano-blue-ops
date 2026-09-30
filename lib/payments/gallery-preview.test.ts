@@ -64,7 +64,7 @@ it('returns full-resolution links once payment is recorded',async()=>{
 it.each(['file','url'])('withholds unpaid %s media URLs as well as photo masters', async source => {
   rows.listing_deliverables=[{id:'plan',order_id:'order',listing_id:'listing',is_published:true,kind:'floor_plan',source,bucket:'deliverables',storage_path:'plan.pdf',external_url:'https://example.test/original',filename:'plan.pdf'}];
   const body=await (await gallery(req,params)).json();
-  expect(body.deliverables[0]).toMatchObject({locked:true,url:null,embedUrl:null});
+  expect(body.deliverables[0]).toMatchObject({locked:true,url:null,downloadUrl:null,embedUrl:null});
   expect(JSON.stringify(body)).not.toContain('https://example.test/original');
   expect(sign).not.toHaveBeenCalled();
 });
@@ -132,4 +132,24 @@ it('exports selected photos with unique sequential filenames in the saved galler
     }
   }
   expect(names).toEqual(['001-DSC10.jpg','002-DSC2.jpg','003-DSC2.jpg']);
+});
+
+it('returns separate preview and attachment links for two published floor plans',async()=>{
+  rows.orders.download_paid_at='2026-09-20';
+  rows.photos=[];
+  rows.listing_deliverables=['first.jpg','second.pdf'].map(filename=>({id:filename,listing_id:'listing',order_id:'order',is_published:true,kind:'floor_plan',source:'file',bucket:'deliverables',storage_path:`listing/${filename}`,filename}));
+  sign.mockImplementation(async(path:string,_ttl:number,options?:{download?:string})=>({data:{signedUrl:`https://storage.test/${path}${options?.download?'?download='+options.download:''}`}}));
+  const body=await(await gallery(req,params)).json();
+  expect(body.deliverables).toHaveLength(2);
+  for(const item of body.deliverables) {
+    expect(item.url).not.toContain('?download=');
+    expect(item.downloadUrl).toContain('?download='+item.filename);
+  }
+});
+it('expired and missing gallery tokens never sign media files',async()=>{
+  rows.delivery_links.expires_at='2020-01-01';
+  expect((await gallery(req,params)).status).toBe(410);
+  rows.delivery_links=null;
+  expect((await gallery(req,params)).status).toBe(404);
+  expect(sign).not.toHaveBeenCalled();
 });

@@ -7,6 +7,7 @@ export type DeliverableView = {
   title: string | null;
   source: 'url' | 'file';
   url: string | null; // external_url, or a signed file URL
+  downloadUrl?: string | null; // signed attachment URL, separate from the inline preview
   embedUrl: string | null; // set when a URL is embeddable (YouTube/Vimeo/Matterport)
   mime: string | null;
   filename: string | null;
@@ -63,7 +64,7 @@ export function MediaRoom({ items }: { items: DeliverableView[] }) {
       )}
 
       {tours.length > 0 && (
-        <Section icon={Box} title={tours.length > 1 ? '360° Tours' : '360° Tour'}>
+        <Section icon={Box} title={tours.length > 1 ? '3D / 360° Tours' : '3D / 360° Tour'}>
           <div className="space-y-6">
             {tours.map((d) => (
               <figure key={d.id}>
@@ -106,8 +107,8 @@ export function MediaRoom({ items }: { items: DeliverableView[] }) {
                 )}
                 <figcaption className="flex items-center justify-between gap-2 border-t border-slate-100 p-3 text-sm">
                   <span className="truncate text-slate-600">{d.title || 'Floor plan'}</span>
-                  {d.url && (
-                    <a href={d.url} download={d.filename ?? undefined} className="inline-flex shrink-0 items-center gap-1 text-ocean-700 hover:underline">
+                  {(d.source === 'file' ? d.downloadUrl : d.url) && (
+                    <a href={(d.source === 'file' ? d.downloadUrl : d.url)!} download={d.filename ?? undefined} className="inline-flex shrink-0 items-center gap-1 text-ocean-700 hover:underline">
                       <Download className="h-4 w-4" /> Download
                     </a>
                   )}
