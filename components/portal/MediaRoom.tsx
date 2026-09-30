@@ -1,5 +1,6 @@
+import * as React from 'react';
 import { Video, Box, Map, Download, ExternalLink, FileText } from 'lucide-react';
-import { isImageMime, isPdfMime, isVideoMime } from '@/lib/deliverables/embed';
+import { getVimeoPageUrl, isImageMime, isPdfMime, isVideoMime } from '@/lib/deliverables/embed';
 
 export type DeliverableView = {
   id: string;
@@ -46,17 +47,21 @@ export function MediaRoom({ items }: { items: DeliverableView[] }) {
                         title={d.title ?? 'Video'}
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                         allowFullScreen
+                        referrerPolicy="strict-origin-when-cross-origin"
                         className="absolute inset-0 h-full w-full"
                       />
                     ) : d.source === 'file' && d.url && isVideoMime(d.mime) ? (
                       // eslint-disable-next-line jsx-a11y/media-has-caption
-                      <video src={d.url} controls preload="metadata" className="absolute inset-0 h-full w-full bg-black object-contain" />
+                      <video src={d.url} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full bg-black object-contain" />
                     ) : (
                       <PlainLink url={d.url} label="Open video" />
                     )}
                   </div>
                 </div>
-                {d.title && <figcaption className="mt-2 text-sm text-slate-600">{d.title}</figcaption>}
+                <figcaption className="mt-3 space-y-2">
+                  {d.title && <p className="text-sm text-slate-600">{d.title}</p>}
+                  <VideoActions item={d} />
+                </figcaption>
               </figure>
             ))}
           </div>
@@ -132,6 +137,33 @@ export function MediaRoom({ items }: { items: DeliverableView[] }) {
           </ul>
         </Section>
       )}
+    </div>
+  );
+}
+
+/** Keep an escape hatch outside the iframe: third-party playback can fail.
+ * A Vimeo video page is not a downloadable file. Label it accordingly and
+ * never invent a CDN URL or bypass the owner's download permissions. */
+function VideoActions({ item: d }: { item: DeliverableView }) {
+  if (d.locked) return null;
+  const vimeoPage = d.source === 'url' && d.url ? getVimeoPageUrl(d.url) : null;
+  const openUrl = vimeoPage || d.url;
+  const actionClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-ocean-200 bg-white px-3 py-2 text-sm font-medium text-ocean-700 hover:bg-ocean-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean-600';
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {openUrl && <a href={openUrl} target="_blank" rel="noopener noreferrer" className={actionClass}>
+          <ExternalLink className="h-4 w-4" /> {vimeoPage ? 'Watch on Vimeo' : 'Open video'}
+        </a>}
+        {d.downloadUrl ? <a href={d.downloadUrl} download={d.filename ?? undefined} target="_blank" rel="noopener noreferrer" className={actionClass}>
+          <Download className="h-4 w-4" /> Download video
+        </a> : vimeoPage ? <a href={vimeoPage} target="_blank" rel="noopener noreferrer" className={actionClass}>
+          <Download className="h-4 w-4" /> Download on Vimeo
+        </a> : null}
+      </div>
+      {vimeoPage && !d.downloadUrl && <p className="text-xs leading-relaxed text-slate-500">
+        Downloads open on Vimeo. Choose Download below the video. If that option is missing, contact us for the file.
+      </p>}
     </div>
   );
 }
