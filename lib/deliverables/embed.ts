@@ -7,6 +7,33 @@
 
 export type EmbedKind = 'video' | 'tour_360' | 'other';
 
+/** Vimeo's unlisted privacy hash is an access credential, not share tracking. */
+function parseVimeoUrl(rawUrl: string): { url: URL; id: string; hash: string | null } | null {
+  try {
+    const url = new URL(rawUrl.trim());
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return null;
+    const host = url.hostname.replace(/^www\./, '').toLowerCase();
+    const match = host === 'vimeo.com'
+      ? url.pathname.match(/^\/(\d+)(?:\/([a-zA-Z0-9]+))?\/?$/)
+      : host === 'player.vimeo.com'
+        ? url.pathname.match(/^\/video\/(\d+)\/?$/)
+        : null;
+    if (!match) return null;
+    const hash = url.searchParams.get('h') || match[2] || null;
+    if (hash && !/^[a-zA-Z0-9]+$/.test(hash)) return null;
+    return { url, id: match[1], hash };
+  } catch {
+    return null;
+  }
+}
+
+/** The Vimeo video page (not the iframe) exposes the owner's enabled downloads.
+ * Preserve the privacy hash when converting an already-embedded player URL. */
+export function getVimeoPageUrl(rawUrl: string): string | null {
+  const video = parseVimeoUrl(rawUrl);
+  return video ? `https://vimeo.com/${video.id}${video.hash ? `/${video.hash}` : ''}` : null;
+}
+
 export function toEmbedUrl(rawUrl: string): string | null {
   let u: URL;
   try {
@@ -14,6 +41,7 @@ export function toEmbedUrl(rawUrl: string): string | null {
   } catch {
     return null;
   }
+  if (!['https:', 'http:'].includes(u.protocol)) return null;
   const host = u.hostname.replace(/^www\./, '').toLowerCase();
 
   // YouTube — watch?v=, youtu.be/, /shorts/, already-embed
@@ -29,12 +57,23 @@ export function toEmbedUrl(rawUrl: string): string | null {
     if (id) return `https://www.youtube.com/embed/${id}`;
   }
 
-  // Vimeo — vimeo.com/{id} (+ optional hash) or player.vimeo.com
-  if (host === 'vimeo.com') {
-    const id = u.pathname.split('/').filter(Boolean)[0];
-    if (id && /^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}`;
+  // Unlisted share URLs put the hash in /{id}/{hash} or ?h={hash}; the
+  // player REQUIRES ?h=. Dropping it makes an otherwise valid video fail.
+  if (host === 'vimeo.com' || host === 'player.vimeo.com') {
+    const video = parseVimeoUrl(rawUrl);
+    if (!video) return null;
+    const embed = new URL(`https://player.vimeo.com/video/${video.id}`);
+    if (video.hash) embed.searchParams.set('h', video.hash);
+    // Keep existing player options, but not Vimeo's share-tracking parameters.
+    // Place h first, as required by Vimeo's unlisted embed documentation.
+    if (host === 'player.vimeo.com') {
+      video.url.searchParams.forEach((value, key) => {
+        if (key !== 'h') embed.searchParams.append(key, value);
+      });
+    }
+    embed.hash = video.url.hash;
+    return embed.toString();
   }
-  if (host === 'player.vimeo.com') return u.toString();
 
   // Matterport — my.matterport.com/show/?m=ID or matterport.com/discover
   if (host.endsWith('matterport.com')) {
