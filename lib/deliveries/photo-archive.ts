@@ -36,7 +36,6 @@ export function createPhotoArchive(
   let resolveDone!: (value: ArchiveResult) => void;
   let rejectDone!: (error: Error) => void;
   const done = new Promise<ArchiveResult>((resolve, reject) => { resolveDone = resolve; rejectDone = reject; });
-  // A source can fail before the caller starts awaiting completion.
   void done.catch(() => undefined);
   const fail = (reason: unknown) => {
     const error = reason instanceof Error ? reason : new Error('Photo archive failed.');
@@ -48,7 +47,7 @@ export function createPhotoArchive(
   };
   const abort = () => fail(new Error('Photo download was cancelled.'));
   archive.on('error', error => { rejectDone(error); current?.destroy(error); });
-  archive.on('warning', fail); // Missing media must not become a successful, incomplete ZIP.
+  archive.on('warning', fail);
   archive.on('entry', () => { count += 1; });
   archive.once('end', () => {
     ended = true;
@@ -84,7 +83,14 @@ export function createPhotoArchive(
         }
         await pumping;
       } else {
-        for await (const chunk of input) yield chunk;
+        // Blob.stream() may yield the entire multi-MB file as one chunk.
+        // A high-water mark alone does not split oversized source chunks.
+        for await (const chunk of input) {
+          const bytes = Buffer.from(chunk);
+          for (let offset = 0; offset < bytes.length; offset += ARCHIVE_BUFFER_BYTES) {
+            yield bytes.subarray(offset, offset + ARCHIVE_BUFFER_BYTES);
+          }
+        }
       }
     } finally {
       input?.destroy();
@@ -115,7 +121,6 @@ export function createPhotoArchive(
 }
 
 export function archiveWebStream(archive: Readable): ReadableStream<Uint8Array> {
-  // toWeb's default size is ONE PER CHUNK, not bytes. Set both explicitly.
   return Readable.toWeb(archive, {
     strategy: { highWaterMark: ARCHIVE_BUFFER_BYTES, size: (chunk: Uint8Array) => chunk.byteLength },
   }) as ReadableStream<Uint8Array>;
