@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { ChevronDown, Download } from 'lucide-react';
+import { PreparedPhotoDownload } from './PreparedPhotoDownload';
 
 export type DeliverySize = 'full' | 'print' | 'web';
 
@@ -23,9 +24,7 @@ type Props = {
   demo?: boolean;
 };
 
-/** Render only for unlocked galleries. Let the browser manage the native picker:
- * a timed blur-close can remove a custom menu before a touch/click completes,
- * and an absolutely positioned menu can extend outside a narrow viewport. */
+/** Render only for unlocked galleries. Let the browser manage the native picker. */
 export function PhotoDownloadControls({ token, photoCount, value, onChange, demo = false }: Props) {
   const selected = SIZE_OPTIONS.find(option => option.value === value) ?? SIZE_OPTIONS[0];
   return (
@@ -54,9 +53,11 @@ export function PhotoDownloadControls({ token, photoCount, value, onChange, demo
             <Download className="h-4 w-4" /> Download all ({photoCount})
           </button>
         ) : (
-          <a href={photoDownloadUrl(token, value)} className="btn-primary min-h-11" download title={selected.hint}>
-            <Download className="h-4 w-4" /> Download all ({photoCount})
-          </a>
+          <PreparedPhotoDownload key={photoDownloadUrl(token, value)} photoCount={photoCount}>
+            <a href={photoDownloadUrl(token, value)} className="btn-primary min-h-11" download title={selected.hint}>
+              <Download className="h-4 w-4" /> Download all ({photoCount})
+            </a>
+          </PreparedPhotoDownload>
         )}
       </div>
       <p id="photo-download-resolution-help" aria-live="polite" className="max-w-sm text-xs leading-relaxed text-slate-500">
