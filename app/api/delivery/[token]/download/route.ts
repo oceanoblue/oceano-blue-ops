@@ -1,117 +1,67 @@
-import archiver from 'archiver';
-import { deliveryFilename } from '@/lib/photos/order';
-import sharp from 'sharp';
 import { createAdminClient } from '@/lib/supabase/server';
 import { isDeliverable } from '@/lib/photos/deliverable';
 import { paywallFor } from '@/lib/payments/gate';
+import { createPhotoArchive, archiveWebStream, ARCHIVE_PRESETS, type ArchiveSize } from '@/lib/deliveries/photo-archive';
+import { preparePhotoArchive, ArchiveBusyError } from '@/lib/deliveries/prepared-archive';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const maxDuration = 300;
 
-// Client-selectable delivery resolutions. "full" ships the original finals
-// untouched; "print" and "web" are resized derivatives generated on the fly.
-const SIZE_PRESETS: Record<string, { longEdge: number; quality: number; suffix: string }> = {
-  // 4K floor: the standard high-quality deliverable. 4096px long edge at q95 —
-  // big enough for premium web/portal use and large screens, smaller than the
-  // full-res master. Pairs with the untouched "full" (native master) download.
-  '4k': { longEdge: 4096, quality: 95, suffix: '-4k' },
-  // Print: large long edge at high quality — good for flyers, brochures, large
-  // prints. Roughly 3000px keeps it sharp at A4/letter without shipping the
-  // full-res master.
-  print: { longEdge: 3000, quality: 92, suffix: '-print' },
-  // Web: MLS / portal-friendly long edge + quality.
-  web: { longEdge: 2048, quality: 85, suffix: '-web' },
-};
-
-/**
- * Streams a zip of all selected delivered photos for the order.
- *   ?size=4k    → each photo resized to 4096px long edge JPEG q95 (standard hi-res)
- *   ?size=print → each photo resized to 3000px long edge JPEG q92 (print)
- *   ?size=web   → each photo resized to 2048px long edge JPEG q85 (MLS upload)
- *   default     → full-resolution native masters
- *
- * For very large galleries you'll want to pre-build the zip and serve via
- * signed URL instead; this works fine for the typical 30-50 photo listing.
+/** The gallery prepares a complete, verified private-storage ZIP first. Legacy
+ * links still stream, but now honor backpressure and process one photo at a time.
+ * All paths check the token, expiry, payment and selected deliverables first.
  */
 export async function GET(req: Request, props: { params: Promise<{ token: string }> }) {
-  const params = await props.params;
-  const sizeParam = new URL(req.url).searchParams.get('size') ?? '';
-  const preset = SIZE_PRESETS[sizeParam];
-  const supabase = createAdminClient();
-  const { data: link } = await supabase
-    .from('delivery_links')
-    .select('id, order_id, expires_at')
-    .eq('token', params.token)
-    .single();
+  const { token } = await props.params;
+  const query = new URL(req.url).searchParams;
+  const size = query.get('size') || 'full';
+  if (!['full', '4k', 'print', 'web'].includes(size)) return new Response('Invalid download resolution.', { status: 400 });
+  const archiveSize = size as ArchiveSize;
+  const preset = archiveSize === 'full' ? null : ARCHIVE_PRESETS[archiveSize];
+  const supabase = createAdminClient({ noStore: true });
+  const { data: link } = await supabase.from('delivery_links')
+    .select('id, order_id, expires_at').eq('token', token).single();
   if (!link) return new Response('Not found', { status: 404 });
-  if (link.expires_at && new Date(link.expires_at) < new Date()) {
-    return new Response('Expired', { status: 410 });
+  if (link.expires_at && new Date(link.expires_at) < new Date()) return new Response('Expired', { status: 410 });
+
+  const { data: order } = await supabase.from('orders')
+    .select('total_cents, download_paid_at').eq('id', link.order_id).single();
+  if (paywallFor(order as any).active) return new Response('Payment required to download this gallery.', { status: 402 });
+  const { data: photos, error } = await supabase.from('photos')
+    .select('id, filename, bucket, storage_path, updated_at, is_hdr, ai_provider')
+    .eq('order_id', link.order_id).in('kind', ['processed', 'delivered']).eq('is_selected', true)
+    .order('sort_order', { ascending: true }).order('id', { ascending: true });
+  if (error) return new Response('Photos are temporarily unavailable.', { status: 503 });
+  const downloadable = ((photos ?? []) as any[]).filter(isDeliverable);
+  if (!downloadable.length) return new Response('No delivered photos are available.', { status: 422 });
+  const filename = `oceanoblue-${token}${preset ? preset.suffix : ''}.zip`;
+
+  if (query.get('prepare') === '1') {
+    try {
+      const ready = await preparePhotoArchive(supabase, downloadable, link.order_id, archiveSize, filename);
+      return Response.json(ready, { headers: { 'cache-control': 'no-store' } });
+    } catch (cause) {
+      const busy = cause instanceof ArchiveBusyError;
+      console.error(JSON.stringify({ scope: 'gallery.archive', event: 'failed', size, busy }));
+      return Response.json({ error: busy ? cause.message : 'We could not prepare a complete ZIP. Please try again or contact our team. No partial download was delivered.' },
+        { status: busy ? 429 : 503, headers: { 'cache-control': 'no-store', 'retry-after': '10' } });
+    }
   }
 
-  // Paywall: a priced, unpaid order can't be downloaded. The gallery swaps the
-  // button for an unlock CTA, but we enforce it here too so the URL can't be hit
-  // directly to bypass payment.
-  const { data: order } = await supabase
-    .from('orders')
-    .select('total_cents, download_paid_at')
-    .eq('id', link.order_id)
-    .single();
-  if (paywallFor(order as any).active) {
-    return new Response('Payment required to download this gallery.', { status: 402 });
-  }
-
-  const { data: photos } = await supabase
-    .from('photos')
-    .select('filename, bucket, storage_path, is_hdr, ai_provider')
-    .eq('order_id', link.order_id)
-    .in('kind', ['processed', 'delivered'])
-    .eq('is_selected', true)
-    .order('sort_order', { ascending: true });
-
-  await supabase
-    .from('delivery_links')
-    .update({ download_count: ((await getCount(supabase, link.id)) + 1) })
-    .eq('id', link.id);
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      const archive = archiver('zip', { zlib: { level: 6 } });
-      archive.on('data', (chunk) => controller.enqueue(chunk));
-      archive.on('end', () => controller.close());
-      archive.on('error', (e) => controller.error(e));
-
-      const downloadable = ((photos ?? []) as any[]).filter(isDeliverable);
-      for (const [index, p] of downloadable.entries()) {
-        const { data } = await supabase.storage.from(p.bucket).download(p.storage_path);
-        if (!data) continue;
-        let bytes: Buffer = Buffer.from(await data.arrayBuffer());
-        let name = p.filename;
-        if (preset) {
-          try {
-            bytes = await sharp(bytes)
-              .rotate()
-              .resize({ width: preset.longEdge, height: preset.longEdge, fit: 'inside', withoutEnlargement: true })
-              .jpeg({ quality: preset.quality, mozjpeg: true })
-              .toBuffer();
-            name = p.filename.replace(/\.[^.]+$/, '') + preset.suffix + '.jpg';
-          } catch {
-            // Fall back to the original bytes rather than dropping the photo.
-          }
-        }
-        archive.append(bytes, { name: deliveryFilename(name, index, downloadable.length) });
-      }
-      archive.finalize();
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'content-type': 'application/zip',
-      'content-disposition': `attachment; filename="oceanoblue-${params.token}${preset ? preset.suffix : ''}.zip"`,
-    },
-  });
-}
-
-async function getCount(supabase: ReturnType<typeof createAdminClient>, id: string) {
-  const { data } = await supabase.from('delivery_links').select('download_count').eq('id', id).single();
-  return (data as any)?.download_count ?? 0;
+  const zip = createPhotoArchive(downloadable, archiveSize, async photo => {
+    const { data, error: downloadError } = await supabase.storage.from(photo.bucket).download(photo.storage_path);
+    if (downloadError || !data) throw new Error('A delivered photo could not be retrieved.');
+    return data;
+  }, AbortSignal.any([req.signal, AbortSignal.timeout(240_000)]));
+  void zip.done.then(async result => {
+    console.info(JSON.stringify({ scope: 'gallery.archive', event: 'stream_complete', size, ...result,
+      rssMiB: Math.round(process.memoryUsage().rss / 1048576) }));
+    const { data } = await supabase.from('delivery_links').select('download_count').eq('id', link.id).single();
+    await supabase.from('delivery_links').update({ download_count: ((data as any)?.download_count ?? 0) + 1 }).eq('id', link.id);
+  }).catch(() => console.error(JSON.stringify({ scope: 'gallery.archive', event: 'stream_failed', size })));
+  return new Response(archiveWebStream(zip.archive), { headers: {
+    'content-type': 'application/zip', 'content-disposition': `attachment; filename="${filename}"`,
+    'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff',
+  } });
 }
