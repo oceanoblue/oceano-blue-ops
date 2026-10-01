@@ -1,24 +1,18 @@
 'use client';
 
+import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Download, Image as ImageIcon, ChevronDown, LayoutGrid, Rows3, X, ChevronLeft, ChevronRight, Lock, ShieldCheck, Loader2 } from 'lucide-react';
+import { Download, Image as ImageIcon, LayoutGrid, Rows3, X, ChevronLeft, ChevronRight, Lock, ShieldCheck, Loader2 } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { groupByRoom, roomLabel } from '@/lib/photos/rooms';
 import { MediaRoom, type DeliverableView } from '@/components/portal/MediaRoom';
 import { MarketingLinks } from '@/components/marketing/MarketingLinks';
 import { RevisionRequests } from '@/components/gallery/RevisionRequests';
+import { PhotoDownloadControls, type DeliverySize } from '@/components/gallery/PhotoDownloadControls';
 
 const money = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-
-type DeliverySize = 'full' | 'print' | 'web';
-
-const SIZE_OPTIONS: { value: DeliverySize; label: string; hint: string }[] = [
-  { value: 'full', label: 'Full resolution', hint: 'Original delivered files — archive & large print' },
-  { value: 'print', label: 'Print resolution', hint: '3000px — flyers, brochures, standard prints' },
-  { value: 'web', label: 'Web resolution', hint: '2048px — MLS & web portals' },
-];
 
 interface GalleryPhoto {
   id: string;
@@ -50,7 +44,6 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
   const [err, setErr] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null);
   const [size, setSize] = useState<DeliverySize>('full');
-  const [sizeOpen, setSizeOpen] = useState(false);
   // Default to the single "all photos" grid; clients can switch to the
   // room-organized view via the toggle. (Grouping only appears when photos have
   // been classified — hasRooms gates the grouped render below.)
@@ -264,45 +257,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
             {locked ? (
               <UnlockButton />
             ) : data.photos.length > 0 ? (
-              <>
-                {/* Resolution selector — clients pick full / print / web */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setSizeOpen((o) => !o)}
-                    onBlur={() => setTimeout(() => setSizeOpen(false), 150)}
-                    className="btn-secondary"
-                    title="Choose download resolution"
-                  >
-                    {SIZE_OPTIONS.find((o) => o.value === size)?.label}
-                    <ChevronDown className="h-4 w-4" />
-                  </button>
-                  {sizeOpen && (
-                    <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lift">
-                      {SIZE_OPTIONS.map((o) => (
-                        <button
-                          key={o.value}
-                          type="button"
-                          onClick={() => {
-                            setSize(o.value);
-                            setSizeOpen(false);
-                          }}
-                          className={`block w-full px-4 py-2.5 text-left transition-colors hover:bg-slate-50 ${
-                            o.value === size ? 'bg-ocean-50' : ''
-                          }`}
-                        >
-                          <div className="text-sm font-medium text-ocean-950">{o.label}</div>
-                          <div className="text-xs text-slate-500">{o.hint}</div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {demo ? <button className="btn-primary" disabled title="Sample gallery — downloads disabled"><Download className="h-4 w-4" />Download all ({data.photos.length})</button> : <a
-                  href={`/api/delivery/${token}/download${size === 'full' ? '' : `?size=${size}`}`}
-                  className="btn-primary" download title={SIZE_OPTIONS.find((o) => o.value === size)?.hint}
-                ><Download className="h-4 w-4" /> Download all ({data.photos.length})</a>}
-              </>
+              <PhotoDownloadControls token={token} photoCount={data.photos.length} value={size} onChange={setSize} demo={demo} />
             ) : null}
           </div>
         </div>
