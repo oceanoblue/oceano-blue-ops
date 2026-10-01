@@ -10,6 +10,7 @@ type Client = ReturnType<typeof createAdminClient>;
 type Manifest = { version: number; path: string; count: number; bytes: number; sha256: string; createdAt: number };
 const running = new Map<string, Promise<Manifest>>();
 export class ArchiveBusyError extends Error {}
+export class ArchiveTooLargeError extends Error {}
 
 /** Constant-space checksum + ZIP footer validation. Never buffer the ZIP. */
 export class ZipAudit extends Transform {
@@ -63,18 +64,24 @@ async function build(client: Client, photos: ArchivePhoto[], size: ArchiveSize, 
     const { error } = await client.storage.from(BUCKET).upload(path, audit, {
       contentType: 'application/zip', cacheControl: '3600', upsert: false, duplex: 'half',
     });
-    if (error) throw new Error('The complete archive could not be stored.');
+    if (error) {
+      // The project-wide limit can be lower than this bucket's 5 GB limit.
+      // Split into independent ZIPs only for an explicit payload-size error.
+      if (String((error as any).statusCode) === '413' ||
+          /entity.?too.?large|payload too large|exceeded the maximum allowed size/i.test(error.message)) {
+        throw new ArchiveTooLargeError('The archive exceeds the storage size limit.');
+      }
+      throw new Error('The complete archive could not be stored.');
+    }
     await pumping;
     const completed = await zip.done;
     const generated = audit.result(photos.length);
     if (completed.bytes !== generated.bytes) throw new Error('Archive byte count mismatch.');
 
-    // Read the committed storage object back as a stream. This verifies the
-    // actual uploaded bytes, not just an HTTP 200 or a synthetic sample image.
     const { data, error: readError } = await client.storage.from(BUCKET).download(path).asStream();
     if (readError || !data) throw new Error('The stored archive could not be verified.');
     const storedAudit = new ZipAudit();
-    storedAudit.resume(); // Discard audited chunks; do NOT accumulate in memory.
+    storedAudit.resume();
     const reader = data.getReader();
     try {
       while (true) {
@@ -104,9 +111,7 @@ async function build(client: Client, photos: ArchivePhoto[], size: ArchiveSize, 
   }
 }
 
-/** Call only AFTER checking gallery token, expiry, payment and selected photos.
- * Signed downloads are short-lived; no public bucket or client storage policy.
- */
+/** Call only AFTER checking gallery token, expiry, payment and selected photos. */
 export async function preparePhotoArchive(client: Client, photos: ArchivePhoto[], orderId: string, size: ArchiveSize, filename: string) {
   const key = createHash('sha256').update(JSON.stringify(['zip-v1', size, photos])).digest('hex');
   const cachePath = `${orderId}/${key}.json`;
