@@ -1,0 +1,122 @@
+import archiver from 'archiver';
+import { once } from 'node:events';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import sharp from 'sharp';
+import { deliveryFilename } from '@/lib/photos/order';
+
+export const ARCHIVE_BUFFER_BYTES = 64 * 1024;
+export type ArchiveSize = 'full' | '4k' | 'print' | 'web';
+export type ArchivePhoto = { id?: string; filename: string; bucket: string; storage_path: string; updated_at?: string | null };
+export const ARCHIVE_PRESETS = {
+  '4k': { longEdge: 4096, quality: 95, suffix: '-4k' },
+  print: { longEdge: 3000, quality: 92, suffix: '-print' },
+  web: { longEdge: 2048, quality: 85, suffix: '-web' },
+} as const;
+export type ArchiveResult = { count: number; bytes: number };
+
+/** The next photo is not opened until the ZIP writer finishes the current entry.
+ * Never collect the gallery in Buffers or push into an unbounded Web queue.
+ * JPEGs are already compressed, so ZIP STORE avoids a second compression queue.
+ */
+export function createPhotoArchive(
+  photos: ArchivePhoto[],
+  size: ArchiveSize,
+  openPhoto: (photo: ArchivePhoto) => Promise<Blob>,
+  signal?: AbortSignal,
+) {
+  if (!photos.length) throw new Error('No delivered photos are available.');
+  const archive = archiver('zip', { store: true, highWaterMark: ARCHIVE_BUFFER_BYTES });
+  const preset = size === 'full' ? null : ARCHIVE_PRESETS[size];
+  let current: Readable | null = null;
+  let input: Readable | null = null;
+  let transform: ReturnType<typeof sharp> | null = null;
+  let count = 0;
+  let ended = false;
+  let resolveDone!: (value: ArchiveResult) => void;
+  let rejectDone!: (error: Error) => void;
+  const done = new Promise<ArchiveResult>((resolve, reject) => { resolveDone = resolve; rejectDone = reject; });
+  // A source can fail before the caller starts awaiting completion.
+  void done.catch(() => undefined);
+  const fail = (reason: unknown) => {
+    const error = reason instanceof Error ? reason : new Error('Photo archive failed.');
+    current?.destroy(error);
+    input?.destroy(error);
+    transform?.destroy(error);
+    archive.destroy(error);
+    rejectDone(error);
+  };
+  const abort = () => fail(new Error('Photo download was cancelled.'));
+  archive.on('error', error => { rejectDone(error); current?.destroy(error); });
+  archive.on('warning', fail); // Missing media must not become a successful, incomplete ZIP.
+  archive.on('entry', () => { count += 1; });
+  archive.once('end', () => {
+    ended = true;
+    signal?.removeEventListener('abort', abort);
+    if (count !== photos.length) rejectDone(new Error('Photo count mismatch.'));
+    else resolveDone({ count, bytes: archive.pointer() });
+  });
+  archive.once('close', () => {
+    signal?.removeEventListener('abort', abort);
+    if (!ended) fail(new Error('Photo archive closed before completion.'));
+  });
+  signal?.addEventListener('abort', abort, { once: true });
+
+  async function* photoBytes(photo: ArchivePhoto) {
+    if (signal?.aborted || archive.destroyed) throw new Error('Photo download was cancelled.');
+    const blob = await openPhoto(photo);
+    if (!blob.size) throw new Error('A delivered photo is empty.');
+    if (signal?.aborted || archive.destroyed) throw new Error('Photo download was cancelled.');
+    input = Readable.fromWeb(blob.stream() as import('node:stream/web').ReadableStream<Uint8Array>, { highWaterMark: ARCHIVE_BUFFER_BYTES });
+    try {
+      if (preset) {
+        transform = sharp({ sequentialRead: true, limitInputPixels: 100_000_000 })
+          .rotate()
+          .resize({ width: preset.longEdge, height: preset.longEdge, fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: preset.quality });
+        const pumping = pipeline(input, transform);
+        void pumping.catch(fail);
+        for await (const chunk of transform) {
+          const bytes = Buffer.from(chunk);
+          for (let offset = 0; offset < bytes.length; offset += ARCHIVE_BUFFER_BYTES) {
+            yield bytes.subarray(offset, offset + ARCHIVE_BUFFER_BYTES);
+          }
+        }
+        await pumping;
+      } else {
+        for await (const chunk of input) yield chunk;
+      }
+    } finally {
+      input?.destroy();
+      transform?.destroy();
+      input = null;
+      transform = null;
+    }
+  }
+
+  async function produce() {
+    try {
+      if (signal?.aborted) throw new Error('Photo download was cancelled.');
+      for (const [index, photo] of photos.entries()) {
+        if (archive.destroyed) return;
+        current = Readable.from(photoBytes(photo), { objectMode: false, highWaterMark: ARCHIVE_BUFFER_BYTES });
+        current.on('error', fail);
+        const written = once(archive, 'entry');
+        const name = preset ? photo.filename.replace(/\.[^.]+$/, '') + preset.suffix + '.jpg' : photo.filename;
+        archive.append(current, { name: deliveryFilename(name, index, photos.length) });
+        await written;
+        current = null;
+      }
+      await archive.finalize();
+    } catch (error) { fail(error); }
+  }
+  queueMicrotask(() => { void produce(); });
+  return { archive, done, cancel: abort };
+}
+
+export function archiveWebStream(archive: Readable): ReadableStream<Uint8Array> {
+  // toWeb's default size is ONE PER CHUNK, not bytes. Set both explicitly.
+  return Readable.toWeb(archive, {
+    strategy: { highWaterMark: ARCHIVE_BUFFER_BYTES, size: (chunk: Uint8Array) => chunk.byteLength },
+  }) as ReadableStream<Uint8Array>;
+}
