@@ -2,16 +2,15 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { isDeliverable } from '@/lib/photos/deliverable';
 import { paywallFor } from '@/lib/payments/gate';
 import { createPhotoArchive, archiveWebStream, ARCHIVE_PRESETS, type ArchiveSize } from '@/lib/deliveries/photo-archive';
-import { preparePhotoArchive, ArchiveBusyError } from '@/lib/deliveries/prepared-archive';
+import { ArchiveBusyError } from '@/lib/deliveries/prepared-archive';
+import { prepareArchiveSet } from '@/lib/deliveries/archive-set';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-/** The gallery prepares a complete, verified private-storage ZIP first. Legacy
- * links still stream, but now honor backpressure and process one photo at a time.
- * All paths check the token, expiry, payment and selected deliverables first.
- */
+/** Prepared downloads are complete verified objects. Legacy links use bounded
+ * streams. Every path checks token, expiry, payment and selected deliverables. */
 export async function GET(req: Request, props: { params: Promise<{ token: string }> }) {
   const { token } = await props.params;
   const query = new URL(req.url).searchParams;
@@ -29,7 +28,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     .select('total_cents, download_paid_at').eq('id', link.order_id).single();
   if (paywallFor(order as any).active) return new Response('Payment required to download this gallery.', { status: 402 });
   const { data: photos, error } = await supabase.from('photos')
-    .select('id, filename, bucket, storage_path, updated_at, is_hdr, ai_provider')
+    .select('id, filename, bucket, storage_path, updated_at, is_hdr, ai_provider, byte_size')
     .eq('order_id', link.order_id).in('kind', ['processed', 'delivered']).eq('is_selected', true)
     .order('sort_order', { ascending: true }).order('id', { ascending: true });
   if (error) return new Response('Photos are temporarily unavailable.', { status: 503 });
@@ -39,7 +38,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
 
   if (query.get('prepare') === '1') {
     try {
-      const ready = await preparePhotoArchive(supabase, downloadable, link.order_id, archiveSize, filename);
+      const ready = await prepareArchiveSet(supabase, downloadable, link.order_id, archiveSize, filename);
       return Response.json(ready, { headers: { 'cache-control': 'no-store' } });
     } catch (cause) {
       const busy = cause instanceof ArchiveBusyError;
