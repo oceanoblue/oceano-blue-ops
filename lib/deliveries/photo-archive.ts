@@ -7,7 +7,7 @@ import { deliveryFilename } from '@/lib/photos/order';
 
 export const ARCHIVE_BUFFER_BYTES = 64 * 1024;
 export type ArchiveSize = 'full' | '4k' | 'print' | 'web';
-export type ArchivePhoto = { id?: string; filename: string; bucket: string; storage_path: string; updated_at?: string | null };
+export type ArchivePhoto = { id?: string; filename: string; bucket: string; storage_path: string; updated_at?: string | null; archiveIndex?: number; archiveTotal?: number };
 export const ARCHIVE_PRESETS = {
   '4k': { longEdge: 4096, quality: 95, suffix: '-4k' },
   print: { longEdge: 3000, quality: 92, suffix: '-print' },
@@ -15,10 +15,7 @@ export const ARCHIVE_PRESETS = {
 } as const;
 export type ArchiveResult = { count: number; bytes: number };
 
-/** The next photo is not opened until the ZIP writer finishes the current entry.
- * Never collect the gallery in Buffers or push into an unbounded Web queue.
- * JPEGs are already compressed, so ZIP STORE avoids a second compression queue.
- */
+/** One source per completed ZIP entry, bounded byte queues, no recompression. */
 export function createPhotoArchive(
   photos: ArchivePhoto[],
   size: ArchiveSize,
@@ -83,8 +80,7 @@ export function createPhotoArchive(
         }
         await pumping;
       } else {
-        // Blob.stream() may yield the entire multi-MB file as one chunk.
-        // A high-water mark alone does not split oversized source chunks.
+        // Blob.stream() can yield an entire multi-MB photo in one chunk.
         for await (const chunk of input) {
           const bytes = Buffer.from(chunk);
           for (let offset = 0; offset < bytes.length; offset += ARCHIVE_BUFFER_BYTES) {
@@ -109,7 +105,7 @@ export function createPhotoArchive(
         current.on('error', fail);
         const written = once(archive, 'entry');
         const name = preset ? photo.filename.replace(/\.[^.]+$/, '') + preset.suffix + '.jpg' : photo.filename;
-        archive.append(current, { name: deliveryFilename(name, index, photos.length) });
+        archive.append(current, { name: deliveryFilename(name, photo.archiveIndex ?? index, photo.archiveTotal ?? photos.length) });
         await written;
         current = null;
       }
