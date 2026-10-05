@@ -10,9 +10,11 @@ export type QuoteLineItem = {
 /**
  * Compute a quote's line items from the selected product slugs + sqft, applying
  * Oceano Blue's bundling rules (PRICING.md):
- *  - Photography is sqft-tiered (price_for_sqft).
- *  - Drone stills and/or video is ONE charge (one trip): $100 with photos, $200
- *    standalone.
+ *  - Photography and cinematic video are sqft-tiered (price_for_sqft).
+ *  - Drone is ONE charge (one trip), priced from the catalog: stills or video
+ *    alone use the add-on price when booked with photos or video, otherwise the
+ *    standalone price; stills + video together use the Drone Photos + Video
+ *    bundle.
  *  - 3D Home + Floor Plan INCLUDES the floor plan; a separate floor plan then
  *    shows Included. 3D is $100 with photos, $200 standalone.
  *  - Matterport is a separate product, never bundled.
@@ -31,7 +33,7 @@ export async function computeQuoteItems(
     .select('id, slug, name, base_price_cents, standalone_price_cents')
     .in('slug', [
       'interior_exterior_photo', 'cinematic_video', 'social_reel', 'floor_plan',
-      'drone_photography', 'drone_video', 'three_d_floor_plan', 'matterport_3d',
+      'drone_photography', 'drone_video', 'drone_photos_video', 'three_d_floor_plan', 'matterport_3d',
       'same_day_delivery', 'twilight', 'virtual_tour', 'virtual_twilight', 'amenities',
     ]);
   const bySlug = new Map<string, any>((prods ?? []).map((p: any) => [p.slug, p]));
@@ -42,11 +44,11 @@ export async function computeQuoteItems(
     items.push({ slug, name, price_cents, complimentary });
 
   const hasPhotos = has('interior_exterior_photo');
+  const hasVideo = has('cinematic_video');
 
-  // Photography — sqft-tiered.
-  if (hasPhotos) {
-    const p = bySlug.get('interior_exterior_photo');
-    let price = base('interior_exterior_photo', 25000);
+  const tieredPrice = async (slug: string, fallback: number) => {
+    const p = bySlug.get(slug);
+    let price = base(slug, fallback);
     if (p) {
       const { data: tiered } = await (admin as any).rpc('price_for_sqft', {
         p_product_id: p.id,
@@ -54,17 +56,31 @@ export async function computeQuoteItems(
       });
       if (typeof tiered === 'number' && tiered > 0) price = tiered;
     }
-    add('interior_exterior_photo', p?.name ?? 'Interior/Exterior Photography', price);
+    return price;
+  };
+
+  // Photography and cinematic video — sqft-tiered.
+  if (hasPhotos) {
+    const price = await tieredPrice('interior_exterior_photo', 25000);
+    add('interior_exterior_photo', bySlug.get('interior_exterior_photo')?.name ?? 'Interior/Exterior Photography', price);
   }
 
-  if (has('cinematic_video')) add('cinematic_video', 'Cinematic Videography', base('cinematic_video', 55000));
+  if (hasVideo) add('cinematic_video', 'Cinematic Videography', await tieredPrice('cinematic_video', 55000));
   if (has('social_reel')) add('social_reel', 'Social Reel', base('social_reel', 12500));
 
-  // Drone: stills and/or video → one charge (one trip). Add-on vs standalone.
+  // Drone: stills and/or video → one charge (one trip).
   if (has('drone_photography') || has('drone_video')) {
     const both = has('drone_photography') && has('drone_video');
-    const name = both ? 'Drone Photos + Video' : has('drone_photography') ? 'Drone Photography' : 'Drone Video';
-    add('drone', name, hasPhotos ? 10000 : 20000);
+    if (both) {
+      add('drone', 'Drone Photos + Video', base('drone_photos_video', 30000));
+    } else {
+      const slug = has('drone_photography') ? 'drone_photography' : 'drone_video';
+      const p = bySlug.get(slug);
+      const withShoot = hasPhotos || hasVideo;
+      const price = withShoot ? base(slug, slug === 'drone_video' ? 20000 : 10000)
+        : p?.standalone_price_cents ?? (slug === 'drone_video' ? 25000 : 15000);
+      add('drone', slug === 'drone_video' ? 'Drone Video' : 'Drone Photography', price);
+    }
   }
 
   // 3D Home + Floor Plan — includes the floor plan.
