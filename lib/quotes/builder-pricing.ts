@@ -30,7 +30,7 @@ export const BUILDER_ADDONS: {
   slug: string; name: string; price_cents: number; qty?: boolean; unit?: string; videoOnly?: boolean;
 }[] = [
   { slug: 'drone_video', name: 'Drone video', price_cents: 10000, videoOnly: true },
-  { slug: 'social_cut', name: 'Additional vertical social cut', price_cents: 12500, qty: true, unit: 'cut' },
+  { slug: 'social_cut', name: 'Additional vertical social cut', price_cents: 20000, qty: true, unit: 'cut' },
   { slug: 'twilight', name: 'Twilight exterior set', price_cents: 6500 },
   { slug: 'tour_360', name: '360° tour, hosted 12 months', price_cents: 15000 },
   { slug: 'floor_plan', name: 'Interactive floor plan', price_cents: 9500 },
