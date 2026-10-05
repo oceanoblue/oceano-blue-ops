@@ -4,9 +4,9 @@ import { requireTeamMember } from '@/lib/auth/require-team-member';
 import { isDeliverable } from '@/lib/photos/deliverable';
 import { propertyMediaAllowed } from './property';
 export const loadProperty=cache(async(slug:string,preview:boolean)=>{
-  if(!/^[0-9a-f-]{36}$/i.test(slug))return null;
+  if(!/^[a-z0-9-]{3,120}$/i.test(slug))return null;
   const admin=createAdminClient({noStore:true}) as any;
-  const {data:site,error:siteError}=await admin.from('property_sites').select('*').eq('slug',slug).maybeSingle();
+  const {data:site,error:siteError}=await admin.from('property_sites').select('*').eq(/^[0-9a-f-]{36}$/i.test(slug)?'slug':'url_slug',slug).maybeSingle();
   if(siteError)throw new Error('Property website unavailable.');if(!site)return null;
   if(!site.is_published){if(!preview)return null;const gate=await requireTeamMember();if(gate.error)return null;}
   const {data:order,error:orderError}=await admin.from('orders').select('id,listing_id,status,total_cents,download_paid_at').eq('id',site.order_id).maybeSingle();
@@ -16,7 +16,8 @@ export const loadProperty=cache(async(slug:string,preview:boolean)=>{
     admin.from('photos').select('id,filename,bucket,storage_path,is_hdr,ai_provider').eq('order_id',order.id).eq('is_selected',true).in('kind',['processed','delivered']).order('sort_order').limit(100),
   ]);
   if(listingError||photoError)throw new Error('Property website unavailable.');
-  const finals=(photos||[]).filter(isDeliverable);
+  const ranks=new Map((site.photo_order||[]).map((id:string,i:number)=>[id,i]));
+  const finals=(photos||[]).filter(isDeliverable).sort((a:any,b:any)=>a.id===site.hero_photo_id?-1:b.id===site.hero_photo_id?1:Number(ranks.get(a.id)??1000)-Number(ranks.get(b.id)??1000));
   const images=await Promise.all(finals.map(async(p:any)=>{const {data,error}=await admin.storage.from(p.bucket).createSignedUrl(p.storage_path,900);if(error)throw new Error('Property photos unavailable.');return {id:p.id,url:data?.signedUrl,alt:p.filename.replace(/\.[^.]+$/,'')};}));
   return {site,listing,photos:images.filter(p=>p.url)};
 });

@@ -8,7 +8,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // redirect must not apply to them — otherwise a server POST gets 307-redirected
 // to /login and fails with 405.
 const PUBLIC_PATHS = [
-  '/', '/book', '/login', '/gallery', '/portal', '/property',
+  '/', '/book', '/login', '/gallery', '/portal', '/property', '/property-report', '/api/property-public',
   '/auth',             // magic-link / OAuth code-exchange callback — must be
                        // reachable BEFORE a session exists, or login can't complete.
   '/quote',            // shareable client quote pages (SSR, token-gated)
@@ -71,7 +71,10 @@ export async function proxy(request: NextRequest) {
 
   // Public routes don't require auth (unless they're a staff-only exception
   // that merely lives under a public prefix).
-  if (isPublic(pathname) && !staffOnlyException) return response;
+  if (isPublic(pathname) && !staffOnlyException) {
+    if(pathname.startsWith('/property-report/')) {response.headers.set('Cache-Control','private, no-store');response.headers.set('Referrer-Policy','no-referrer');response.headers.set('X-Robots-Tag','noindex, nofollow');}
+    return response;
+  }
 
   // Must be signed in.
   if (!user) {
