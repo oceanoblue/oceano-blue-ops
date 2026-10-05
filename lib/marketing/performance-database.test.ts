@@ -6,7 +6,7 @@ const order='00000000-0000-4000-8000-000000000001';
 beforeAll(async()=>{
  db=new PGlite();await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create table orders(id uuid primary key);insert into orders values('${order}');create function is_team_member() returns boolean language sql as $$select current_setting('test.staff',true)='yes'$$;create function set_updated_at() returns trigger language plpgsql as $$begin new.updated_at=now();return new;end;$$;`);
  await db.exec(readFileSync('supabase/migrations/20260920232447_property_marketing_sites.sql','utf8'));
- await db.exec(readFileSync('supabase/migrations/20261005182949_property_performance.sql','utf8'));
+ await db.exec(readFileSync('supabase/migrations/20261005184356_property_performance.sql','utf8'));
  await db.exec(`insert into property_sites(order_id,headline) values('${order}','Property');insert into property_events(id,order_id,session_id,event,source) values(gen_random_uuid(),'${order}','${order}','page_view','instagram'),(gen_random_uuid(),'${order}','${order}','phone_click','instagram');insert into property_inquiries(id,order_id,name,email,message,source) values(gen_random_uuid(),'${order}','Buyer','buyer@example.test','Hello','instagram');`);
 },30000);
 afterAll(async()=>{await db.close();});
