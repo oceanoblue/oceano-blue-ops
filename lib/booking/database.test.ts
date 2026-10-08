@@ -52,6 +52,10 @@ beforeAll(async () => {
   await db.exec(readFileSync('supabase/migrations/20260923104656_manual_assignment_review.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20260923105506_calendar_role_keys.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20260923110950_preserve_accepted_shorter_visits.sql','utf8'));
+  await db.exec(`alter table orders add column delivered_at timestamptz;
+    create table delivery_links(id uuid primary key default gen_random_uuid(),order_id uuid references orders(id) on delete cascade,token text unique,created_by uuid,expires_at timestamptz,created_at timestamptz default now());`);
+  await db.exec(readFileSync('supabase/migrations/20260917111545_client_gallery_delivery.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261008112200_allow_delivery_status_without_rescheduling.sql','utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -69,6 +73,43 @@ beforeEach(async () => {
 async function book(body = payload, key = requestId, bodyHash = hash) {
   return db.query<{id: string}>('select commit_public_booking($1::jsonb,$2::uuid,$3) as id',[JSON.stringify(body),key,bodyHash]);
 }
+
+describe('delivery completion with an existing travel-buffer conflict', () => {
+  const first='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', second='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const listing='cccccccc-cccc-4ccc-8ccc-cccccccccccc', dispatch='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  beforeEach(async()=>{
+    await db.exec(`insert into listings(id,status) values('${listing}','review');
+      begin; set local app.allow_double_book='on';
+      insert into orders(id,listing_id,status,scheduled_at,duration_minutes,photographer_id)
+      values('${first}','${listing}','booked','2026-01-01 15:00Z',60,'${photographer}'),
+            ('${second}','${listing}','scheduled','2026-01-01 16:00Z',60,'${photographer}');
+      commit;`);
+  });
+  it.each([1,3])('finalizes an accepted %i-recipient delivery without changing recipients or creating a new send',async(count)=>{
+    const recipients=Array.from({length:count},(_,i)=>({channel:'email',to:`member${i}@example.test`,status:'accepted',provider_id:`accepted-${i}`}));
+    await db.query(`insert into gallery_dispatches(id,order_id,created_by,fingerprint,status,recipients)
+      values($1,$2,$3,'already-sent','sending',$4::jsonb)`,[dispatch,second,photographer,JSON.stringify(recipients)]);
+    const complete=()=>db.query<{status:string}>(`select (finish_gallery_dispatch($1)).status`,[dispatch]);
+    expect((await complete()).rows).toEqual([{status:'sent'}]);
+    expect((await complete()).rows).toEqual([{status:'sent'}]);
+    expect((await db.query('select status from orders where id=$1',[second])).rows).toEqual([{status:'delivered'}]);
+    expect((await db.query('select status from listings where id=$1',[listing])).rows).toEqual([{status:'delivered'}]);
+    expect((await db.query('select recipients from gallery_dispatches')).rows).toEqual([{recipients}]);
+  });
+  it('still rejects new overlaps and schedule changes combined with delivery',async()=>{
+    await expect(db.query(`insert into orders(id,status,scheduled_at,duration_minutes,photographer_id)
+      values(gen_random_uuid(),'booked','2026-01-01 15:30Z',60,$1)`,[photographer])).rejects.toThrow('slot_unavailable');
+    await expect(db.query(`update orders set scheduled_at=scheduled_at+interval '5 minutes',status='delivered' where id=$1`,[second])).rejects.toThrow('slot_unavailable');
+  });
+  it.each(['draft','cancelled'])('still checks conflicts when reactivating a %s order',async(status)=>{
+    await db.query('update orders set status=$1 where id=$2',[status,second]);
+    await expect(db.query(`update orders set status='booked' where id=$1`,[second])).rejects.toThrow('slot_unavailable');
+  });
+  it('still checks a crew change combined with delivery',async()=>{
+    await db.query('update orders set photographer_id=null where id=$1',[second]);
+    await expect(db.query(`update orders set photographer_id=$1,status='delivered' where id=$2`,[photographer,second])).rejects.toThrow('slot_unavailable');
+  });
+});
 
 describe('public booking transaction', () => {
   it('commits one booking and each independent follow-up, and returns the same booking on replay', async () => {
