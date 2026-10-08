@@ -11,7 +11,10 @@
 export type Fields = Record<string, unknown>;
 
 export function captureError(scope: string, err: unknown, context: Fields = {}): void {
-  const message = err instanceof Error ? err.message : String(err);
+  // Supabase/PostgREST errors are plain objects, not Error instances.
+  const record = err && typeof err === 'object' ? err as Record<string, unknown> : null;
+  const message = err instanceof Error ? err.message : typeof record?.message === 'string' ? record.message : String(err);
+  const code = typeof record?.code === 'string' ? record.code : undefined;
   const stack = err instanceof Error ? err.stack : undefined;
   try {
     console.error(
@@ -19,6 +22,7 @@ export function captureError(scope: string, err: unknown, context: Fields = {}):
         level: 'error',
         scope,
         message,
+        code,
         ...context,
         stack,
         ts: new Date().toISOString(),

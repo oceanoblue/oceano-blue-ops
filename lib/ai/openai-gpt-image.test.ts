@@ -57,3 +57,17 @@ it('runs the chosen Flare model and retains lossless output with surface protect
   expect(result.outputs[0].mimeType).toBe('image/png');
   expect(result.provenance?.outputFormat).toBe('png');
 });
+
+it('normalizes oversized files before submitting a paid edit and records the actual input hash', async () => {
+  const { createHash } = await import('node:crypto');
+  const req = request();
+  req.inputs[0].bytes = Buffer.concat([source, Buffer.alloc(50_000_001)]);
+  const result = await openaiGptImage.process(req);
+  const file = mocks.edit.mock.calls[0][0].image as File;
+  expect(file.size).toBeLessThan(49_000_000);
+  expect(file.type).toBe('image/png');
+  expect(file.name).toBe('portrait.png');
+  const uploaded = Buffer.from(await file.arrayBuffer());
+  expect(result.provenance?.inputSha256).toEqual([createHash('sha256').update(uploaded).digest('hex')]);
+  expect(mocks.edit).toHaveBeenCalledTimes(1);
+});
