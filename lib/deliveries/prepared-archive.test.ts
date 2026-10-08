@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
-import { preparePhotoArchive, ZipAudit } from './prepared-archive';
+import { preparePhotoArchive, preparedArchiveResponse, STORAGE_BLOCK_BYTES, ZipAudit } from './prepared-archive';
 
 function storage() {
   const objects = new Map<string, Buffer>();
@@ -9,7 +9,8 @@ function storage() {
   const signed = vi.fn(async (path: string) => ({ data: { signedUrl: `https://storage.test/${path}` }, error: null }));
   const upload = vi.fn(async (bucket: string, path: string, body: any) => {
     const chunks: Buffer[] = [];
-    if (typeof body === 'string') chunks.push(Buffer.from(body));
+    if (Buffer.isBuffer(body)) chunks.push(body);
+    else if (typeof body === 'string') chunks.push(Buffer.from(body));
     else for await (const chunk of body) chunks.push(Buffer.from(chunk));
     let bytes = Buffer.concat(chunks);
     if (corrupt && path.endsWith('.zip')) bytes = bytes.subarray(0, bytes.length - 22);
@@ -68,7 +69,7 @@ function extract(zip: Buffer) {
 }
 
 describe('prepared private photo archives', () => {
-  it('reads back the stored ZIP, verifies every byte, then signs it; cached retries do not rebuild', async () => {
+  it('reads back the stored ZIP, verifies every byte, before serving it; cached retries do not rebuild', async () => {
     const s = storage();
     const original = Buffer.from('original file bytes');
     s.objects.set('processed-photos/master.jpg', original);
@@ -79,10 +80,10 @@ describe('prepared private photo archives', () => {
     expect(ready.bytes).toBe(bytes.length);
     expect(ready.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
     expect(extract(bytes)[0].bytes.equals(original)).toBe(true);
-    expect(s.signed).toHaveBeenCalledTimes(1);
+    expect(s.signed).not.toHaveBeenCalled();
     await preparePhotoArchive(s.client, s.photos, 'order-a', 'full', 'photos.zip');
     expect(s.upload).toHaveBeenCalledTimes(2); // One ZIP and one small manifest.
-    expect(s.signed).toHaveBeenCalledTimes(2);
+    expect(s.signed).not.toHaveBeenCalled();
   });
 
   it('extracts and validates every web JPEG from a multi-photo stored archive', async () => {
@@ -122,7 +123,29 @@ describe('prepared private photo archives', () => {
     s.objects.set('processed-photos/master.jpg', Buffer.from('replacement'));
     const b = await preparePhotoArchive(s.client, [{ ...s.photos[0], updated_at: '2026-01-02' }], 'order-e', 'full', 'photos.zip');
     expect(a.sha256).not.toBe(b.sha256);
-    expect(a.downloadUrl).not.toBe(b.downloadUrl);
+    expect(a.archiveKey).not.toBe(b.archiveKey);
+  });
+
+  it('reassembles storage blocks into one ZIP and resumes across block boundaries', async () => {
+    const s = storage();
+    const original = Buffer.alloc(STORAGE_BLOCK_BYTES + 1024, 71);
+    s.objects.set('processed-photos/master.jpg', original);
+    const ready = await preparePhotoArchive(s.client, s.photos, 'large', 'full', 'photos.zip');
+    const url = `https://app.test/download?archive=${ready.archiveKey}`;
+    const response = await preparedArchiveResponse(s.client, s.photos, 'large', 'full', 'photos.zip', new Request(url));
+    expect(response.status).toBe(200);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    expect(bytes.length).toBe(ready.bytes);
+    expect(extract(bytes)[0].bytes.equals(original)).toBe(true);
+    const range = await preparedArchiveResponse(s.client, s.photos, 'large', 'full', 'photos.zip', new Request(url, { headers: { range: `bytes=${STORAGE_BLOCK_BYTES - 100}-${STORAGE_BLOCK_BYTES + 100}` } }));
+    expect(range.status).toBe(206);
+    expect(Buffer.from(await range.arrayBuffer())).toEqual(bytes.subarray(STORAGE_BLOCK_BYTES - 100, STORAGE_BLOCK_BYTES + 101));
+    const suffix = await preparedArchiveResponse(s.client, s.photos, 'large', 'full', 'photos.zip', new Request(url, { headers: { range: 'bytes=-22' } }));
+    expect(Buffer.from(await suffix.arrayBuffer())).toEqual(bytes.subarray(-22));
+    const stale = await preparedArchiveResponse(s.client, [{ ...s.photos[0], updated_at: 'changed' }], 'large', 'full', 'photos.zip', new Request(url));
+    expect(stale.status).toBe(409);
+    const invalid = await preparedArchiveResponse(s.client, s.photos, 'large', 'full', 'photos.zip', new Request(url, { headers: { range: 'bytes=999999999-' } }));
+    expect(invalid.status).toBe(416);
   });
 
   it('rejects bytes with no complete ZIP directory', () => {

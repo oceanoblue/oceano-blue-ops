@@ -9,7 +9,7 @@ import { groupByRoom, roomLabel } from '@/lib/photos/rooms';
 import { MediaRoom, type DeliverableView } from '@/components/portal/MediaRoom';
 import { MarketingLinks } from '@/components/marketing/MarketingLinks';
 import { RevisionRequests } from '@/components/gallery/RevisionRequests';
-import { PhotoDownloadControls, type DeliverySize } from '@/components/gallery/PhotoDownloadControls';
+import { PhotoDownloadControls } from '@/components/gallery/PhotoDownloadControls';
 
 const money = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -43,7 +43,6 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
   const [data, setData] = useState<GalleryData | null>(initialData ?? null);
   const [err, setErr] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null);
-  const [size, setSize] = useState<DeliverySize>('full');
   // Default to the single "all photos" grid; clients can switch to the
   // room-organized view via the toggle. (Grouping only appears when photos have
   // been classified — hasRooms gates the grouped render below.)
@@ -257,7 +256,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
             {locked ? (
               <UnlockButton />
             ) : data.photos.length > 0 ? (
-              <PhotoDownloadControls token={token} photoCount={data.photos.length} value={size} onChange={setSize} demo={demo} />
+              <PhotoDownloadControls token={token} photoCount={data.photos.length} demo={demo} />
             ) : null}
           </div>
         </div>

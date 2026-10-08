@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 import { deliveryFilename } from '@/lib/photos/order';
 
+export const MLS_MAX_BYTES = 2_000_000;
 export const ARCHIVE_BUFFER_BYTES = 64 * 1024;
 export type ArchiveSize = 'full' | '4k' | 'print' | 'web';
 export type ArchivePhoto = { id?: string; filename: string; bucket: string; storage_path: string; updated_at?: string | null; archiveIndex?: number; archiveTotal?: number };
@@ -65,7 +66,24 @@ export function createPhotoArchive(
     if (signal?.aborted || archive.destroyed) throw new Error('Photo download was cancelled.');
     input = Readable.fromWeb(blob.stream() as import('node:stream/web').ReadableStream<Uint8Array>, { highWaterMark: ARCHIVE_BUFFER_BYTES });
     try {
-      if (preset) {
+      if (size === 'web') {
+        // Bound memory to one photo; never keep a gallery of decoded images.
+        const source = Buffer.from(await blob.arrayBuffer());
+        let output: Buffer | undefined;
+        for (const longEdge of [2048, 1600, 1200]) {
+          for (const quality of [85, 75, 65]) {
+            output = await sharp(source, { sequentialRead: true, limitInputPixels: 100_000_000 })
+              .rotate().resize({ width: longEdge, height: longEdge, fit: 'inside', withoutEnlargement: true })
+              .jpeg({ quality }).toBuffer();
+            if (output.length < MLS_MAX_BYTES) break;
+          }
+          if (output!.length < MLS_MAX_BYTES) break;
+        }
+        if (!output || output.length >= MLS_MAX_BYTES) throw new Error('A photo could not be sized for MLS.');
+        for (let offset = 0; offset < output.length; offset += ARCHIVE_BUFFER_BYTES) {
+          yield output.subarray(offset, offset + ARCHIVE_BUFFER_BYTES);
+        }
+      } else if (preset) {
         transform = sharp({ sequentialRead: true, limitInputPixels: 100_000_000 })
           .rotate()
           .resize({ width: preset.longEdge, height: preset.longEdge, fit: 'inside', withoutEnlargement: true })
