@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { randomBytes } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { GET as download } from '@/app/api/delivery/[token]/download/route';
@@ -86,5 +87,29 @@ it.each(['full', 'print', 'web'] as const)('still refuses unpaid %s downloads', 
   rows.orders.download_paid_at = null;
   const response = await download(new Request(`https://example.test${photoDownloadUrl('test-token', size)}`), params);
   expect(response.status).toBe(402);
+  expect(storageDownload).not.toHaveBeenCalled();
+});
+
+it('reduces an oversized detailed image to an MLS JPEG below 2 MB', async () => {
+  const original = await sharp(randomBytes(2400 * 2400 * 3), { raw: { width: 2400, height: 2400, channels: 3 } }).png().toBuffer();
+  expect(original.length).toBeGreaterThan(15_000_000);
+  storageDownload.mockResolvedValue({ data: new Blob([new Uint8Array(original)]) });
+  const response = await download(new Request('https://example.test/api/delivery/test-token/download?size=web'), params);
+  const file = firstFile(Buffer.from(await response.arrayBuffer()));
+  expect(file.bytes.length).toBeLessThan(2_000_000);
+  const meta = await sharp(file.bytes).metadata();
+  expect(meta.format).toBe('jpeg');
+  expect(meta.width).toBeLessThanOrEqual(2048);
+});
+
+it.each(['prepare=1', 'archive=any-key'])('rechecks payment before %s', async query => {
+  rows.orders.download_paid_at = null;
+  expect((await download(new Request(`https://example.test/api/delivery/test-token/download?${query}`), params)).status).toBe(402);
+  expect(storageDownload).not.toHaveBeenCalled();
+});
+
+it.each(['prepare=1', 'archive=any-key'])('rechecks token expiry before %s', async query => {
+  rows.delivery_links.expires_at = '2020-01-01';
+  expect((await download(new Request(`https://example.test/api/delivery/test-token/download?${query}`), params)).status).toBe(410);
   expect(storageDownload).not.toHaveBeenCalled();
 });

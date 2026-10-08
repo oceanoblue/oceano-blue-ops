@@ -1,9 +1,10 @@
+import { PhotoDownloadControls } from '@/components/gallery/PhotoDownloadControls';
 import { signDeliverableFile } from '@/lib/deliverables/files';
 import { RescheduleAppointment } from '@/components/portal/RescheduleAppointment';
 import { rescheduleEligibility } from '@/lib/booking/reschedule';
 import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
-import { Download, ImageOff } from 'lucide-react';
+import { ImageOff } from 'lucide-react';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { fmtAddress, STATUS_LABEL } from '@/lib/utils/format';
 import { ClientGalleryGrid } from '@/components/gallery/ClientGalleryGrid';
@@ -127,13 +128,7 @@ export default async function ClientListingDetail(props: { params: Promise<{ id:
       >
         {latest && (latest.assignment_state && latest.assignment_state!=='confirmed' ? <span className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{latest.assignment_state==='needs_attention'?'Our team is arranging your photographer':'Time reserved · awaiting photographer confirmation'}</span> : <StatusBadge status={latest.status} />)}
         {signed.length > 0 && (
-          <Link
-            href={`/api/portal/zip?listing_id=${l.id}`}
-            prefetch={false}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-sm font-medium text-ink-900 shadow-soft transition hover:-translate-y-px hover:shadow-lift"
-          >
-            <Download className="h-4 w-4" /> Download all
-          </Link>
+          <PhotoDownloadControls endpoint={`/api/portal/zip?listing_id=${l.id}`} photoCount={signed.length} />
         )}
       </PortalHero>
 

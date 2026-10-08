@@ -2,8 +2,8 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { isDeliverable } from '@/lib/photos/deliverable';
 import { paywallFor } from '@/lib/payments/gate';
 import { createPhotoArchive, archiveWebStream, ARCHIVE_PRESETS, type ArchiveSize } from '@/lib/deliveries/photo-archive';
-import { ArchiveBusyError } from '@/lib/deliveries/prepared-archive';
-import { prepareArchiveSet } from '@/lib/deliveries/archive-set';
+import { ArchiveBusyError, preparedArchiveResponse } from '@/lib/deliveries/prepared-archive';
+import { prepareArchiveSet, archiveSources } from '@/lib/deliveries/archive-set';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -36,10 +36,15 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
   if (!downloadable.length) return new Response('No delivered photos are available.', { status: 422 });
   const filename = `oceanoblue-${token}${preset ? preset.suffix : ''}.zip`;
 
+  if (query.has('archive')) return preparedArchiveResponse(supabase, archiveSources(downloadable), link.order_id, archiveSize, filename, req);
+
   if (query.get('prepare') === '1') {
     try {
       const ready = await prepareArchiveSet(supabase, downloadable, link.order_id, archiveSize, filename);
-      return Response.json(ready, { headers: { 'cache-control': 'no-store' } });
+      const url = new URL(req.url);
+      url.searchParams.delete('prepare');
+      url.searchParams.set('archive', ready.archiveKey);
+      return Response.json({ ...ready, downloadUrl: url.toString() }, { headers: { 'cache-control': 'no-store' } });
     } catch (cause) {
       const busy = cause instanceof ArchiveBusyError;
       console.error(JSON.stringify({ scope: 'gallery.archive', event: 'failed', size, busy }));
