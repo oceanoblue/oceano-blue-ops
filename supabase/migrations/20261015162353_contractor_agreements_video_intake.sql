@@ -8,7 +8,7 @@ create table public.contractor_agreements (
   template_version text not null default '2026-10-15.1',
   body_text text not null check (length(body_text) between 100 and 50000),
   esign_consent text not null,
-  document_hash text generated always as (encode(sha256(convert_to('Oceano Blue contractor agreement' || E'\n' || template_version || E'\n' || company_legal_name || E'\n' || contractor_legal_name || E'\n' || contractor_email || E'\n' || esign_consent || E'\n' || body_text, 'UTF8')), 'hex')) stored,
+  document_hash text not null check (length(document_hash)=64),
   status text not null default 'draft' check (status in ('draft','issued','executed','void')),
   company_signature jsonb,
   contractor_signature jsonb,
@@ -20,6 +20,15 @@ create table public.contractor_agreements (
   check (status not in ('issued','executed') or company_signature is not null),
   check ((status = 'executed') = (contractor_signature is not null))
 );
+-- PostgreSQL convert_to is STABLE; compute the fingerprint in a trigger.
+create function public.fingerprint_contractor_agreement() returns trigger language plpgsql security invoker set search_path=pg_catalog,public as $$
+begin
+  new.document_hash = encode(sha256(convert_to('Oceano Blue contractor agreement' || E'\n' || new.template_version || E'\n' || new.company_legal_name || E'\n' || new.contractor_legal_name || E'\n' || new.contractor_email || E'\n' || new.esign_consent || E'\n' || new.body_text, 'UTF8')), 'hex');
+  return new;
+end $$;
+revoke all on function public.fingerprint_contractor_agreement() from public;
+create trigger contractor_agreement_fingerprint before insert or update on public.contractor_agreements for each row execute function public.fingerprint_contractor_agreement();
+
 create index contractor_agreements_owner_idx on public.contractor_agreements(contractor_id,created_at desc);
 
 create table public.contractor_agreement_events (
@@ -97,7 +106,7 @@ alter table public.contractor_video_intakes enable row level security;
 alter table public.contractor_video_intake_events enable row level security;
 
 create policy agreement_read on public.contractor_agreements for select to authenticated using (
-  contractor_id = public.current_contractor_id() or exists(select 1 from public.team_members t where t.id=(select auth.uid()) and t.is_active and t.role::text='admin')
+  (status <> 'draft' and contractor_id = public.current_contractor_id()) or exists(select 1 from public.team_members t where t.id=(select auth.uid()) and t.is_active and t.role::text='admin')
 );
 create policy agreement_event_read on public.contractor_agreement_events for select to authenticated using (
   exists(select 1 from public.contractor_agreements a where a.id=agreement_id)
