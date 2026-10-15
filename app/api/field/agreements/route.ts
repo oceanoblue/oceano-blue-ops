@@ -34,7 +34,7 @@ export async function GET(req:Request) {
       return NextResponse.json({agreement,events:events??[],admin:actor.admin},{headers:{'Cache-Control':'private, no-store'}});
     }
     let q=db.from('contractor_agreements').select('*').order('created_at',{ascending:false}).limit(40);
-    if(!actor.admin) q=q.eq('contractor_id',actor.contractorId);
+    if(!actor.admin) q=q.eq('contractor_id',actor.contractorId).neq('status','draft');
     const before=url.searchParams.get('before');
     if(before) {if(!z.string().datetime({offset:true}).safeParse(before).success) throw new WorkError('Invalid page.');q=q.lt('created_at',before);}
     const {data:items,error}=await q;
