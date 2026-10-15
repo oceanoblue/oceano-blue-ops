@@ -4,101 +4,31 @@ import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ContractorRoster, type ContractorRow } from '@/components/contractors/ContractorRoster';
 import { PayRequestsPanel, type PendingPayRequest } from '@/components/contractors/PayRequestsPanel';
-
+import { ContractorWorkLinks } from '@/components/contractors/ContractorWorkLinks';
 export const dynamic = 'force-dynamic';
-
-// A shoot counts toward pay once the RAWs are in (uploaded) and onward.
 const PAYABLE = new Set(['uploaded', 'processing', 'editing', 'ready', 'delivered']);
-
 export default async function ContractorsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-
-  // Office-only page: a contractor who lands here is redirected to their portal.
-  const { data: teamRow } = await supabase
-    .from('team_members')
-    .select('id')
-    .eq('id', user.id)
-    .maybeSingle();
+  const { data: teamRow } = await supabase.from('team_members').select('id,role,is_active').eq('id', user.id).maybeSingle();
   if (!teamRow) redirect('/field/shoots');
-
   const [{ data: contractors }, { data: orders }, { data: pendingRequests }] = await Promise.all([
-    supabase
-      .from('contractors')
-      .select('id, full_name, email, phone, pay_rate_small_cents, pay_rate_large_cents, pay_rate_360_cents, payout_method, payout_details, is_active, auth_user_id')
-      .order('full_name', { ascending: true }),
-    supabase
-      .from('orders')
-      .select('contractor_id, status, pay_status, pay_amount_cents, created_at')
-      .not('contractor_id', 'is', null),
-    supabase
-      .from('pay_requests')
-      .select('id, period_start, period_end, shoot_count, total_cents, notes, payout_method, payout_details, created_at, contractors(full_name, email)')
-      .eq('status', 'submitted')
-      .order('created_at', { ascending: true }),
+    supabase.from('contractors').select('id, full_name, email, phone, pay_rate_small_cents, pay_rate_large_cents, pay_rate_360_cents, payout_method, payout_details, is_active, auth_user_id').order('full_name', { ascending: true }),
+    supabase.from('orders').select('contractor_id, status, pay_status, pay_amount_cents, created_at').not('contractor_id', 'is', null),
+    supabase.from('pay_requests').select('id, period_start, period_end, shoot_count, total_cents, notes, payout_method, payout_details, created_at, contractors(full_name, email)').eq('status', 'submitted').order('created_at', { ascending: true }),
   ]);
-
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-
   const byContractor = new Map<string, any[]>();
-  (orders ?? []).forEach((o: any) => {
-    const arr = byContractor.get(o.contractor_id) ?? [];
-    arr.push(o);
-    byContractor.set(o.contractor_id, arr);
-  });
-
+  (orders ?? []).forEach((o: any) => { const arr = byContractor.get(o.contractor_id) ?? []; arr.push(o); byContractor.set(o.contractor_id, arr); });
   const rows: ContractorRow[] = (contractors ?? []).map((c: any) => {
     const os = byContractor.get(c.id) ?? [];
     const payable = os.filter((o) => PAYABLE.has(o.status));
     const thisMonth = payable.filter((o) => new Date(o.created_at).getTime() >= monthStart).length;
     const unpaid = payable.filter((o) => o.pay_status === 'unpaid');
-    return {
-      id: c.id,
-      full_name: c.full_name,
-      email: c.email,
-      phone: c.phone,
-      pay_rate_small_cents: c.pay_rate_small_cents,
-      pay_rate_large_cents: c.pay_rate_large_cents,
-      pay_rate_360_cents: c.pay_rate_360_cents,
-      payout_method: c.payout_method,
-      payout_details: c.payout_details,
-      is_active: c.is_active,
-      linked: Boolean(c.auth_user_id),
-      total: payable.length,
-      thisMonth,
-      unpaidCount: unpaid.length,
-      owedCents: unpaid.reduce((s, o) => s + (o.pay_amount_cents ?? 0), 0),
-    };
+    return { id: c.id, full_name: c.full_name, email: c.email, phone: c.phone, pay_rate_small_cents: c.pay_rate_small_cents, pay_rate_large_cents: c.pay_rate_large_cents, pay_rate_360_cents: c.pay_rate_360_cents, payout_method: c.payout_method, payout_details: c.payout_details, is_active: c.is_active, linked: Boolean(c.auth_user_id), total: payable.length, thisMonth, unpaidCount: unpaid.length, owedCents: unpaid.reduce((s, o) => s + (o.pay_amount_cents ?? 0), 0) };
   });
-
-  const requests: PendingPayRequest[] = (pendingRequests ?? []).map((r: any) => ({
-    id: r.id,
-    contractorName: r.contractors?.full_name ?? 'Unknown',
-    contractorEmail: r.contractors?.email ?? '',
-    periodStart: r.period_start,
-    periodEnd: r.period_end,
-    shootCount: r.shoot_count,
-    totalCents: r.total_cents,
-    notes: r.notes,
-    payoutMethod: r.payout_method,
-    payoutDetails: r.payout_details,
-    submittedAt: r.created_at,
-  }));
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Library"
-        icon={Camera}
-        title="Contractors"
-        subtitle="Your 1099 contractor photographers — properties shot and pay owed. They log shoots and upload RAWs from the field portal."
-      />
-      <PayRequestsPanel requests={requests} />
-      <ContractorRoster rows={rows} />
-    </div>
-  );
+  const requests: PendingPayRequest[] = (pendingRequests ?? []).map((r: any) => ({ id: r.id, contractorName: r.contractors?.full_name ?? 'Unknown', contractorEmail: r.contractors?.email ?? '', periodStart: r.period_start, periodEnd: r.period_end, shootCount: r.shoot_count, totalCents: r.total_cents, notes: r.notes, payoutMethod: r.payout_method, payoutDetails: r.payout_details, submittedAt: r.created_at }));
+  return <div className="space-y-6"><PageHeader eyebrow="Library" icon={Camera} title="Contractors" subtitle="Your contractor roster, photo-shoot pay requests, master agreements and separate video handoffs."/>{teamRow.role==='admin'&&teamRow.is_active&&<ContractorWorkLinks/>}<PayRequestsPanel requests={requests}/><ContractorRoster rows={rows}/></div>;
 }
