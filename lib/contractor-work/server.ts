@@ -24,7 +24,7 @@ export async function workActor(): Promise<WorkActor> {
 export function requireAdmin(a:WorkActor):void { if(!a.admin) throw new WorkError('Office administrator access is required.',403); }
 export async function ownAgreement(actor:WorkActor,id:string):Promise<ContractorAgreement> {
   let q=workDb().from('contractor_agreements').select('*').eq('id',id);
-  if(!actor.admin) q=q.eq('contractor_id',actor.contractorId??'00000000-0000-0000-0000-000000000000');
+  if(!actor.admin) q=q.eq('contractor_id',actor.contractorId??'00000000-0000-0000-0000-000000000000').neq('status','draft');
   const {data,error}=await q.maybeSingle();
   if(error) throw new WorkError('Agreements are temporarily unavailable.',503);
   if(!data) throw new WorkError('Agreement not found.',404);
