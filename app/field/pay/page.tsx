@@ -1,3 +1,6 @@
+import Link from 'next/link';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { hourlyMoney } from '@/lib/contractor-work/hourly';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { PortalHero } from '@/components/portal/PortalHero';
@@ -27,7 +30,7 @@ export default async function FieldPayPage() {
   // All scoped to the signed-in contractor via the field_orders view (0070) —
   // pay_amount_cents is the contractor's OWN pay; the client price is not on
   // the view at all. `listing` is a nested object.
-  const [{ data: eligible }, { count: awaitingUpload }, { data: requests }] = await Promise.all([
+  const [{ data: eligible }, { count: awaitingUpload }, { data: requests }, hourlyBalance] = await Promise.all([
     supabase
       .from('field_orders')
       .select('id, status, created_at, scheduled_at, pay_amount_cents, listing')
@@ -46,6 +49,7 @@ export default async function FieldPayPage() {
       .select('id, period_start, period_end, status, shoot_count, total_cents, notes, paid_note, paid_at, created_at')
       .order('created_at', { ascending: false })
       .limit(20),
+    (supabase as unknown as SupabaseClient).from('contractor_hourly_balances').select('owed_cents,unpaid_count').eq('contractor_id', me.id).maybeSingle(),
   ]);
 
   const shoots: EligibleShoot[] = (eligible ?? []).map((o: any) => ({
@@ -68,6 +72,11 @@ export default async function FieldPayPage() {
       </PortalHero>
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
         <PayoutMethodCard method={me.payout_method} details={me.payout_details} />
+        <Link href="/field/hourly" className="card block p-5">
+          <h2 className="font-semibold">Hourly event pay</h2>
+          <p className="mt-1 text-sm text-slate-600">{hourlyBalance.error ? 'Hourly balance is temporarily unavailable. Open hourly work to retry.' : `${hourlyMoney(Number(hourlyBalance.data?.owed_cents ?? 0))} approved and unpaid · ${hourlyBalance.data?.unpaid_count ?? 0} assignments`}</p>
+          <p className="mt-2 text-sm text-ocean-600">Submit hours, review approvals & view payment history →</p>
+        </Link>
         <PayRequestForm
           shoots={shoots}
           awaitingUploadCount={awaitingUpload ?? 0}
