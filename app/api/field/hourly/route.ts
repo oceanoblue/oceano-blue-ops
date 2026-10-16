@@ -13,9 +13,9 @@ export async function GET(req: Request) {
     const db = workDb();
     const url = new URL(req.url), wanted = url.searchParams.get('id');
     if (wanted) {
+      if (!actor.admin) throw new WorkError('Office administrator access is required.', 403);
       if (!z.string().uuid().safeParse(wanted).success) throw new WorkError('Invalid assignment.');
-      let query = db.from('contractor_hourly_assignments').select('id').eq('id', wanted);
-      if (!actor.admin) query = query.eq('contractor_id', actor.contractorId);
+      const query = db.from('contractor_hourly_assignments').select('id').eq('id', wanted);
       const { data, error } = await query.maybeSingle();
       if (error) throw new WorkError('Hourly work is temporarily unavailable.', 503);
       if (!data) throw new WorkError('Assignment not found.', 404);
