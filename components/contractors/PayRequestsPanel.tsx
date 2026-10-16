@@ -1,5 +1,7 @@
 'use client';
 
+import { PaymentBreakdown } from './PaymentBreakdown';
+import type { PaymentLine } from '@/lib/contractor-work/payment-ledger';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, DollarSign, CheckCircle2, Wallet } from 'lucide-react';
@@ -7,6 +9,7 @@ import { fmtCents, fmtDate } from '@/lib/utils/format';
 import { payoutLabel } from '@/components/field/PayoutMethodCard';
 
 export type PendingPayRequest = {
+  items: PaymentLine[];
   id: string;
   contractorName: string;
   contractorEmail: string;
@@ -110,6 +113,10 @@ export function PayRequestsPanel({ requests }: { requests: PendingPayRequest[] }
                 {noteFor === r.id ? 'Confirm paid' : 'Mark paid'}
               </button>
             </div>
+            <details className="mt-3" open>
+              <summary className="mb-2 cursor-pointer text-xs font-medium text-ocean-700">Shoots included in this request ({r.items.length})</summary>
+              <PaymentBreakdown items={r.items} filterable={false}/>
+            </details>
             {noteFor === r.id && (
               <div className="mt-2 flex items-center gap-2">
                 <input

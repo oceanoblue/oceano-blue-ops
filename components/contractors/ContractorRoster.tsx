@@ -1,12 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import { PaymentBreakdown } from './PaymentBreakdown';
+import type { PaymentLine } from '@/lib/contractor-work/payment-ledger';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, UserPlus, Check, DollarSign, Pencil, Trash2, Power } from 'lucide-react';
 import { payoutLabel } from '@/components/field/PayoutMethodCard';
 
 export type ContractorRow = {
+  paymentItems: PaymentLine[];
   id: string;
   full_name: string;
   email: string;
@@ -248,6 +251,7 @@ function Row({
     x360: (c.pay_rate_360_cents / 100).toString(),
   });
   const [editing, setEditing] = useState(false);
+  const [showPayments, setShowPayments] = useState(c.unpaidCount > 0 || (c.hourlyUnpaidCount ?? 0) > 0);
   const [contact, setContact] = useState({ full_name: c.full_name, email: c.email, phone: c.phone ?? '' });
   const dirty =
     Math.round(Number(rates.small) * 100) !== c.pay_rate_small_cents ||
@@ -287,6 +291,9 @@ function Row({
               {c.payout_details ? ` · ${c.payout_details}` : ''}
             </div>
           )}
+          <button type="button" className="mt-2 text-xs font-medium text-ocean-700 hover:underline" aria-expanded={showPayments} aria-controls={`payments-${c.id}`} onClick={() => setShowPayments(v => !v)}>
+            {showPayments ? 'Hide shoots & payments' : 'View shoots & payments'}
+          </button>
           {!c.linked && c.is_active && <div className="text-xs text-amber-600">Hasn’t signed in yet</div>}
         </td>
         <td className="px-4 py-3">
@@ -380,6 +387,14 @@ function Row({
           </div>
         </td>
       </tr>
+      {showPayments && <tr className="border-b border-slate-100 bg-slate-50/60">
+        <td colSpan={6} className="px-4 py-4">
+          <div id={`payments-${c.id}`} className="max-w-[calc(100vw-5rem)] lg:max-w-none">
+            <h3 className="mb-3 font-semibold text-ink-900">{c.full_name} · Shoots & payments</h3>
+            <PaymentBreakdown items={c.paymentItems}/>
+          </div>
+        </td>
+      </tr>}
       {editing && (
         <tr className="border-b border-slate-50 bg-slate-50/60">
           <td colSpan={6} className="px-4 py-3">
