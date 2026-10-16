@@ -17,5 +17,13 @@ describe('hourly API trust boundaries', () => {
   it('rejects injected identity and rates', async () => { expect((await POST(request({ ...submit, actor: id, rate_cents: 90000 }))).status).toBe(400); expect(mock.rpc).not.toHaveBeenCalled(); });
   it('returns a conflict for stale approval without treating it as success', async () => { mock.rpc.mockResolvedValue({ data: { error: 'changed' }, error: null }); expect((await POST(request(submit))).status).toBe(409); });
   it('does not leak database error details', async () => { mock.rpc.mockResolvedValue({ error: { code: 'test', message: 'secret internal detail' }, data: null }); const response = await POST(request(submit)); expect(response.status).toBe(503); expect(await response.text()).not.toContain('secret internal detail'); });
-  it('checks ownership before reading audit history', async () => { const q = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }; mock.from.mockReturnValue(q); const response = await GET(new Request(`https://example.com/api/field/hourly?id=${id}`)); expect(response.status).toBe(404); expect(q.eq).toHaveBeenCalledWith('contractor_id', id); expect(mock.from).toHaveBeenCalledTimes(1); });
+  it('denies contractor history requests before reading any data', async () => { const response = await GET(new Request(`https://example.com/api/field/hourly?id=${id}`)); expect(response.status).toBe(403); expect(mock.from).not.toHaveBeenCalled(); });
+  it('allows administrators to read history', async () => {
+    mock.actor.mockResolvedValue({ id: actor, admin: true });
+    const events = [{ id, kind: 'edit', details: { before: { rate_cents: 7500 }, after: { rate_cents: 6000 } } }];
+    const q = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { id }, error: null }), order: vi.fn().mockResolvedValue({ data: events, error: null }) };
+    mock.from.mockReturnValue(q);
+    const response = await GET(new Request(`https://example.com/api/field/hourly?id=${id}`));
+    expect(response.status).toBe(200); expect(await response.json()).toEqual({ events });
+  });
 });
