@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, UserPlus, Check, DollarSign, Pencil, Trash2, Power } from 'lucide-react';
@@ -21,6 +22,10 @@ export type ContractorRow = {
   thisMonth: number;
   unpaidCount: number;
   owedCents: number;
+  hourlyTotal?: number;
+  hourlyThisMonth?: number;
+  hourlyUnpaidCount?: number;
+  hourlyOwedCents?: number;
 };
 
 function dollars(cents: number) {
@@ -129,7 +134,7 @@ export function ContractorRoster({ rows }: { rows: ContractorRow[] }) {
   }
 
   async function markPaid(id: string, count: number) {
-    if (!confirm(`Mark ${count} shoot${count === 1 ? '' : 's'} as paid? This clears what's currently owed.`)) return;
+    if (!confirm(`Mark ${count} shoot${count === 1 ? '' : 's'} as paid? This records payment for photo shoots only. Hourly assignments are settled in Hourly work.`)) return;
     await patch(id, { action: 'mark_paid' }, `paid-${id}`);
   }
 
@@ -325,13 +330,14 @@ function Row({
             )}
           </div>
         </td>
-        <td className="px-4 py-3 text-right tabular-nums">{c.thisMonth}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{c.total}</td>
+        <td className="px-4 py-3 text-right tabular-nums">{c.thisMonth} shoots<div className="text-xs text-slate-400">{c.hourlyThisMonth ?? 0} hourly</div></td>
+        <td className="px-4 py-3 text-right tabular-nums">{c.total} shoots<div className="text-xs text-slate-400">{c.hourlyTotal ?? 0} hourly</div></td>
         <td className="px-4 py-3 text-right">
           <span className={c.owedCents > 0 ? 'font-semibold text-ink-900' : 'text-slate-400'}>
             {dollars(c.owedCents)}
           </span>
-          <div className="text-xs text-slate-400">{c.unpaidCount} unpaid</div>
+          <div className="text-xs text-slate-400">{c.unpaidCount} shoots · {c.hourlyUnpaidCount ?? 0} hourly unpaid</div>
+          {(c.hourlyOwedCents ?? 0) > 0 && <Link href="/dashboard/contractors/hourly" className="text-xs text-ocean-600">{dollars(c.hourlyOwedCents ?? 0)} hourly · Review</Link>}
         </td>
         <td className="px-4 py-3 text-right">
           <div className="flex items-center justify-end gap-1">
@@ -342,7 +348,7 @@ function Row({
                 className="btn-secondary inline-flex items-center gap-1.5 text-xs"
               >
                 {busy === `paid-${c.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DollarSign className="h-3.5 w-3.5" />}
-                Mark paid
+                Pay photo shoots
               </button>
             )}
             <button

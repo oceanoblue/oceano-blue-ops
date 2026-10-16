@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { redirect } from 'next/navigation';
 import { Camera } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -13,22 +14,24 @@ export default async function ContractorsPage() {
   if (!user) redirect('/login');
   const { data: teamRow } = await supabase.from('team_members').select('id,role,is_active').eq('id', user.id).maybeSingle();
   if (!teamRow) redirect('/field/shoots');
-  const [{ data: contractors }, { data: orders }, { data: pendingRequests }] = await Promise.all([
+  const [{ data: contractors }, { data: orders }, { data: pendingRequests }, { data: hourlyBalances, error: hourlyError }] = await Promise.all([
     supabase.from('contractors').select('id, full_name, email, phone, pay_rate_small_cents, pay_rate_large_cents, pay_rate_360_cents, payout_method, payout_details, is_active, auth_user_id').order('full_name', { ascending: true }),
     supabase.from('orders').select('contractor_id, status, pay_status, pay_amount_cents, created_at').not('contractor_id', 'is', null),
     supabase.from('pay_requests').select('id, period_start, period_end, shoot_count, total_cents, notes, payout_method, payout_details, created_at, contractors(full_name, email)').eq('status', 'submitted').order('created_at', { ascending: true }),
+    (supabase as unknown as SupabaseClient).from('contractor_hourly_balances').select('*'),
   ]);
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
   const byContractor = new Map<string, any[]>();
   (orders ?? []).forEach((o: any) => { const arr = byContractor.get(o.contractor_id) ?? []; arr.push(o); byContractor.set(o.contractor_id, arr); });
   const rows: ContractorRow[] = (contractors ?? []).map((c: any) => {
+    const hourly = (hourlyBalances ?? []).find((h: any) => h.contractor_id === c.id);
     const os = byContractor.get(c.id) ?? [];
     const payable = os.filter((o) => PAYABLE.has(o.status));
     const thisMonth = payable.filter((o) => new Date(o.created_at).getTime() >= monthStart).length;
     const unpaid = payable.filter((o) => o.pay_status === 'unpaid');
-    return { id: c.id, full_name: c.full_name, email: c.email, phone: c.phone, pay_rate_small_cents: c.pay_rate_small_cents, pay_rate_large_cents: c.pay_rate_large_cents, pay_rate_360_cents: c.pay_rate_360_cents, payout_method: c.payout_method, payout_details: c.payout_details, is_active: c.is_active, linked: Boolean(c.auth_user_id), total: payable.length, thisMonth, unpaidCount: unpaid.length, owedCents: unpaid.reduce((s, o) => s + (o.pay_amount_cents ?? 0), 0) };
+    return { id: c.id, full_name: c.full_name, email: c.email, phone: c.phone, pay_rate_small_cents: c.pay_rate_small_cents, pay_rate_large_cents: c.pay_rate_large_cents, pay_rate_360_cents: c.pay_rate_360_cents, payout_method: c.payout_method, payout_details: c.payout_details, is_active: c.is_active, linked: Boolean(c.auth_user_id), total: payable.length, thisMonth, unpaidCount: unpaid.length, hourlyTotal: hourly?.total ?? 0, hourlyThisMonth: hourly?.this_month ?? 0, hourlyUnpaidCount: hourly?.unpaid_count ?? 0, hourlyOwedCents: Number(hourly?.owed_cents ?? 0), owedCents: unpaid.reduce((s, o) => s + (o.pay_amount_cents ?? 0), 0) + Number(hourly?.owed_cents ?? 0) };
   });
   const requests: PendingPayRequest[] = (pendingRequests ?? []).map((r: any) => ({ id: r.id, contractorName: r.contractors?.full_name ?? 'Unknown', contractorEmail: r.contractors?.email ?? '', periodStart: r.period_start, periodEnd: r.period_end, shootCount: r.shoot_count, totalCents: r.total_cents, notes: r.notes, payoutMethod: r.payout_method, payoutDetails: r.payout_details, submittedAt: r.created_at }));
-  return <div className="space-y-6"><PageHeader eyebrow="Library" icon={Camera} title="Contractors" subtitle="Your contractor roster, photo-shoot pay requests, master agreements and separate video handoffs."/>{teamRow.role==='admin'&&teamRow.is_active&&<ContractorWorkLinks/>}<PayRequestsPanel requests={requests}/><ContractorRoster rows={rows}/></div>;
+  return <div className="space-y-6"><PageHeader eyebrow="Library" icon={Camera} title="Contractors" subtitle="Your contractor roster, property pay, hourly event work, agreements and video handoffs."/>{teamRow.role==='admin'&&teamRow.is_active&&<ContractorWorkLinks/>}{hourlyError && <p role="alert" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Hourly balances could not be loaded. The amounts below include photo shoots only. Reload before settling payments.</p>}<PayRequestsPanel requests={requests}/><ContractorRoster rows={rows}/></div>;
 }

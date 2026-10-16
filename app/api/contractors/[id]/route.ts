@@ -149,6 +149,7 @@ export async function DELETE(_request: Request, props: { params: Promise<{ id: s
   }
 
   const { error } = await admin.from('contractors').delete().eq('id', params.id);
+  if (error?.code === '23503') return NextResponse.json({ error: 'This contractor has work or agreement history. Deactivate them to preserve their records.' }, { status: 409 });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
