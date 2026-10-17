@@ -7,11 +7,13 @@ export function SmartFileClient({
   document: doc,
   context,
   responded,
+  readOnly = false,
 }: {
   token: string;
   document: FileDocument;
   context: FileContext;
   responded: boolean;
+  readOnly?: boolean;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({}),
     [done, setDone] = useState(responded),
@@ -20,18 +22,24 @@ export function SmartFileClient({
   const requestId = useRef<string | null>(null),
     viewed = useRef(false);
   useEffect(() => {
-    if (viewed.current) return;
+    if (viewed.current || readOnly) return;
     viewed.current = true;
     void fetch(`/api/smart-files/${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "view", id: crypto.randomUUID() }),
     }).catch(() => {});
-  }, [token]);
+  }, [token, readOnly]);
   const questions = doc.blocks.some((b) => b.kind === "question");
   return (
     <main className="mx-auto max-w-3xl p-5 sm:py-14">
       <div className="card p-6 sm:p-10">
+        {readOnly && (
+          <p className="mb-6 rounded-xl bg-ocean-50 p-4 text-sm text-ocean-900">
+            This is a read-only preview. Client responses are submitted through
+            the live file link.
+          </p>
+        )}
         {done && (
           <p
             role="status"
@@ -44,6 +52,7 @@ export function SmartFileClient({
         <form
           onSubmit={async (e) => {
             e.preventDefault();
+            if (readOnly || busy || done) return;
             setBusy(true);
             setError("");
             requestId.current ??= crypto.randomUUID();
@@ -78,10 +87,10 @@ export function SmartFileClient({
             onAnswer={(key, value) =>
               setAnswers((a) => ({ ...a, [key]: value }))
             }
-            disabled={done || busy}
+            disabled={done || busy || readOnly}
             hideQuestions={done}
           />
-          {questions && !done && (
+          {questions && !done && !readOnly && (
             <div className="mt-8 border-t border-ink-100 pt-6">
               <p className="mb-4 text-xs leading-relaxed text-slate-500">
                 Your answers will be shared with the Oceano Blue team for this

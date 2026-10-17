@@ -8,6 +8,11 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   try {
+    if (process.env.VERCEL_ENV !== "production")
+      throw new CrmError(
+        "Submit inquiries through the live website form.",
+        403,
+      );
     if (req.headers.get("origin") !== new URL(req.url).origin)
       throw new CrmError("Submit using the inquiry form.", 403);
     const slug = z

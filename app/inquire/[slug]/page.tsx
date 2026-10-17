@@ -39,6 +39,7 @@ export default async function InquiryPage({
         title={form.title}
         description={form.description}
         fields={z.array(fieldSchema).parse(form.fields)}
+        readOnly={process.env.VERCEL_ENV !== "production"}
       />
     </main>
   );

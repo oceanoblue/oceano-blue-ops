@@ -6,11 +6,13 @@ export function InquiryForm({
   title,
   description,
   fields,
+  readOnly = false,
 }: {
   slug: string;
   title: string;
   description: string;
   fields: InquiryField[];
+  readOnly?: boolean;
 }) {
   const [requestId, setRequestId] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
@@ -18,7 +20,7 @@ export function InquiryForm({
     [success, setSuccess] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (busy) return;
+    if (busy || readOnly) return;
     setBusy(true);
     setError("");
     const form = e.currentTarget;
@@ -78,13 +80,22 @@ export function InquiryForm({
         <h1 className="mt-2 font-display text-3xl text-ocean-950">{title}</h1>
         <p className="mt-3 text-slate-600">{description}</p>
       </div>
+      {readOnly && (
+        <p className="rounded-xl bg-ocean-50 p-4 text-sm text-ocean-900">
+          This is a read-only preview. Use the live website form to send an
+          inquiry.
+        </p>
+      )}
       <div aria-hidden="true" className="hidden">
         <label>
           Website
           <input name="website" tabIndex={-1} autoComplete="off" />
         </label>
       </div>
-      <fieldset disabled={busy} className="grid gap-5 sm:grid-cols-2">
+      <fieldset
+        disabled={busy || readOnly}
+        className="grid gap-5 sm:grid-cols-2"
+      >
         {fields.map((f) => (
           <label
             key={f.key}
@@ -141,7 +152,10 @@ export function InquiryForm({
       <p className="text-xs text-slate-500">
         We’ll use these details to respond to your inquiry.
       </p>
-      <button disabled={busy} className="btn-primary w-full sm:w-auto">
+      <button
+        disabled={busy || readOnly}
+        className="btn-primary w-full sm:w-auto"
+      >
         {busy ? "Sending…" : "Send inquiry"}
       </button>
     </form>

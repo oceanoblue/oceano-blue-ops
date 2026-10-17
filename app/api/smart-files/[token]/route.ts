@@ -15,6 +15,8 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
+    if (process.env.VERCEL_ENV !== "production")
+      throw new CrmError("Client file previews are read-only.", 403);
     sameOrigin(req);
     const token = z
       .string()

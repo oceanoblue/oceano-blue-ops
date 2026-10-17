@@ -40,6 +40,7 @@ export default async function Page({
       document={file.document}
       context={file.context}
       responded={!!file.responded_at}
+      readOnly={process.env.VERCEL_ENV !== "production"}
     />
   );
 }

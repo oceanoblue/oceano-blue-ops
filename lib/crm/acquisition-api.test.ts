@@ -218,3 +218,22 @@ it("makes preview acquisition configuration read-only, including template edits"
   expect((await POST(req())).status).toBe(403);
   expect(mock.rpc).not.toHaveBeenCalled();
 });
+it("blocks preview inquiry submissions and file events before they can create production workflow work", async () => {
+  vi.stubEnv("VERCEL_ENV", "preview");
+  const { POST: inquiry } = await import(
+    "@/app/api/inquiry-forms/[slug]/route"
+  );
+  expect(
+    (await inquiry(req({}), { params: Promise.resolve({ slug: "contact" }) }))
+      .status,
+  ).toBe(403);
+  expect(
+    (
+      await respond(req({ action: "view", id }), {
+        params: Promise.resolve({ token }),
+      })
+    ).status,
+  ).toBe(403);
+  expect(mock.rpc).not.toHaveBeenCalled();
+  expect(mock.file).not.toHaveBeenCalled();
+});
