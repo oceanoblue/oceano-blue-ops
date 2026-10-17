@@ -5,7 +5,8 @@ vi.mock("./server", () => ({ crmDb: () => ({ from: m.from, rpc: m.rpc }), CrmErr
         constructor(message: string, public status = 400) { super(message); }
     } }));
 vi.mock("@/lib/google-calendar/api", () => ({ fetchMemberBusy: m.busy }));
-import { sessionAvailability, sessionCalendarWriteAccess, bookSession, publicSessionType } from "./scheduling-server";
+import { sessionAvailability, sessionCalendarWriteAccess, bookSession, publicSessionType, schedulingRead } from "./scheduling-server";
+import { appointmentTimeLabel } from "./appointment-time";
 import type { Appointment, SessionType } from "./scheduling-types";
 const t: SessionType = { id: "00000000-0000-4000-8000-000000000001", version: 1, name: "Planning", slug: "planning", description: "",confirmation_instructions:"",owner_id: "00000000-0000-4000-8000-000000000002", duration_minutes: 30, timezone: "America/New_York", availability: [{ day: 1, start: "09:00", end: "12:00" }], notice_minutes: 0, horizon_days: 90, booking_horizon_months: null, slot_interval_minutes:15, use_session_as_project_date:false, buffer_minutes: 0,buffer_before_minutes:null,buffer_after_minutes:null, location: "Phone", published: true };
 beforeEach(() => {
@@ -49,6 +50,20 @@ it("rechecks live availability immediately before the guarded booking commit", a
 });
 it("blocks preview booking before touching data or providers", async () => { vi.stubEnv("VERCEL_ENV", "preview"); await expect(bookSession("planning", {})).rejects.toThrow("production"); expect(m.from).not.toHaveBeenCalled(); expect(m.busy).not.toHaveBeenCalled(); expect(m.rpc).not.toHaveBeenCalled(); });
 it("never serializes internal host, availability or version into the public type", () => { expect(Object.keys(publicSessionType(t)).sort()).toEqual(["description", "duration_minutes", "location", "name", "slug", "timezone"]); });
+it("preserves source date holds through the office read without exposing manage tokens", async () => {
+    const hold = { starts_at: "2027-01-07T05:00:00Z", ends_at: "2027-01-08T05:00:00Z", timezone: "America/New_York", source_evidence: { all_day: true }, manage_token: "private" };
+    m.from.mockImplementation((table: string) => {
+        let columns: string[] = [];
+        const chain: any = {};
+        chain.select = (projection: string) => { columns = projection.split(","); return chain; };
+        for (const method of ["gte", "order", "eq", "in", "limit"]) chain[method] = () => chain;
+        chain.then = (yes: any, no: any) => Promise.resolve({ data: table === "crm_appointments" ? [Object.fromEntries(Object.entries(hold).filter(([key]) => columns.includes(key)))] : [], error: null }).then(yes, no);
+        return chain;
+    });
+    const data = await schedulingRead();
+    expect(appointmentTimeLabel(data.appointments[0])).toBe("Thu, Jan 7, 2027 · All-day hold; confirm coverage times");
+    expect(data.appointments[0]).not.toHaveProperty("manage_token");
+});
 it("requires a callable phone number for phone sessions before calendar or mutation work",async()=>{
  await expect(bookSession("planning",{id:"00000000-0000-4000-8000-000000000003",starts_at:"2026-10-19T13:15:00Z",full_name:"Test Client",email:"client@example.test",email_consent:false,phone:"123"})).rejects.toThrow("phone number");expect(m.busy).not.toHaveBeenCalled();expect(m.rpc).not.toHaveBeenCalled();
 });
