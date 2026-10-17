@@ -120,7 +120,7 @@ export async function schedulingRead(): Promise<SchedulingData> {
     const db = crmDb(), since = new Date(Date.now() - 30 * 86400000).toISOString();
     const [types, appointments, team, notifications] = await Promise.all([
         db.from("crm_session_types").select("*").order("name").limit(200),
-        db.from("crm_appointments").select("id,session_type_id,client_id,project_id,owner_id,title,location,timezone,full_name,email,phone,notes,starts_at,ends_at,status,version,email_consent,created_at,source_system,source_id,import_state").gte("starts_at", since).order("starts_at").limit(500),
+        db.from("crm_appointments").select("id,session_type_id,client_id,project_id,owner_id,title,location,timezone,full_name,email,phone,notes,starts_at,ends_at,status,version,email_consent,created_at,source_system,source_id,source_evidence,import_state").gte("starts_at", since).order("starts_at").limit(500),
         db.from("team_members").select("id,full_name").eq("is_active", true).in("role", ["admin", "coordinator"]).order("full_name"),
         db.from("crm_session_notifications").select("id,appointment_id,kind,status,last_error,due_at").in("status", ["pending", "sending", "needs_review"]).order("due_at").limit(300),
     ]);
