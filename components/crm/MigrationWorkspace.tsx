@@ -64,9 +64,7 @@ export function MigrationWorkspace({ initialData }: { initialData: MigrationData
     <PageHeader eyebrow="Migration review" title="Keep every commitment in view" subtitle="Review source projects, payment evidence, and scheduled sessions before leaving HoneyBook." icon={ClipboardCheck}>
       <button className="btn-secondary" disabled={busy} onClick={() => void load()} aria-label="Refresh migration review"><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Refresh</span></button>
     </PageHeader>
-    <nav aria-label="Related CRM workspaces" className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-ocean-700">
-      <Link href="/dashboard/crm" className="hover:underline">CRM pipeline</Link><Link href="/dashboard/crm/billing" className="hover:underline">Project receivables</Link><Link href="/dashboard/crm/scheduling" className="hover:underline">Scheduling links</Link>
-    </nav>
+
     {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error} <button className="ml-2 underline" onClick={() => void load()}>Retry</button></p>}
     {notice && <p role="status" className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">{notice}</p>}
     {data && <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">{[

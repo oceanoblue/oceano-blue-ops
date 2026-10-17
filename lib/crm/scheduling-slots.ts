@@ -44,7 +44,7 @@ export function sessionSlots(type: SessionType, day: string, busy: SessionRange[
             const end = start.getTime() + type.duration_minutes * 60000;
             if (start.getTime() < now.getTime() + type.notice_minutes * 60000)
                 continue;
-            const before = start.getTime() - type.buffer_minutes * 60000, after = end + type.buffer_minutes * 60000;
+            const before = start.getTime() - (type.buffer_before_minutes??type.buffer_minutes) * 60000, after = end + (type.buffer_after_minutes??type.buffer_minutes) * 60000;
             if (ranges.some(r => before < r.end && after > r.start))
                 continue;
             // A DST transition must not extend the meeting outside its wall-clock window.

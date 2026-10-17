@@ -67,3 +67,12 @@ it("escapes client data in email HTML and keeps cancellation subjects accurate",
     expect(email.html).not.toContain("<Test Client>");
     expect(email.subject).toContain("Session cancelled");
 });
+it("includes the frozen preparation text in confirmations and both reminders as escaped plain text", () => {
+    const appointment = { ...m.appointment, confirmation_instructions: 'Bring <sample> & "notes".\r\nArrive early.\rNo HTML.' };
+    for (const kind of ["confirmation", "reminder", "reminder_1h"]) {
+        const email = sessionEmail(appointment, kind, "https://app.oceanoblue.net");
+        expect(email.html).toContain("Before your session");
+        expect(email.html).toContain("Bring &lt;sample&gt; &amp; &quot;notes&quot;.<br>Arrive early.<br>No HTML.");
+        expect(email.html).not.toContain("<sample>");
+    }
+});

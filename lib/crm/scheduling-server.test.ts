@@ -7,7 +7,7 @@ vi.mock("./server", () => ({ crmDb: () => ({ from: m.from, rpc: m.rpc }), CrmErr
 vi.mock("@/lib/google-calendar/api", () => ({ fetchMemberBusy: m.busy }));
 import { sessionAvailability, sessionCalendarWriteAccess, bookSession, publicSessionType } from "./scheduling-server";
 import type { Appointment, SessionType } from "./scheduling-types";
-const t: SessionType = { id: "00000000-0000-4000-8000-000000000001", version: 1, name: "Planning", slug: "planning", description: "", owner_id: "00000000-0000-4000-8000-000000000002", duration_minutes: 30, timezone: "America/New_York", availability: [{ day: 1, start: "09:00", end: "12:00" }], notice_minutes: 0, horizon_days: 90, booking_horizon_months: null, slot_interval_minutes:15, use_session_as_project_date:false, buffer_minutes: 0, location: "Phone", published: true };
+const t: SessionType = { id: "00000000-0000-4000-8000-000000000001", version: 1, name: "Planning", slug: "planning", description: "",confirmation_instructions:"",owner_id: "00000000-0000-4000-8000-000000000002", duration_minutes: 30, timezone: "America/New_York", availability: [{ day: 1, start: "09:00", end: "12:00" }], notice_minutes: 0, horizon_days: 90, booking_horizon_months: null, slot_interval_minutes:15, use_session_as_project_date:false, buffer_minutes: 0,buffer_before_minutes:null,buffer_after_minutes:null, location: "Phone", published: true };
 beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();

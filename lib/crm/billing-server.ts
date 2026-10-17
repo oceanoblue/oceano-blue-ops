@@ -1,4 +1,5 @@
 import type Stripe from 'stripe';
+import {rememberBillingPayment} from './billing-adjustments';
 import { crmDb,CrmError } from './server';
 import { positiveSourcePayments,type SourcePaymentObservation,type BillingData } from './billing-types';
 import { getStripe,getBaseUrl } from '@/lib/stripe/server';
@@ -10,30 +11,33 @@ export async function billingRead():Promise<BillingData>{
  db.from('crm_billing_receipts').select('*').order('created_at',{ascending:false}).limit(501),
  db.from('crm_billing_checkouts').select('id,invoice_id,status,expires_at,stripe_session_id').in('status',['reserved','open']).order('created_at',{ascending:false}).limit(1001),
  db.from('crm_migration_observations').select('id,title,source_id,observed_at,review_state,next_action,follow_up_at,linked_ops_project,facts',{count:'exact'}).eq('source_kind','payment').in('review_state',['pending','active']).order('observed_at',{ascending:false}).limit(201),
+ db.from('crm_billing_payment_events').select('event_id,invoice_id,event_type,payment_intent_id,charge_id,evidence,task_id,created_at').order('created_at',{ascending:false}).limit(101),
  ]);if(results.some(r=>r.error))throw new CrmError('Project billing is temporarily unavailable.',503);
- return{sourcePayments:positiveSourcePayments((results[5].data??[]).slice(0,200) as SourcePaymentObservation[]),sourcePaymentsTruncated:(results[5].count??0)>200,invoices:(results[0].data??[]).slice(0,500),projects:(results[1].data??[]).slice(0,1000),reviews:(results[2].data??[]).slice(0,100),receipts:(results[3].data??[]).slice(0,500),checkouts:(results[4].data??[]).slice(0,1000),paymentsConfigured:!!process.env.STRIPE_SECRET_KEY,production:process.env.VERCEL_ENV==='production',truncated:results.some((r,i)=>(r.data?.length??0)>[500,1000,100,500,1000,200][i])} as unknown as BillingData;
+ return{providerEvents:(results[6].data??[]).slice(0,100),sourcePayments:positiveSourcePayments((results[5].data??[]).slice(0,200) as SourcePaymentObservation[]),sourcePaymentsTruncated:(results[5].count??0)>200,invoices:(results[0].data??[]).slice(0,500),projects:(results[1].data??[]).slice(0,1000),reviews:(results[2].data??[]).slice(0,100),receipts:(results[3].data??[]).slice(0,500),checkouts:(results[4].data??[]).slice(0,1000),paymentsConfigured:!!process.env.STRIPE_SECRET_KEY,production:process.env.VERCEL_ENV==='production',truncated:results.some((r,i)=>(r.data?.length??0)>[500,1000,100,500,1000,200,100][i])} as unknown as BillingData;
 }
 export async function publicProjectBill(token:string){
  if(!/^[a-f0-9]{64}$/.test(token))return null;
  const db=crmDb();const{data,error}=await db.from('crm_billing_installments').select('id,title,amount_cents,paid_cents,due_date,due_date_verified,invoice_id').eq('access_token',token).maybeSingle();if(error)throw new CrmError('Payment is temporarily unavailable.',503);if(!data)return null;
- const{data:invoice,error:invoiceError}=await db.from('crm_billing_invoices').select('title,project_id,client_id,reconciliation,source_collection_stopped,collection_enabled').eq('id',data.invoice_id).maybeSingle();if(invoiceError)throw new CrmError('Payment is temporarily unavailable.',503);if(!invoice)return null;
+ const{data:invoice,error:invoiceError}=await db.from('crm_billing_invoices').select('title,project_id,client_id,reconciliation,source_collection_stopped,collection_enabled,payment_review_required').eq('id',data.invoice_id).maybeSingle();if(invoiceError)throw new CrmError('Payment is temporarily unavailable.',503);if(!invoice)return null;
  const[{data:project,error:projectError},{data:review,error:reviewError},{data:client,error:clientError}]=await Promise.all([
  db.from('crm_opportunities').select('title,crm_stages!inner(outcome)').eq('project_id',invoice.project_id).maybeSingle(),
  db.from('crm_billing_checkouts').select('id').eq('invoice_id',data.invoice_id).eq('status','review').limit(1),db.from('clients').select('is_archived').eq('id',invoice.client_id).maybeSingle(),]);
  if(projectError||reviewError||clientError)throw new CrmError('Payment is temporarily unavailable.',503);
  const stage=(project?.crm_stages as unknown as {outcome:string}|null)?.outcome;
- return{title:invoice.title,project:project?.title??'Your project',installment:data.title,amount_cents:data.amount_cents,paid_cents:data.paid_cents,due_date:data.due_date,due_date_verified:data.due_date_verified,payable:invoice.collection_enabled&&invoice.reconciliation==='verified'&&invoice.source_collection_stopped&&data.due_date_verified&&!!data.due_date&&['open','won'].includes(stage??'')&&!review?.length&&!!client&&!client.is_archived};
+ return{title:invoice.title,project:project?.title??'Your project',installment:data.title,amount_cents:data.amount_cents,paid_cents:data.paid_cents,due_date:data.due_date,due_date_verified:data.due_date_verified,payment_review_required:!!invoice.payment_review_required,payable:!invoice.payment_review_required&&invoice.collection_enabled&&invoice.reconciliation==='verified'&&invoice.source_collection_stopped&&data.due_date_verified&&!!data.due_date&&['open','won'].includes(stage??'')&&!review?.length&&!!client&&!client.is_archived};
 }
-export async function settleCrmBillingCheckout(session:Stripe.Checkout.Session,eventId:string){
+export async function settleCrmBillingCheckout(session:Stripe.Checkout.Session,eventId:string,eventType='checkout.session.completed'){
+ if(process.env.VERCEL_ENV!=='production')return 'production_only';
  const id=session.metadata?.crm_billing_checkout_id;
  if(!id||session.mode!=='payment'||session.payment_status!=='paid')return;
  if(process.env.VERCEL_ENV==='production'&&session.livemode!==true)throw new Error('Test payments cannot settle a live project invoice');
  if(!/^[0-9a-f-]{36}$/.test(id))throw new Error('Invalid CRM checkout metadata');
+ if(await rememberBillingPayment(session,eventId,eventType))return 'provider_review';
  const{data,error}=await crmDb().rpc('crm_billing_settle',{p_id:id,p_session:session.id,p_event:eventId,p_amount:session.amount_total??-1,p_currency:session.currency??''});
  if(error)throw new Error('Project payment persistence failed');return data;
 }
-type CheckoutReservation={id:string;expected_cents:number;expires_at:string;stripe_session_id:string|null};
-function frozenCheckout(stripe:Stripe,ck:CheckoutReservation,title:string,token:string,req:Request){const base=getBaseUrl(req);return stripe.checkout.sessions.create({mode:'payment',payment_method_types:['card'],line_items:[{quantity:1,price_data:{currency:'usd',unit_amount:ck.expected_cents,product_data:{name:title}}}],metadata:{crm_billing_checkout_id:ck.id},expires_at:Math.floor(Date.parse(ck.expires_at)/1000),success_url:`${base}/pay/project/${token}?submitted=1`,cancel_url:`${base}/pay/project/${token}`},{idempotencyKey:`crm-billing:${ck.id}`});}
+type CheckoutReservation={id:string;expected_cents:number;expires_at:string;stripe_session_id:string|null;stripe_payload_version?:number};
+function frozenCheckout(stripe:Stripe,ck:CheckoutReservation,title:string,token:string,req:Request){const base=getBaseUrl(req);return stripe.checkout.sessions.create({mode:'payment',payment_method_types:['card'],line_items:[{quantity:1,price_data:{currency:'usd',unit_amount:ck.expected_cents,product_data:{name:title}}}],metadata:{crm_billing_checkout_id:ck.id},...(ck.stripe_payload_version&&ck.stripe_payload_version>=2?{payment_intent_data:{metadata:{crm_billing_checkout_id:ck.id}}}:{}),expires_at:Math.floor(Date.parse(ck.expires_at)/1000),success_url:`${base}/pay/project/${token}?submitted=1`,cancel_url:`${base}/pay/project/${token}`},{idempotencyKey:`crm-billing:${ck.id}`});}
 export async function projectCheckout(token:string,req:Request):Promise<{url?:string;paid?:boolean}>{
  const stripe=getStripe();if(!stripe)throw new CrmError('Payments are temporarily unavailable.',503);
  const db=crmDb();

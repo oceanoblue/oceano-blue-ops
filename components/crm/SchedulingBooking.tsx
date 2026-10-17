@@ -15,6 +15,7 @@ type Managed = {
         ends_at: string;
         status: string;
         version: number;
+        confirmation_instructions?:string;
     };
     slug: string;
     canReschedule: boolean;
@@ -95,6 +96,7 @@ export function SchedulingBooking({ type, readOnly, managed, token }: {
         {readOnly && <p className="mb-6 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Preview only. Open production Ops to book or change a session.</p>}
         {error && <p role="alert" className="mb-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{error}</p>}{success && <p role="status" className="mb-5 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">{success}</p>}
         {managed && <div className="mb-7"><span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${managed.appointment.status === "cancelled" ? "bg-slate-100 text-slate-700" : "bg-emerald-50 text-emerald-800"}`}><CheckCircle2 className="h-3.5 w-3.5"/>{managed.appointment.status === "cancelled" ? "Cancelled" : "Confirmed"}</span><h2 className="mt-4 text-xl font-semibold text-ocean-950">{managed.appointment.full_name}</h2><p className="mt-2 text-lg text-ocean-900">{stamp(managed.appointment.starts_at)}</p><p className="mt-1 text-xs text-slate-500">Displayed in {displayZone}</p><div className="mt-5 flex flex-wrap gap-2"><a className="btn-secondary" href={`${base}?calendar=1`}><Download className="h-4 w-4"/>Add to calendar</a>{managed.appointment.status === "confirmed" && <><button className="btn-secondary" disabled={readOnly || !managed.canReschedule || saving} onClick={() => setRescheduling(v => !v)}>Reschedule</button><button className="btn-ghost text-rose-700" disabled={readOnly || saving || !managed.canReschedule} onClick={() => setCancelConfirm(true)}>Cancel session</button></>}</div>{!managed.canReschedule && managed.appointment.status === "confirmed" && <p className="mt-3 text-sm text-slate-600">Contact the office to change this appointment.</p>}{cancelConfirm && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-sm text-rose-900">Cancel this session and release the reserved time?</p><div className="mt-3 flex gap-2"><button className="btn-danger" disabled={saving} onClick={() => void mutate({ action: "cancel", version: managed.appointment.version })}>Yes, cancel session</button><button className="btn-secondary" onClick={() => setCancelConfirm(false)}>Keep session</button></div></div>}</div>}
+        {managed?.appointment.confirmation_instructions&&<section className="mb-7 rounded-xl border border-ocean-100 bg-ocean-50/60 p-5"><h2 className="font-semibold text-ocean-950">Before your session</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{managed.appointment.confirmation_instructions}</p></section>}
         {showPicker && <form onSubmit={e => { e.preventDefault(); if (!selected)
             return; if (managed) {
             void mutate({ action: "reschedule", version: managed.appointment.version, starts_at: selected });

@@ -13,6 +13,7 @@ export const sessionTypeSchema = z.object({
     name: z.string().trim().min(1).max(120),
     slug: z.string().min(1).max(80).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
     description: z.string().trim().max(2000),
+    confirmation_instructions: z.string().trim().max(8000).default(""),
     owner_id: z.string().uuid(),
     duration_minutes: z.number().int().min(15).max(720),
     timezone,
@@ -23,6 +24,8 @@ export const sessionTypeSchema = z.object({
     slot_interval_minutes: z.number().int().min(1).max(720).default(15),
     use_session_as_project_date: z.boolean().default(false),
     buffer_minutes: z.number().int().min(0).max(180),
+    buffer_before_minutes: z.number().int().min(0).max(180).nullable().default(null),
+    buffer_after_minutes: z.number().int().min(0).max(180).nullable().default(null),
     location: z.string().trim().max(500),
     published: z.boolean(),
 });
@@ -55,6 +58,7 @@ export type Appointment = {
     email: string;
     phone: string;
     notes: string;
+    confirmation_instructions?: string;
     starts_at: string;
     ends_at: string;
     timezone: string;

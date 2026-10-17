@@ -3,8 +3,10 @@ import Stripe from 'stripe';
 import { POST } from '@/app/api/stripe/webhook/route';
 import { getStripe } from '@/lib/stripe/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import {holdCrmBillingProviderEvent} from '@/lib/crm/billing-adjustments';
 import { settleCrmBillingCheckout } from '@/lib/crm/billing-server';
 
+vi.mock('@/lib/crm/billing-adjustments',async importOriginal=>({...await importOriginal<typeof import('@/lib/crm/billing-adjustments')>(),holdCrmBillingProviderEvent:vi.fn()}));
 vi.mock('@/lib/stripe/server', () => ({ getStripe: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: vi.fn() }));
 vi.mock('@/lib/observability/report', () => ({ captureError: vi.fn() }));
@@ -68,7 +70,7 @@ it('does not apply a subscription payment to order downloads', async () => {
 it.each(['checkout.session.completed', 'checkout.session.async_payment_succeeded'])('settles CRM project checkout from %s without touching order downloads', async type => {
   const metadata = { crm_billing_checkout_id: '00000000-0000-4000-8000-000000000002', order_id: '00000000-0000-4000-8000-000000000001' };
   expect((await POST(request('paid', type, 'payment', metadata))).status).toBe(200);
-  expect(settleCrmBillingCheckout).toHaveBeenCalledWith(expect.objectContaining({ payment_status: 'paid', metadata }), 'evt_fixture');
+  expect(settleCrmBillingCheckout).toHaveBeenCalledWith(expect.objectContaining({ payment_status: 'paid', metadata }), 'evt_fixture', type);
   expect(rpc).not.toHaveBeenCalled();
 });
 it('does not settle an unpaid CRM checkout', async () => {
@@ -80,3 +82,5 @@ it('asks Stripe to retry if CRM payment persistence fails', async () => {
   expect((await POST(request('paid', 'checkout.session.completed', 'payment', { crm_billing_checkout_id: '00000000-0000-4000-8000-000000000002' }))).status).toBe(500);
   expect(rpc).not.toHaveBeenCalled();
 });
+
+it('routes signed refund events through exact project association and retries failed holds',async()=>{vi.mocked(holdCrmBillingProviderEvent).mockResolvedValue({held:true});expect((await POST(request('paid','charge.refunded'))).status).toBe(200);expect(holdCrmBillingProviderEvent).toHaveBeenCalledWith(expect.objectContaining({type:'charge.refunded'}));expect(rpc).not.toHaveBeenCalled();vi.mocked(holdCrmBillingProviderEvent).mockRejectedValue(new Error('offline'));expect((await POST(request('paid','charge.refunded'))).status).toBe(500);});

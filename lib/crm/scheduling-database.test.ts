@@ -24,6 +24,7 @@ beforeAll(async () => {
     await db.exec(readFileSync("supabase/migrations/20261017034047_crm_historical_archive.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/20261017115510_crm_general_scheduling.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/20261017120411_crm_scheduling_source_precision.sql", "utf8"));
+    await db.exec(readFileSync("supabase/migrations/20261017122113_crm_scheduling_asymmetric_buffers.sql", "utf8"));
     await db.exec("grant select,insert,update on clients,projects,schedule_blocks,contractors,orders to service_role");
 }, 60000);
 afterAll(async () => { await db?.close(); });
@@ -40,7 +41,7 @@ async function failed(run: () => Promise<unknown>) { await db.exec("savepoint ex
 catch (e) {
     message = e instanceof Error ? e.message : String(e);
 } await db.exec("rollback to savepoint expected_error"); expect(message).not.toBe(""); return message; }
-async function change(id: string, token: string, action: string, version = 1, newStart: string | null = null) { return db.query<any>("select crm_session_change($1,$2,null,$3,$4,$5,clock_timestamp(),1) r", [id, token, action, version, newStart]); }
+async function change(id: string, token: string, action: string, version = 1, newStart: string | null = null, typeVersion = 1) { return db.query<any>("select crm_session_change($1,$2,null,$3,$4,$5,clock_timestamp(),$6) r", [id, token, action, version, newStart, typeVersion]); }
 it("books once, links contact/project/task, and blocks shoots through schedule_blocks", async () => {
     await typeSave();
     const id = randomUUID(), first = await book(id);
@@ -129,4 +130,26 @@ it("uses exact calendar-month boundaries independently of the fallback days hori
 });
 it("validates phone-session contact details in SQL and works under the real service role",async()=>{
  await typeSave();expect(await failed(()=>book(randomUUID(),{phone:"123"}))).toContain("phone number");await db.exec("set local role service_role");const b=await book();await change(b.id,b.token,"cancel");expect((await db.query<any>("select status from crm_appointments where id=$1",[b.id])).rows[0].status).toBe("cancelled");await db.exec("reset role");
+});
+it("reserves asymmetric buffers, blocks both neighboring links and reschedules with current buffers", async () => {
+    await typeSave({ ...settings, name: "Commercial filming", buffer_before_minutes: 30, buffer_after_minutes: 60 });
+    const b = await book();
+    const reservation = async () => (await db.query<any>("select (extract(epoch from (a.starts_at-b.starts_at))/60)::int as before,(extract(epoch from (b.ends_at-a.ends_at))/60)::int as after,a.buffer_before_minutes,a.buffer_after_minutes,o.project_type from crm_appointments a join schedule_blocks b on b.id=a.schedule_block_id join crm_opportunities o on o.project_id=a.project_id where a.id=$1", [b.id])).rows[0];
+    expect(await reservation()).toMatchObject({ before: 30, after: 60, buffer_before_minutes: 30, buffer_after_minutes: 60, project_type: "Commercial filming" });
+    await typeSave({ ...settings, slug: "neighbor", buffer_minutes: 0 }, null, actor, randomUUID());
+    expect(await failed(() => book(randomUUID(), { starts_at: new Date(start.getTime() - 45 * 60000).toISOString() }, "before", "neighbor"))).toContain("just booked");
+    expect(await failed(() => book(randomUUID(), { starts_at: new Date(start.getTime() + 75 * 60000).toISOString() }, "after", "neighbor"))).toContain("just booked");
+    await book(randomUUID(), { starts_at: new Date(start.getTime() + 90 * 60000).toISOString() }, "touching", "neighbor");
+    await typeSave({ ...settings, name: "Commercial filming", buffer_before_minutes: 0, buffer_after_minutes: 45 }, 1);
+    await change(b.id, b.token, "reschedule", 1, new Date(start.getTime() + 86400000).toISOString(), 2);
+    expect(await reservation()).toMatchObject({ before: 0, after: 45, buffer_before_minutes: 0, buffer_after_minutes: 45 });
+});
+it("freezes preparation instructions at booking across later template edits and reschedules", async () => {
+    const original = "Bring two outfits.\nPlease arrive ten minutes early.";
+    await typeSave({ ...settings, confirmation_instructions: original });
+    const b = await book();
+    await typeSave({ ...settings, confirmation_instructions: "New instructions for future bookings." }, 1);
+    await change(b.id, b.token, "reschedule", 1, new Date(start.getTime() + 86400000).toISOString(), 2);
+    const { rows } = await db.query<any>("select a.confirmation_instructions as snapshot,t.confirmation_instructions as current from crm_appointments a join crm_session_types t on t.id=a.session_type_id where a.id=$1", [b.id]);
+    expect(rows[0]).toEqual({ snapshot: original, current: "New instructions for future bookings." });
 });

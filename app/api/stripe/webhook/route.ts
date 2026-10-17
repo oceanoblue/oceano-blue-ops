@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe/server';
 import { captureError } from '@/lib/observability/report';
+import {billingAdjustmentTypes,holdCrmBillingProviderEvent} from '@/lib/crm/billing-adjustments';
 import { settleCrmBillingCheckout } from '@/lib/crm/billing-server';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,11 @@ export async function POST(req: Request) {
     );
   }
 
+  if(billingAdjustmentTypes.has(event.type)){
+    try{await holdCrmBillingProviderEvent(event);}catch(error){captureError('stripe.crmBillingAdjustment',error,{eventId:event.id,eventType:event.type});return NextResponse.json({error:'adjustment_persistence_failed'},{status:500});}
+    return NextResponse.json({received:true});
+  }
+
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const session = event.data.object;
     // Checkout can complete while a delayed payment is still pending. Only
@@ -43,7 +49,7 @@ export async function POST(req: Request) {
     }
     if (session.metadata?.crm_billing_checkout_id) {
       try {
-        await settleCrmBillingCheckout(session, event.id);
+        await settleCrmBillingCheckout(session, event.id,event.type);
       } catch (error) {
         captureError('stripe.crmBillingPersistence', error, { eventId: event.id, sessionId: session.id });
         return NextResponse.json({ error: 'payment_persistence_failed' }, { status: 500 });

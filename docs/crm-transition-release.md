@@ -6,9 +6,12 @@ required throughout; public links expose only their own booking/document/payment
 
 ## Live configuration and source custody
 
-The release audit covers 80 projects dated in 2026 (79 unarchived and one archived),
-the three visible projects dated in 2027, future appointments attached to older
-projects, and the connected business calendars. Source observations retain dates,
+The complete project inventory captures 1,144 source projects. The priority audit
+covers 80 projects dated in 2026 (79 unarchived and one archived), the three visible
+projects dated in 2027, future appointments attached to older projects and the
+connected business calendars. The native contact export contains 1,110 rows:
+1,108 valid contacts are represented in Ops (1,089 newly imported and 19 existing
+contacts preserved); two source email exceptions remain for correction. Source observations retain dates,
 reported balances, follow-up owners and reasons for review. They are not proof
 that an old balance is collectible or that a future inquiry is booked.
 
@@ -24,6 +27,11 @@ dates and stop source collection before activating an Ops payment link. Unresolv
 source balance observations are displayed separately from the actual invoice
 ledger. Zero-dollar proposal placeholders do not become receivables. Stripe review
 resolution rechecks live provider evidence and never initiates a refund or charge.
+Signed refund and dispute events hold affected invoices, remove uncertain figures
+from financial totals and create a deduplicated urgent accounting task. Recorded
+paid cents remain preserved pending accounting reconciliation. Office health tools
+verify Stripe and let an admin add required events to existing canonical webhook
+subscriptions without changing their URL or removing existing subscriptions.
 
 Session configurations are published only after comparing source availability,
 duration, buffers and notice. The replacement supports exact calendar-month
@@ -34,14 +42,15 @@ Publishing a new Ops URL does not redirect a previously shared HoneyBook URL.
 
 ## Verification and operation
 
-The final automated checks passed 1,093 tests across 137 files, TypeScript and
+The final automated checks passed 1,134 tests across 141 files, TypeScript and
 ESLint (ten existing warnings). A production webpack build passed locally; GitHub
 CI also runs the default Turbopack build. New service RPCs use active office actor
 guards, private tables use RLS, and public commands use durable fail-closed limits.
 The existing database advisor warnings remain outside this release; service-only
 financial tables intentionally have deny-by-default RLS without browser policies.
 
-The scheduling notification cron runs each minute. Native booking uses a private
+The scheduling notification cron runs each minute. An office-only, same-origin
+production action can process due jobs through the same leased worker. Native booking uses a private
 Google busy hold without attendee invitations; retries use deterministic event
 identity. Calendar/provider failures remain visible and availability fails closed.
 Provider mail acceptance is distinct from verified delivery to an inbox.

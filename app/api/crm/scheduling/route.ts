@@ -3,7 +3,10 @@ import { crmActor, crmDb, crmError, CrmError, readJson, sameOrigin } from "@/lib
 import { sessionTypeSchema } from "@/lib/crm/scheduling-types";
 import { changeSession, schedulingProduction, schedulingRead, sessionRpcError, sessionCalendarWriteAccess } from "@/lib/crm/scheduling-server";
 import { fetchMemberBusy } from "@/lib/google-calendar/api";
+import { runSessionNotifications } from "@/lib/crm/scheduling-mail";
+export const maxDuration = 60;
 const actions = z.discriminatedUnion("action", [
+    z.object({ action: z.literal("dispatch") }),
     z.object({ action: z.literal("type_save"), id: z.string().uuid(), version: z.number().int().positive().nullable(), data: sessionTypeSchema }),
     z.object({ action: z.literal("cancel"), id: z.string().uuid(), version: z.number().int().positive() }),
 ]);
@@ -19,7 +22,10 @@ export async function POST(req: Request) {
         const actor = await crmActor();
         sameOrigin(req);
         schedulingProduction();
-        const b = actions.parse(await readJson(req, 20000));
+        const b = actions.parse(await readJson(req, 50000));
+        if (b.action === "dispatch") {
+            return Response.json(await runSessionNotifications(), { headers: { "Cache-Control": "no-store" } });
+        }
         if (b.action === "cancel") {
             const { data, error } = await crmDb().from("crm_appointments").select("*").eq("id", b.id).maybeSingle();
             if (error || !data)
