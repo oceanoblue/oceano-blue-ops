@@ -65,8 +65,8 @@ export function SchedulingSettingsForm({ initial }: { initial: Settings }) {
             <div><h3 id="auto-confirm-label" className="font-semibold text-ocean-950">Automatic confirmation</h3><p className="mt-1 text-xs font-medium text-ocean-700">{s.auto_confirm_bookings ? 'ON · Confirm immediately' : 'OFF · Require acceptance'}</p></div>
             <button type="button" role="switch" aria-checked={s.auto_confirm_bookings} aria-labelledby="auto-confirm-label" aria-describedby="auto-confirm-description" disabled={pending}
               onClick={() => setS({ ...s, auto_confirm_bookings: !s.auto_confirm_bookings })}
-              className={`inline-flex min-h-11 w-14 shrink-0 items-center rounded-full p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ocean-600 disabled:opacity-50 ${s.auto_confirm_bookings ? 'bg-ocean-700' : 'bg-slate-400'}`}>
-              <span className={`h-9 w-9 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none ${s.auto_confirm_bookings ? 'translate-x-3' : 'translate-x-0'}`} />
+              className={`inline-flex min-h-11 w-14 shrink-0 items-center rounded-full p-1 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ocean-600 disabled:opacity-50 ${s.auto_confirm_bookings ? 'bg-ocean-700' : 'bg-slate-400'}`}>
+              <span className={`h-9 w-9 rounded-full bg-white shadow-xs transition-transform motion-reduce:transition-none ${s.auto_confirm_bookings ? 'translate-x-3' : 'translate-x-0'}`} />
             </button>
           </div>
           <p id="auto-confirm-description" className="mt-3 text-sm text-slate-700">{s.auto_confirm_bookings ? 'Clients receive confirmation immediately. The assigned photographer is notified; no acceptance is required.' : 'The time is reserved while the assigned photographer accepts. Clients receive confirmation after acceptance. This includes Gustavo and contractors.'}</p>

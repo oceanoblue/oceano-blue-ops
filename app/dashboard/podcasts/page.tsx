@@ -47,14 +47,14 @@ export default async function PodcastsPage() {
               <Link
                 key={s.id}
                 href={`/dashboard/podcasts/shows/${s.id}`}
-                className="card flex items-start gap-3 p-4 hover:border-ocean-300 hover:shadow-sm"
+                className="card flex items-start gap-3 p-4 hover:border-ocean-300 hover:shadow-xs"
               >
                 {s.logo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.logo_url} alt="" className="h-9 w-9 shrink-0 rounded object-contain ring-1 ring-slate-200" />
+                  <img src={s.logo_url} alt="" className="h-9 w-9 shrink-0 rounded-sm object-contain ring-1 ring-slate-200" />
                 ) : (
                   <div
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded text-white"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-sm text-white"
                     style={{ backgroundColor: s.brand_color || '#0f766e' }}
                   >
                     <Mic className="h-4 w-4" />

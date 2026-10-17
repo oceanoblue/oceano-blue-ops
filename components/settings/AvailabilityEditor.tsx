@@ -134,7 +134,7 @@ export function AvailabilityEditor({
               >
                 <span
                   className={cn(
-                    'block h-5 w-5 m-0.5 rounded-full bg-white shadow transition',
+                    'block h-5 w-5 m-0.5 rounded-full bg-white shadow-sm transition',
                     enabled ? 'translate-x-6' : ''
                   )}
                 />

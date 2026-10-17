@@ -31,7 +31,7 @@ export function FieldSignIn() {
   }
 
   return (
-    <div className="grain relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-ink-900 to-ink-950 px-6 py-12">
+    <div className="grain relative flex min-h-screen items-center justify-center overflow-hidden bg-linear-to-br from-ink-900 to-ink-950 px-6 py-12">
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-ocean-500/20 blur-3xl" />
       <div className="relative w-full max-w-sm">
         <div className="mb-8 text-center">

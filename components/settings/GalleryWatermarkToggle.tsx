@@ -36,8 +36,8 @@ export function GalleryWatermarkToggle({ initial }: { initial: boolean }) {
         <div className="flex shrink-0 items-center gap-3">
           <span className="text-sm text-slate-600">{busy ? 'Saving…' : enabled ? 'On' : 'Off'}</span>
           <button type="button" role="switch" aria-checked={enabled} aria-labelledby="gallery-watermark-label" aria-describedby="gallery-watermark-description" disabled={busy} onClick={toggle}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ocean-600 ${enabled ? 'bg-ocean-600' : 'bg-slate-300'} disabled:opacity-60`}>
-            <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ocean-600 ${enabled ? 'bg-ocean-600' : 'bg-slate-300'} disabled:opacity-60`}>
+            <span className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
         </div>
       </div>

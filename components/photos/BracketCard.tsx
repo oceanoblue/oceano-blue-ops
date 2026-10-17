@@ -119,7 +119,7 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
       }`}
     >
       {/* Hero thumbnail + frame-count badge */}
-      <div className="relative aspect-[3/2] bg-slate-800 overflow-hidden">
+      <div className="relative aspect-3/2 bg-slate-800 overflow-hidden">
         {heroUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={heroUrl} alt={middleFrame.filename} loading="lazy" decoding="async" className="h-full w-full object-cover" />
@@ -132,7 +132,7 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
             )}
           </div>
         )}
-        <div className="absolute bottom-1.5 right-1.5 text-[10px] font-mono bg-black/60 text-white px-1.5 py-0.5 rounded">
+        <div className="absolute bottom-1.5 right-1.5 text-[10px] font-mono bg-black/60 text-white px-1.5 py-0.5 rounded-sm">
           {bracket.photos.length} frames
         </div>
       </div>
@@ -145,7 +145,7 @@ export function BracketCard({ bracket, selected, onToggle, urls, setUrls }: Brac
             {bracket.detectedSize}-shot bracket
           </div>
           {allRaw && (
-            <span className="ml-auto text-[10px] font-mono bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">
+            <span className="ml-auto text-[10px] font-mono bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded-sm">
               {ext}
             </span>
           )}

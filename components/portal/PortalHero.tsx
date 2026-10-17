@@ -24,7 +24,7 @@ export function PortalHero({
   children?: ReactNode;
 }) {
   return (
-    <header className="grain relative overflow-hidden bg-gradient-to-br from-ink-900 to-ink-950 text-white">
+    <header className="grain relative overflow-hidden bg-linear-to-br from-ink-900 to-ink-950 text-white">
       {/* soft ocean glow */}
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-ocean-500/20 blur-3xl" />
       <div className="relative mx-auto max-w-6xl px-6 py-9 sm:py-11">

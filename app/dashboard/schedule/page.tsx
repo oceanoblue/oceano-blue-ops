@@ -48,10 +48,10 @@ export default async function SchedulePage({searchParams}:{searchParams:Promise<
   function card(o:Shoot,color?:string,memberId?:string) {
     const visits=memberId?memberWindows(o as any,memberId):[];
     const visit=visits.length?{start:visits.map(w=>w.start!).sort()[0],end:visits.map(w=>w.end!).sort().at(-1)!}:null;
-    const label=missingVideo(o)?'Videographer needed':`Photo · ${assignmentLabel(o)}`;return <Link key={o.id} href={`/dashboard/orders/${o.id}`} className="block rounded-xl border border-slate-200 border-l-4 bg-white p-3 shadow-sm transition hover:shadow-md focus-visible:outline-ocean-600" style={{borderLeftColor:color||'#d97706'}}>
+    const label=missingVideo(o)?'Videographer needed':`Photo · ${assignmentLabel(o)}`;return <Link key={o.id} href={`/dashboard/orders/${o.id}`} className="block rounded-xl border border-slate-200 border-l-4 bg-white p-3 shadow-xs transition hover:shadow-md focus-visible:outline-ocean-600" style={{borderLeftColor:color||'#d97706'}}>
       <div className="flex justify-between gap-2 text-xs text-slate-500"><span>{o.scheduled_at?`${fmtTimeInTz(visit?.start||o.scheduled_at,tz)}${o.duration_minutes?`–${fmtTimeInTz(visit?.end||new Date(Date.parse(o.scheduled_at)+o.duration_minutes*60000),tz)}`:''}`:'Date needed'}</span><span>#{o.order_number}</span></div>
       <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{memberId && o.videographer_id===memberId ? resolve(o)===memberId ? 'Photo + video' : 'Video' : 'Photography / 360'}</p>
-      <p className="mt-2 break-words text-sm font-semibold text-ink-950">{o.listings?.address_line1||'Property details needed'}</p><p className="mt-1 text-xs text-slate-500">{o.clients?.full_name} · {o.listings?.city}</p>
+      <p className="mt-2 wrap-break-word text-sm font-semibold text-ink-950">{o.listings?.address_line1||'Property details needed'}</p><p className="mt-1 text-xs text-slate-500">{o.clients?.full_name} · {o.listings?.city}</p>
       <p className="mt-2 text-xs font-medium" style={{color:color||'#92400e'}}>{name(o)}</p>
       <p className="mt-1 text-xs text-slate-500">{(o.order_items||[]).map((i:any)=>i.description).join(' · ')||'Services not entered'}{o.duration_minutes?` · ${visit?Math.round((Date.parse(visit.end)-Date.parse(visit.start))/60000):o.duration_minutes} min`:''}</p>
       <span className={`mt-3 inline-block rounded-md px-2 py-1 text-[11px] font-medium ${!missingVideo(o)&&assignmentLabel(o).startsWith('Confirmed')?'bg-emerald-50 text-emerald-800':'bg-amber-50 text-amber-900'}`}>{label}</span>

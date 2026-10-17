@@ -60,7 +60,7 @@ export function PortalSignIn() {
   }
 
   return (
-    <div className="grain relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-ink-900 to-ink-950 px-6 py-12">
+    <div className="grain relative flex min-h-screen items-center justify-center overflow-hidden bg-linear-to-br from-ink-900 to-ink-950 px-6 py-12">
       {/* ambient ocean glows */}
       <div className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full bg-ocean-500/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-40 -right-24 h-96 w-96 rounded-full bg-ocean-700/20 blur-3xl" />
@@ -73,7 +73,7 @@ export function PortalSignIn() {
           </div>
         </div>
 
-        <div className="rounded-2xl bg-white/95 p-8 shadow-lift backdrop-blur">
+        <div className="rounded-2xl bg-white/95 p-8 shadow-lift backdrop-blur-sm">
           <h1 className="font-display text-3xl font-semibold tracking-tight text-ocean-950">
             Welcome back
           </h1>

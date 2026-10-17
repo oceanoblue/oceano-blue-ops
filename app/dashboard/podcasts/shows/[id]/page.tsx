@@ -41,10 +41,10 @@ export default async function ShowDetailPage(props: { params: Promise<{ id: stri
         <div className="mt-1 flex items-center gap-3">
           {s.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={s.logo_url} alt={`${s.name} logo`} className="h-11 w-11 rounded object-contain ring-1 ring-slate-200" />
+            <img src={s.logo_url} alt={`${s.name} logo`} className="h-11 w-11 rounded-sm object-contain ring-1 ring-slate-200" />
           ) : (
             <div
-              className="grid h-11 w-11 place-items-center rounded text-sm font-bold text-white"
+              className="grid h-11 w-11 place-items-center rounded-sm text-sm font-bold text-white"
               style={{ backgroundColor: s.brand_color || '#0f766e' }}
             >
               {s.name?.[0]?.toUpperCase() ?? '?'}
@@ -54,7 +54,7 @@ export default async function ShowDetailPage(props: { params: Promise<{ id: stri
             <h1 className="text-2xl font-semibold text-ocean-950">{s.name}</h1>
             <p className="text-sm text-slate-600">
               {s.clients?.full_name ?? 'Internal'} · slug{' '}
-              <code className="rounded bg-slate-100 px-1 font-mono text-xs">{s.slug}</code>
+              <code className="rounded-sm bg-slate-100 px-1 font-mono text-xs">{s.slug}</code>
               {s.tagline ? ` · ${s.tagline}` : ''}
             </p>
           </div>

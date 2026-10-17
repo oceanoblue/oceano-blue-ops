@@ -40,13 +40,13 @@ const VALID_SINGLE_SET_SIZES = new Set([2, 3, 5, 7]);
 function Thumb({ url, alt }: { url: string | null; alt: string }) {
   if (!url) {
     return (
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-100 text-slate-300">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-300">
         <Camera className="h-4 w-4" />
       </div>
     );
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt={alt} className="h-10 w-10 shrink-0 rounded object-cover" />;
+  return <img src={url} alt={alt} className="h-10 w-10 shrink-0 rounded-sm object-cover" />;
 }
 
 function SceneBadge({ scene }: { scene: string | null }) {
@@ -236,7 +236,7 @@ export function GroupReviewList({
                       </span>
                     </div>
                     <select
-                      className="rounded border-slate-200 text-xs"
+                      className="rounded-sm border-slate-200 text-xs"
                       value={it.scene ?? 'unknown'}
                       disabled={busy}
                       title="Scene"
@@ -247,7 +247,7 @@ export function GroupReviewList({
                       ))}
                     </select>
                     <select
-                      className="rounded border-slate-200 text-xs"
+                      className="rounded-sm border-slate-200 text-xs"
                       value={it.role ?? ''}
                       disabled={busy}
                       title="Role"
@@ -268,7 +268,7 @@ export function GroupReviewList({
               <div className="flex flex-wrap gap-2">
                 {g.review_required && (
                   <button
-                    className="btn-primary !px-2.5 !py-1.5 text-xs"
+                    className="btn-primary px-2.5! py-1.5! text-xs"
                     disabled={busy}
                     onClick={() => act({ action: 'mark_reviewed', group_id: g.id })}
                   >
@@ -276,7 +276,7 @@ export function GroupReviewList({
                   </button>
                 )}
                 <button
-                  className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                  className="btn-secondary px-2.5! py-1.5! text-xs"
                   disabled={busy}
                   onClick={() => act({ action: 'split', group_id: g.id })}
                 >
@@ -296,7 +296,7 @@ export function GroupReviewList({
             <div className="flex items-center gap-2">
               {archivedSingles.length > 0 && (
                 <button
-                  className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                  className="btn-secondary px-2.5! py-1.5! text-xs"
                   onClick={() => setShowArchived((v) => !v)}
                 >
                   <Archive className="h-3.5 w-3.5" />
@@ -304,7 +304,7 @@ export function GroupReviewList({
                 </button>
               )}
               <button
-                className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                className="btn-secondary px-2.5! py-1.5! text-xs"
                 disabled={busy || !oneBracketSelectionIsValid}
                 onClick={() => act({ action: 'create_group', job_id: jobId, asset_ids: [...selectedSingles] })}
                 title="Create one bracket set from 2, 3, 5, or 7 selected frames"
@@ -312,7 +312,7 @@ export function GroupReviewList({
                 <Layers className="h-3.5 w-3.5" /> One set ({selectedSingles.size})
               </button>
               <button
-                className="btn-primary !px-2.5 !py-1.5 text-xs"
+                className="btn-primary px-2.5! py-1.5! text-xs"
                 disabled={busy || selectedSingles.size < 3 || selectedSingles.size % 3 !== 0}
                 onClick={() => createFixedBrackets(3)}
               >
@@ -336,7 +336,7 @@ export function GroupReviewList({
                     <SceneBadge scene={s.scene} />
                   </div>
                   <select
-                    className="rounded border-slate-200 text-xs"
+                    className="rounded-sm border-slate-200 text-xs"
                     value={s.scene ?? 'unknown'}
                     disabled={busy}
                     title="Scene"
@@ -347,7 +347,7 @@ export function GroupReviewList({
                     ))}
                   </select>
                   <button
-                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
+                    className="rounded-sm p-1 text-slate-400 hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
                     title="Archive"
                     disabled={busy}
                     onClick={() => act({ action: 'reject_asset', asset_id: s.id })}
@@ -370,7 +370,7 @@ export function GroupReviewList({
                     <Thumb url={s.thumb_url} alt={s.filename} />
                     <span className="min-w-0 flex-1 truncate text-slate-500 line-through">{s.filename}</span>
                     <button
-                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-ocean-700 disabled:opacity-50"
+                      className="rounded-sm p-1 text-slate-400 hover:bg-slate-100 hover:text-ocean-700 disabled:opacity-50"
                       title="Unarchive"
                       disabled={busy}
                       onClick={() => act({ action: 'restore_asset', asset_id: s.id })}

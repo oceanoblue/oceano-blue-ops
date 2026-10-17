@@ -248,7 +248,7 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
           <h1 className="text-3xl leading-tight text-ink-950 sm:text-4xl">{order.listings?.address_line1 || `Order #${order.order_number}`}</h1>
           <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500"><MapPin className="h-4 w-4"/>{[order.listings?.address_line2, order.listings?.city, order.listings?.state, order.listings?.zip].filter(Boolean).join(', ')}</p>
         </div>
-        <div className="min-w-0 break-words text-right"><p className="text-xs text-slate-500">Order total</p><p className="mt-1 text-2xl font-semibold tracking-tight text-ink-950">{fmtCents(order.total_cents)}</p><p className={`mt-1 text-xs font-medium ${order.download_paid_at?'text-emerald-700':'text-slate-500'}`}>{order.download_paid_at?'Paid':'Payment pending'}</p></div>
+        <div className="min-w-0 wrap-break-word text-right"><p className="text-xs text-slate-500">Order total</p><p className="mt-1 text-2xl font-semibold tracking-tight text-ink-950">{fmtCents(order.total_cents)}</p><p className={`mt-1 text-xs font-medium ${order.download_paid_at?'text-emerald-700':'text-slate-500'}`}>{order.download_paid_at?'Paid':'Payment pending'}</p></div>
       </div>
       <div className="grid divide-y border-t border-slate-100 bg-slate-50/70 text-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         <SummaryItem icon={<UserRound className="h-4 w-4"/>} label="Client" value={order.clients?.full_name || 'No client'}/>
@@ -427,14 +427,14 @@ export default async function OrderDetailPage(props: { params: Promise<{ id: str
 }
 
 function SummaryItem({icon,label,value}:{icon:React.ReactNode;label:string;value:string}) {
-  return <div className="flex min-w-0 items-center gap-3 px-5 py-4 sm:px-7"><span className="text-slate-400">{icon}</span><div className="min-w-0"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 break-words font-medium text-ink-900">{value}</p></div></div>;
+  return <div className="flex min-w-0 items-center gap-3 px-5 py-4 sm:px-7"><span className="text-slate-400">{icon}</span><div className="min-w-0"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 wrap-break-word font-medium text-ink-900">{value}</p></div></div>;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-3">
       <dt className="text-slate-500">{label}</dt>
-      <dd className="min-w-0 break-words text-right">{children}</dd>
+      <dd className="min-w-0 wrap-break-word text-right">{children}</dd>
     </div>
   );
 }

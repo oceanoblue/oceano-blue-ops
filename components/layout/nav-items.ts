@@ -54,6 +54,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { href: '/dashboard', label: 'My Day', icon: Sparkles },
       { href: '/dashboard/overview', label: 'Overview', icon: LayoutDashboard },
       { href: '/dashboard/orders', label: 'Orders', icon: ClipboardList },
+      { href: '/dashboard/crm', label: 'CRM & Inquiries', icon: Users },
       { href: '/dashboard/quotes', label: 'Quotes', icon: FileText },
       { href: '/dashboard/invoices', label: 'Invoices', icon: FileText },
       { href: '/dashboard/reports', label: 'Reports', icon: Gauge },

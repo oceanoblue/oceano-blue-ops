@@ -128,7 +128,7 @@ export function PayRequestForm({
                       type="checkbox"
                       checked={selected.has(s.id)}
                       onChange={() => toggle(s.id)}
-                      className="h-4 w-4 rounded border-slate-300 text-ocean-600 focus:ring-ocean-500"
+                      className="h-4 w-4 rounded-sm border-slate-300 text-ocean-600 focus:ring-ocean-500"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-ink-900">{s.address}</div>

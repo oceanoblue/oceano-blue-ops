@@ -125,7 +125,7 @@ export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveri
           {d.title && <div className="text-xs text-slate-500">{d.title}</div>}
         </div>
         <select
-          className="rounded border-slate-200 text-xs"
+          className="rounded-sm border-slate-200 text-xs"
           value={d.status}
           disabled={busy}
           onChange={(e) => onUpdate(d.id, { status: e.target.value })}
@@ -137,7 +137,7 @@ export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveri
           {d.status.replace(/_/g, ' ')}
         </span>
         <input
-          className="input flex-1 !py-1 text-xs"
+          className="input flex-1 py-1! text-xs"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           disabled={busy}
@@ -149,7 +149,7 @@ export function DeliveryManager({ jobId, deliveries }: { jobId: string; deliveri
           </a>
         )}
         {dirty && (
-          <button className="btn-secondary !px-2 !py-1 text-xs" disabled={busy} onClick={() => onUpdate(d.id, { external_url: url })}>
+          <button className="btn-secondary px-2! py-1! text-xs" disabled={busy} onClick={() => onUpdate(d.id, { external_url: url })}>
             <Save className="h-3.5 w-3.5" /> Save
           </button>
         )}

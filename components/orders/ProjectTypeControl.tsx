@@ -37,7 +37,7 @@ export function ProjectTypeControl({
         value={current.id}
         disabled={pending}
         onChange={(e) => setType(e.target.value as ProjectType)}
-        className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+        className="w-full rounded-sm border border-slate-200 bg-white px-2 py-1.5 text-sm"
       >
         {PROJECT_TYPES.map((t) => (
           <option key={t} value={t}>

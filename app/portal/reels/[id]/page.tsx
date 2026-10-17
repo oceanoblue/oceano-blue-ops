@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 
 /** Player aspect-ratio class derived from the brief's stored "WIDTHxHEIGHT". */
 const PLAYER_ASPECT: Record<string, string> = {
-  '1080x1920': 'aspect-[9/16] max-h-[560px]',
+  '1080x1920': 'aspect-9/16 max-h-[560px]',
   '1080x1080': 'aspect-square max-h-[560px]',
   '1920x1080': 'aspect-video',
 };
@@ -106,7 +106,7 @@ export default async function ClientReelDetail(props: { params: Promise<{ id: st
 
   const reelLabel = REEL_TYPES.find((t) => t.value === brief?.reel_type)?.label ?? 'Reel';
   const aspectLabel = ASPECTS.find((a) => a.value === brief?.aspect)?.label ?? brief?.aspect ?? '—';
-  const playerAspect = PLAYER_ASPECT[brief?.aspect] ?? 'aspect-[9/16] max-h-[560px]';
+  const playerAspect = PLAYER_ASPECT[brief?.aspect] ?? 'aspect-9/16 max-h-[560px]';
 
   const steps = [
     { label: 'Footage received', done: rank >= 1, active: rank === 1 },

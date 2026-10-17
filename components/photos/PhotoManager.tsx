@@ -867,7 +867,7 @@ export function PhotoManager({
           checked={compressUploads}
           disabled={uploading}
           onChange={(e) => setCompressUploads(e.target.checked)}
-          className="h-3.5 w-3.5 rounded accent-ocean-600"
+          className="h-3.5 w-3.5 rounded-sm accent-ocean-600"
         />
         <span>
           Compress before upload — faster, slightly lower quality.{' '}
@@ -1478,7 +1478,7 @@ function Stage2({
                   type="checkbox"
                   checked={perspectiveCorrection}
                   onChange={(e) => onPerspectiveCorrectionChange(e.target.checked)}
-                  className="h-4 w-4 rounded accent-ocean-600"
+                  className="h-4 w-4 rounded-sm accent-ocean-600"
                 />
                 <span className="text-sm text-slate-700">Perspective correction</span>
               </label>
@@ -1487,7 +1487,7 @@ function Stage2({
                   type="checkbox"
                   checked={removeReflections}
                   onChange={(e) => onRemoveReflectionsChange(e.target.checked)}
-                  className="h-4 w-4 rounded accent-ocean-600"
+                  className="h-4 w-4 rounded-sm accent-ocean-600"
                 />
                 <span className="text-sm text-slate-700">Remove camera reflections</span>
               </label>
@@ -1496,7 +1496,7 @@ function Stage2({
                   type="checkbox"
                   checked={blurFaces}
                   onChange={(e) => onBlurFacesChange(e.target.checked)}
-                  className="h-4 w-4 rounded accent-ocean-600"
+                  className="h-4 w-4 rounded-sm accent-ocean-600"
                 />
                 <span className="text-sm text-slate-700">Blur faces in personal photos</span>
               </label>
@@ -1541,7 +1541,7 @@ function Stage2({
                   type="checkbox"
                   checked={autoDetect}
                   onChange={(e) => onAutoDetectChange(e.target.checked)}
-                  className="h-4 w-4 rounded accent-ocean-600"
+                  className="h-4 w-4 rounded-sm accent-ocean-600"
                 />
                 <span className="text-sm text-slate-700">
                   Auto-apply sky / window fixes when detected
@@ -1587,7 +1587,7 @@ function Stage2Thumb({
       ref={ref}
       type="button"
       onClick={onToggle}
-      className={`relative aspect-[3/2] overflow-hidden rounded-md ring-2 transition ${
+      className={`relative aspect-3/2 overflow-hidden rounded-md ring-2 transition ${
         selected ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'
       }`}
     >
@@ -1607,7 +1607,7 @@ function Stage2Thumb({
         ✓
       </div>
       {photo.is_hdr && (
-        <div className="absolute top-1.5 right-1.5 text-[10px] font-semibold bg-amber-500/90 text-amber-950 px-1.5 py-0.5 rounded">
+        <div className="absolute top-1.5 right-1.5 text-[10px] font-semibold bg-amber-500/90 text-amber-950 px-1.5 py-0.5 rounded-sm">
           Merged
         </div>
       )}
@@ -1936,7 +1936,7 @@ function Stage3({
       </section>
 
       {shown.length > 0 && (
-        <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2.5 shadow-sm backdrop-blur">
+        <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2.5 shadow-xs backdrop-blur-sm">
           <span className="px-1 text-sm font-medium text-slate-700">
             {selecting ? `${selected.size} selected` : 'Tick photos to remove or delete them'}
           </span>
@@ -2151,8 +2151,8 @@ function Stage3({
 // ─── In-flight job placeholder (Stage 3) ────────────────────────────────────
 function ProcessingTile({ job }: { job: JobView }) {
   return (
-    <div className="relative aspect-[3/2] overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200">
-      <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-slate-100 via-slate-200 to-slate-100" />
+    <div className="relative aspect-3/2 overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200">
+      <div className="absolute inset-0 animate-pulse bg-linear-to-br from-slate-100 via-slate-200 to-slate-100" />
       <div className="relative h-full w-full flex flex-col items-center justify-center gap-1.5 text-slate-500">
         <Loader2 className="h-5 w-5 animate-spin text-ocean-600" />
         <span className="text-xs font-medium">{JOB_LABEL[job.job_type] ?? 'Processing'}…</span>
@@ -2228,9 +2228,9 @@ function SingleThumb({
       } ${selected ? 'ring-ocean-600' : 'ring-transparent hover:ring-slate-300'}`}
     >
       {raw ? (
-        <div className="h-full w-full bg-gradient-to-br from-slate-700 to-slate-900 text-slate-100 flex flex-col items-center justify-center p-2 text-center">
+        <div className="h-full w-full bg-linear-to-br from-slate-700 to-slate-900 text-slate-100 flex flex-col items-center justify-center p-2 text-center">
           <Camera className="h-7 w-7 mb-1 text-slate-300" strokeWidth={1.5} />
-          <div className="text-[10px] font-mono tracking-wider px-2 py-0.5 rounded bg-amber-500 text-amber-950 font-semibold">
+          <div className="text-[10px] font-mono tracking-wider px-2 py-0.5 rounded-sm bg-amber-500 text-amber-950 font-semibold">
             {ext}
           </div>
           <div className="mt-1 text-[10px] text-slate-300 truncate max-w-full">{photo.filename}</div>
@@ -2269,7 +2269,7 @@ function SingleThumb({
               convert();
             }}
             disabled={converting}
-            className="absolute inset-x-2 bottom-2 text-[11px] font-medium px-2 py-1.5 rounded-md bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-60 inline-flex items-center justify-center gap-1 shadow z-10"
+            className="absolute inset-x-2 bottom-2 text-[11px] font-medium px-2 py-1.5 rounded-md bg-ocean-600 text-white hover:bg-ocean-500 disabled:opacity-60 inline-flex items-center justify-center gap-1 shadow-sm z-10"
           >
             {converting ? (
               <>
@@ -2284,7 +2284,7 @@ function SingleThumb({
             )}
           </button>
           {convertError && (
-            <div className="absolute top-7 left-1 right-1 text-[10px] bg-rose-600 text-white px-1.5 py-1 rounded shadow truncate z-10" title={convertError}>
+            <div className="absolute top-7 left-1 right-1 text-[10px] bg-rose-600 text-white px-1.5 py-1 rounded-sm shadow-sm truncate z-10" title={convertError}>
               {convertError}
             </div>
           )}
@@ -2605,7 +2605,7 @@ function ProcessedCard({
   return (
     <div
       ref={ref}
-      className={`group relative aspect-[3/2] overflow-hidden rounded-md ring-2 transition ${selecting ? 'cursor-pointer' : 'cursor-zoom-in'} ${
+      className={`group relative aspect-3/2 overflow-hidden rounded-md ring-2 transition ${selecting ? 'cursor-pointer' : 'cursor-zoom-in'} ${
         selected
           ? 'ring-ocean-600 ring-4'
           : isApproved
@@ -2641,9 +2641,9 @@ function ProcessedCard({
       >
         <Check className="h-3.5 w-3.5" strokeWidth={3} />
       </button>
-      <div title={photo.filename} className="pointer-events-none absolute left-8 top-1.5 max-w-[55%] truncate rounded bg-slate-950/70 px-1.5 py-0.5 text-[10px] text-white">{photo.filename}</div>
+      <div title={photo.filename} className="pointer-events-none absolute left-8 top-1.5 max-w-[55%] truncate rounded-sm bg-slate-950/70 px-1.5 py-0.5 text-[10px] text-white">{photo.filename}</div>
       {isApproved && (
-        <div className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-600 text-white px-1.5 py-0.5 rounded shadow">
+        <div className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-600 text-white px-1.5 py-0.5 rounded-sm shadow-sm">
           <CheckCircle2 className="h-3 w-3" /> Approved
         </div>
       )}
@@ -2654,7 +2654,7 @@ function ProcessedCard({
           only the buttons do — so clicking the empty gradient still opens the
           loupe instead of being swallowed. */}
       <div
-        className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-2 opacity-0 transition pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto ${selecting ? 'hidden' : ''}`}
+        className={`absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 via-black/50 to-transparent p-2 opacity-0 transition pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto ${selecting ? 'hidden' : ''}`}
       >
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex gap-1">
@@ -2723,7 +2723,7 @@ function ProcessedCard({
                 onClick={(ev) => { ev.stopPropagation(); applyExtra(e.id); }}
                 disabled={busy !== null}
                 title={e.label}
-                className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-medium bg-white/15 text-white hover:bg-white/25 transition"
+                className="inline-flex items-center gap-1 px-1.5 py-1 rounded-sm text-[10px] font-medium bg-white/15 text-white hover:bg-white/25 transition"
               >
                 {busy === e.id ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -2774,7 +2774,7 @@ function OriginalTile({
       type="button"
       onClick={onOpen}
       title={photo.filename}
-      className="relative aspect-[3/2] overflow-hidden rounded-md ring-1 ring-slate-200 transition hover:ring-ocean-400"
+      className="relative aspect-3/2 overflow-hidden rounded-md ring-1 ring-slate-200 transition hover:ring-ocean-400"
     >
       {raw ? (
         <div className="grid h-full w-full place-items-center bg-slate-100 text-center">

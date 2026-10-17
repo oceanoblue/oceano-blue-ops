@@ -286,7 +286,7 @@ function PreviewPanel({
   return (
     <div>
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-1">{title}</div>
-      <div className="aspect-[3/2] w-full overflow-hidden rounded-md ring-1 ring-slate-200 bg-slate-50 grid place-items-center">
+      <div className="aspect-3/2 w-full overflow-hidden rounded-md ring-1 ring-slate-200 bg-slate-50 grid place-items-center">
         {src ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt={title} className="h-full w-full object-cover" />

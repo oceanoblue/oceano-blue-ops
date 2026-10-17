@@ -368,13 +368,13 @@ export function PhotoViewer({
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 h-[100dvh] w-screen bg-neutral-950 text-neutral-100 flex flex-col">
+    <div className="fixed inset-0 z-50 h-dvh w-screen bg-neutral-950 text-neutral-100 flex flex-col">
       {/* ─── Top bar ───────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-neutral-800 bg-neutral-900">
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onClose}
-            className="p-1.5 rounded hover:bg-white/10 text-neutral-300"
+            className="p-1.5 rounded-sm hover:bg-white/10 text-neutral-300"
             title="Close (Esc)"
           >
             <X className="h-4 w-4" />
@@ -415,7 +415,7 @@ export function PhotoViewer({
             onClick={() => rotate(-90)}
             disabled={busy === 'rotate'}
             title="Rotate left"
-            className="p-1.5 rounded hover:bg-white/10 text-neutral-300 disabled:opacity-40"
+            className="p-1.5 rounded-sm hover:bg-white/10 text-neutral-300 disabled:opacity-40"
           >
             <RotateCw className="h-4 w-4 -scale-x-100" />
           </button>
@@ -423,14 +423,14 @@ export function PhotoViewer({
             onClick={() => rotate(90)}
             disabled={busy === 'rotate'}
             title="Rotate right"
-            className="p-1.5 rounded hover:bg-white/10 text-neutral-300 disabled:opacity-40"
+            className="p-1.5 rounded-sm hover:bg-white/10 text-neutral-300 disabled:opacity-40"
           >
             <RotateCw className="h-4 w-4" />
           </button>
           <button
             onClick={download}
             title="Open in new tab"
-            className="p-1.5 rounded hover:bg-white/10 text-neutral-300"
+            className="p-1.5 rounded-sm hover:bg-white/10 text-neutral-300"
           >
             <Download className="h-4 w-4" />
           </button>
@@ -454,7 +454,7 @@ export function PhotoViewer({
           {index > 0 && (
             <button
               onClick={prev}
-              className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-neutral-800/90 hover:bg-neutral-700 p-2 shadow z-10"
+              className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-neutral-800/90 hover:bg-neutral-700 p-2 shadow-sm z-10"
               aria-label="Previous"
             >
               <ChevronLeft className="h-5 w-5 text-neutral-200" />
@@ -463,7 +463,7 @@ export function PhotoViewer({
           {index < photos.length - 1 && (
             <button
               onClick={next}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-neutral-800/90 hover:bg-neutral-700 p-2 shadow z-10"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-neutral-800/90 hover:bg-neutral-700 p-2 shadow-sm z-10"
               aria-label="Next"
             >
               <ChevronRight className="h-5 w-5 text-neutral-200" />
@@ -514,14 +514,14 @@ export function PhotoViewer({
                 className="absolute inset-y-0 w-0.5 bg-white shadow-[0_0_6px_rgba(0,0,0,0.5)] pointer-events-none"
                 style={{ left: `${splitPct}%` }}
               >
-                <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-8 w-8 rounded-full bg-white shadow grid place-items-center">
+                <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-8 w-8 rounded-full bg-white shadow-sm grid place-items-center">
                   <Columns2 className="h-4 w-4 text-slate-700" />
                 </div>
               </div>
-              <div className="absolute top-3 left-3 bg-slate-900/80 text-white text-[11px] px-2 py-0.5 rounded font-medium pointer-events-none">
+              <div className="absolute top-3 left-3 bg-slate-900/80 text-white text-[11px] px-2 py-0.5 rounded-sm font-medium pointer-events-none">
                 ORIGINAL
               </div>
-              <div className="absolute top-3 right-3 bg-ocean-600/90 text-white text-[11px] px-2 py-0.5 rounded font-medium pointer-events-none">
+              <div className="absolute top-3 right-3 bg-ocean-600/90 text-white text-[11px] px-2 py-0.5 rounded-sm font-medium pointer-events-none">
                 ENHANCED
               </div>
             </div>
@@ -538,7 +538,7 @@ export function PhotoViewer({
           )}
 
           {!split && showBefore && parentUrl && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-xs px-2 py-0.5 rounded shadow z-10 font-medium">
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-xs px-2 py-0.5 rounded-sm shadow-sm z-10 font-medium">
               BEFORE
             </div>
           )}
@@ -567,7 +567,7 @@ export function PhotoViewer({
               }}
               aria-label="AI revision instructions"
               placeholder="Describe changes for AI revision…"
-              className="flex-1 bg-transparent outline-none text-sm text-neutral-100 placeholder:text-neutral-500"
+              className="flex-1 bg-transparent outline-hidden text-sm text-neutral-100 placeholder:text-neutral-500"
             />
             <button
               aria-label="Create AI revision"
@@ -643,7 +643,7 @@ export function PhotoViewer({
             </SidebarSection>
 
             {error && (
-              <div className="text-xs text-rose-300 bg-rose-950/60 ring-1 ring-rose-900 rounded px-2 py-1.5">{error}</div>
+              <div className="text-xs text-rose-300 bg-rose-950/60 ring-1 ring-rose-900 rounded-sm px-2 py-1.5">{error}</div>
             )}
           </div>
         </aside>
@@ -735,7 +735,7 @@ function Filmstrip({
       <button
         onClick={() => onSelect(Math.max(0, index - 1))}
         disabled={index === 0}
-        className="p-1.5 rounded hover:bg-white/10 disabled:opacity-30"
+        className="p-1.5 rounded-sm hover:bg-white/10 disabled:opacity-30"
       >
         <ChevronLeft className="h-4 w-4 text-neutral-400" />
       </button>
@@ -771,7 +771,7 @@ function Filmstrip({
       <button
         onClick={() => onSelect(Math.min(photos.length - 1, index + 1))}
         disabled={index === photos.length - 1}
-        className="p-1.5 rounded hover:bg-white/10 disabled:opacity-30"
+        className="p-1.5 rounded-sm hover:bg-white/10 disabled:opacity-30"
       >
         <ChevronRight className="h-4 w-4 text-neutral-400" />
       </button>

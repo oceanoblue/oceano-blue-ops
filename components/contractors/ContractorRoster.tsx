@@ -303,7 +303,7 @@ function Row({
               inputMode="decimal"
               value={rates.small}
               onChange={(e) => setRates({ ...rates, small: e.target.value })}
-              className="w-12 rounded border-slate-200 px-1.5 py-1 text-sm"
+              className="w-12 rounded-sm border-slate-200 px-1.5 py-1 text-sm"
               title="Small home (below the sqft cutoff)"
               aria-label="Small home rate"
             />
@@ -312,7 +312,7 @@ function Row({
               inputMode="decimal"
               value={rates.large}
               onChange={(e) => setRates({ ...rates, large: e.target.value })}
-              className="w-12 rounded border-slate-200 px-1.5 py-1 text-sm"
+              className="w-12 rounded-sm border-slate-200 px-1.5 py-1 text-sm"
               title="Larger home (at/above the sqft cutoff)"
               aria-label="Large home rate"
             />
@@ -321,7 +321,7 @@ function Row({
               inputMode="decimal"
               value={rates.x360}
               onChange={(e) => setRates({ ...rates, x360: e.target.value })}
-              className="w-12 rounded border-slate-200 px-1.5 py-1 text-sm"
+              className="w-12 rounded-sm border-slate-200 px-1.5 py-1 text-sm"
               title="360 photos add-on"
               aria-label="360 photos add-on rate"
             />

@@ -92,7 +92,7 @@ export function PayRequestsPanel({ requests }: { requests: PendingPayRequest[] }
                   )}
                 </div>
                 {r.notes && (
-                  <div className="mt-1 rounded bg-slate-50 px-2 py-1 text-xs italic text-slate-600">
+                  <div className="mt-1 rounded-sm bg-slate-50 px-2 py-1 text-xs italic text-slate-600">
                     &ldquo;{r.notes}&rdquo;
                   </div>
                 )}

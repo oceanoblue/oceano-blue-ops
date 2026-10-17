@@ -162,14 +162,14 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
       <div className="min-h-screen bg-slate-50">
         <header className="border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-6xl px-6 py-5">
-            <div className="h-3 w-24 rounded bg-slate-200 animate-pulse" />
-            <div className="mt-2 h-6 w-72 max-w-full rounded bg-slate-200 animate-pulse" />
+            <div className="h-3 w-24 rounded-sm bg-slate-200 animate-pulse" />
+            <div className="mt-2 h-6 w-72 max-w-full rounded-sm bg-slate-200 animate-pulse" />
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="aspect-[3/2] rounded-lg bg-slate-200 animate-pulse" />
+              <div key={i} className="aspect-3/2 rounded-lg bg-slate-200 animate-pulse" />
             ))}
           </div>
         </main>
@@ -194,7 +194,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
       key={p.id}
       aria-label={`View ${p.filename}`}
       onClick={() => setLightbox(p)}
-      className="group relative aspect-[3/2] overflow-hidden rounded-lg ring-1 ring-slate-200 shadow-soft transition-all duration-300 ease-swift hover:-translate-y-0.5 hover:shadow-lift hover:ring-ocean-400"
+      className="group relative aspect-3/2 overflow-hidden rounded-lg ring-1 ring-slate-200 shadow-soft transition-all duration-300 ease-swift hover:-translate-y-0.5 hover:shadow-lift hover:ring-ocean-400"
     >
       {p.url && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -221,7 +221,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
       </header>
       <section className="relative isolate min-h-[300px] overflow-hidden bg-[#102c3b] sm:min-h-[420px]">
         {data.photos[0]?.url && <img src={data.photos[0].url} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" />}
-        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[#0a202f] via-[#0a202f]/40 to-[#0a202f]/10" />
+        <div className="absolute inset-0 -z-10 bg-linear-to-t from-[#0a202f] via-[#0a202f]/40 to-[#0a202f]/10" />
         <div className="mx-auto flex min-h-[300px] max-w-6xl flex-col justify-end px-5 pb-9 pt-16 text-white sm:min-h-[420px] sm:px-8 sm:pb-12">
           <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/80">Your property. Beautifully presented.</p>
           <h1 className="max-w-3xl text-3xl font-normal leading-tight sm:text-5xl">{data.listing?.address_line1 || `Order #${data.order.order_number}`}</h1>
@@ -229,7 +229,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
           <div className="mt-6 flex flex-wrap gap-3 text-xs"><span className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5">{data.photos.length} photos</span>{!!data.deliverables?.length && <span className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5">{data.deliverables.length} media files</span>}<span className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5">Prepared by Oceano Blue Media</span></div>
         </div>
       </section>
-      <nav aria-label="Gallery sections" className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <nav aria-label="Gallery sections" className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl gap-5 overflow-x-auto px-5 py-4 text-sm font-medium sm:px-8">
           {data.photos.length > 0 && <a href="#gallery-photos" className="shrink-0 text-ocean-800 hover:underline">Photos ({data.photos.length})</a>}
           {!!data.deliverables?.length && <a href="#gallery-media" className="shrink-0 text-ocean-800 hover:underline">Videos, tours & floor plans</a>}
@@ -337,7 +337,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
         return (
           <div
             role="dialog" aria-modal="true" aria-label="Photo viewer"
-            className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-xs animate-fade-in"
             onClick={() => setLightbox(null)}
           >
             <div

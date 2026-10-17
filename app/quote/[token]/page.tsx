@@ -91,12 +91,12 @@ export default async function QuotePage(props: { params: Promise<{ token: string
             <span className="text-[17px] font-semibold text-ink-900">Total</span>
             <span className="font-mono text-[28px] font-medium text-ocean-700">{money(q.subtotal_cents)}</span>
           </div>
-          {q.notes && <p className="mt-6 rounded bg-ocean-50/60 p-4 text-sm text-slate-600">{q.notes}</p>}
-          <p className="mt-6 rounded bg-slate-50 p-4 text-[14.5px] text-slate-600">
+          {q.notes && <p className="mt-6 rounded-sm bg-ocean-50/60 p-4 text-sm text-slate-600">{q.notes}</p>}
+          <p className="mt-6 rounded-sm bg-slate-50 p-4 text-[14.5px] text-slate-600">
             Want something added or taken off? <strong className="text-ink-900">Text me and I&apos;ll resend it.</strong> Nothing is locked in until you pick a date.
           </p>
           {q.expires_at && (
-            <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.1em] text-slate-500">
+            <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-slate-500">
               Held until {new Date(q.expires_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}
             </p>
           )}
@@ -113,7 +113,7 @@ export default async function QuotePage(props: { params: Promise<{ token: string
                   src={src}
                   alt="Oceano Blue real estate photography"
                   loading="lazy"
-                  className="aspect-[3/2] w-full rounded-lg object-cover ring-1 ring-slate-200"
+                  className="aspect-3/2 w-full rounded-lg object-cover ring-1 ring-slate-200"
                 />
               ))}
             </div>
@@ -122,7 +122,7 @@ export default async function QuotePage(props: { params: Promise<{ token: string
       </div>
 
       {/* Fixed action bar — booking is the one job. */}
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-2xl gap-2.5 px-6 py-3.5" style={{ paddingBottom: 'calc(0.875rem + env(safe-area-inset-bottom))' }}>
           <Link href="/book" prefetch={false} className="btn-primary flex-1 justify-center py-4 text-base">
             Pick a date

@@ -27,12 +27,12 @@ export function PaymentBreakdown({ items, filterable = true }: { items: PaymentL
       </label>
     </div>}
     {visible.length === 0 ? <p className="py-3 text-sm text-slate-500">No {filterable && status !== 'all' ? `${status} ` : ''}work{search ? ' matches your search' : ' to show'}.</p> : <>
-      <ul className="max-h-[28rem] divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+      <ul className="max-h-112 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200 bg-white">
         {visible.map(item => <li key={item.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
-            <Link href={item.href} className="break-words font-medium text-ocean-700 hover:underline">{item.title}</Link>
+            <Link href={item.href} className="wrap-break-word font-medium text-ocean-700 hover:underline">{item.title}</Link>
             <p className="mt-1 text-xs text-slate-500">{item.date ? fmtDate(item.date) : 'Shoot date not recorded'} · {item.description}</p>
-            {item.status === 'paid' && <p className="mt-1 break-words text-xs text-slate-600">
+            {item.status === 'paid' && <p className="mt-1 wrap-break-word text-xs text-slate-600">
               {item.paidAt ? `Paid ${fmtDate(item.paidAt)}` : 'Marked paid; payment date not recorded'}
               {item.paidNote ? ` · ${item.paidNote}` : ''}
             </p>}

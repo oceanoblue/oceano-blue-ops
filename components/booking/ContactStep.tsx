@@ -39,14 +39,14 @@ export function ContactStep({
       <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
         <button
           type="button"
-          className={`rounded-md py-1.5 text-sm font-medium transition ${mode === 'guest' ? 'bg-white shadow-sm text-ocean-900' : 'text-slate-600'}`}
+          className={`rounded-md py-1.5 text-sm font-medium transition ${mode === 'guest' ? 'bg-white shadow-xs text-ocean-900' : 'text-slate-600'}`}
           onClick={() => setMode('guest')}
         >
           Continue as guest
         </button>
         <button
           type="button"
-          className={`rounded-md py-1.5 text-sm font-medium transition ${mode === 'signin' ? 'bg-white shadow-sm text-ocean-900' : 'text-slate-600'}`}
+          className={`rounded-md py-1.5 text-sm font-medium transition ${mode === 'signin' ? 'bg-white shadow-xs text-ocean-900' : 'text-slate-600'}`}
           onClick={() => setMode('signin')}
         >
           Sign in
