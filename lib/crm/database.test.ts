@@ -47,6 +47,12 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    readFileSync(
+      "supabase/migrations/20261017043251_crm_acquisition_booked_files.sql",
+      "utf8",
+    ),
+  );
 }, 60000);
 afterAll(async () => {
   await db?.close();
@@ -1205,4 +1211,83 @@ it("does not accept views or answers after a client link has expired", async () 
       )
     ).rows[0].result,
   ).toEqual({ error: "File unavailable." });
+});
+it("allows explicit client files on booked projects while stopping automated lead emails", async () => {
+  const f = await acquisitionFlow();
+  const data = await deal(f.job.client_id);
+  const won = (
+    await db.query<any>("select id from crm_stages where name='Retainer paid'")
+  ).rows[0].id;
+  const planning = (
+    await db.query<any>("select id from crm_stages where name='Planning'")
+  ).rows[0].id;
+  await act("deal_update", f.job.project_id, { ...data, stage_id: won }, 1);
+  expect(
+    (
+      await db.query<any>(
+        "select status from crm_acquisition_jobs where id=$1",
+        [f.job.id],
+      )
+    ).rows[0].status,
+  ).toBe("cancelled");
+  const request = randomUUID();
+  expect(
+    await acquisition("issue_file", request, {
+      project_id: f.job.project_id,
+      message_template_id: f.message,
+      file_template_id: f.file,
+    }),
+  ).toMatchObject({ id: request });
+  await act(
+    "deal_update",
+    f.job.project_id,
+    { ...data, stage_id: planning },
+    2,
+  );
+  const job = (await db.query<any>("select * from crm_claim_acquisition(5)"))
+    .rows[0];
+  expect(job.id).toBe(request);
+  expect(
+    (
+      await db.query<any>("select crm_prepare_acquisition($1,$2,true) result", [
+        job.id,
+        job.lease_token,
+      ])
+    ).rows[0].result.job.id,
+  ).toBe(request);
+});
+it("preserves explicit office file sends when a client responds to an earlier file", async () => {
+  const f = await acquisitionFlow();
+  const request = randomUUID();
+  await acquisition("issue_file", request, {
+    project_id: f.job.project_id,
+    message_template_id: f.message,
+    file_template_id: f.file,
+  });
+  const file = (
+    await db.query<any>(
+      "select access_token from crm_issued_files where id=$1",
+      [f.job.file_id],
+    )
+  ).rows[0];
+  await db.query(
+    "select crm_file_event($1,'respond',$2,'hash','{\"goals\":\"Film\"}')",
+    [file.access_token, randomUUID()],
+  );
+  expect(
+    (
+      await db.query<any>(
+        "select status from crm_acquisition_jobs where id=$1",
+        [f.job.id],
+      )
+    ).rows[0].status,
+  ).toBe("cancelled");
+  expect(
+    (
+      await db.query<any>(
+        "select status from crm_acquisition_jobs where id=$1",
+        [request],
+      )
+    ).rows[0].status,
+  ).toBe("queued");
 });

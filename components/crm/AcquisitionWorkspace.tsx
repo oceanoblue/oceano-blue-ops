@@ -444,6 +444,9 @@ export function AcquisitionWorkspace({
                     >
                       <div>
                         <h4 className="font-medium text-ink-950">{f.title}</h4>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {f.context.project_name} · {f.context.client_name}
+                        </p>
                         <p className="mt-1 text-xs text-slate-500">
                           {f.revoked_at
                             ? "Revoked"
@@ -505,6 +508,9 @@ export function AcquisitionWorkspace({
                         </h3>
                         <p className="mt-1 text-sm text-slate-500">
                           To {j.recipient} · Scheduled {fmtDateTime(j.due_at)}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {j.context.project_name}
                         </p>
                         {j.last_error && (
                           <p className="mt-3 text-sm text-rose-700">
@@ -1401,7 +1407,7 @@ function IssueFileEditor({
         project’s contact. Review the recipient, message, and file below before
         sending.
       </p>
-      <Label name="Find an open project by name">
+      <Label name="Find an active project by name">
         <input
           className="input"
           value={query}
@@ -1421,9 +1427,11 @@ function IssueFileEditor({
           required
           onChange={(e) => setProjectId(e.target.value)}
         >
-          <option value="">Choose an open project</option>
+          <option value="">Choose an active project</option>
           {projects
-            .filter((p) => p.crm_stages?.outcome === "open")
+            .filter((p) =>
+              ["open", "won"].includes(p.crm_stages?.outcome ?? ""),
+            )
             .map((p) => (
               <option key={p.id} value={p.id}>
                 {p.title} · {p.clients?.full_name} · {p.clients?.email}

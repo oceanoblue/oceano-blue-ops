@@ -161,6 +161,7 @@ export type FileContext = {
   project_type: string;
 };
 export type IssuedFile = {
+  context: FileContext;
   id: string;
   project_id: string;
   client_id: string;

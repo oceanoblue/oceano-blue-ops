@@ -21,7 +21,7 @@ export async function acquisitionProjects(query = "", clientId?: string) {
     .select(
       "id,title,project_type,clients(full_name,email),crm_stages!inner(outcome)",
     )
-    .eq("crm_stages.outcome", "open")
+    .in("crm_stages.outcome", ["open", "won"])
     .order("updated_at", { ascending: false })
     .limit(100);
   if (clientId) projects = projects.eq("client_id", clientId);
@@ -44,7 +44,7 @@ export async function acquisitionRead(
   let issuedQuery = db
     .from("crm_issued_files")
     .select(
-      "id,project_id,client_id,title,created_at,expires_at,viewed_at,responded_at,revoked_at",
+      "id,project_id,client_id,title,context,created_at,expires_at,viewed_at,responded_at,revoked_at",
     )
     .order("created_at", { ascending: false })
     .limit(100);

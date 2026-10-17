@@ -16,10 +16,10 @@ The starter has an immediate acknowledgment draft and an office follow-up task d
 
 - **Outbox** shows approval holds, scheduled/accepted messages and failures. Provider acceptance is distinct from inbox delivery. Delivery/bounce webhooks and mailbox synchronization are not implemented here.
 - Replies go to the configured office Reply-To address (default `info@oceanoblue.net`). Staff use **Client replied / stop follow-ups** to stop pending messages for that project. This does not claim automatic detection of an email reply.
-- A submitted smart-file response automatically stops remaining queued messages for the project. The response is available in the issued-file viewer and the event appears in the contact's CRM activity.
+- A submitted smart-file response automatically stops remaining queued workflow messages for the project. The response is available in the issued-file viewer and the event appears in the contact's CRM activity.
 - Leaving an open pipeline stage, archiving the contact/project, disabling the workflow, or returning an in-use template to draft cancels queued workflow messages. Archiving still pauses open project tasks under the existing archive policy. Reopening or re-enabling does not restart cancelled runs.
 - An email already handed to the provider cannot be recalled. The preflight rechecks project/contact/workflow state immediately before starting a provider call.
-- Explicitly issuing a new file after an office reply hold is allowed for an open project; it does not resume the old automated sequence.
+- Explicitly issuing a new file after an office reply hold is allowed for an active (open or booked) project; it does not resume the old automated sequence.
 
 ## Client files and evidence
 
@@ -35,10 +35,12 @@ The worker claims bounded batches with `FOR UPDATE SKIP LOCKED`, uses a per-job 
 
 All acquisition mutations and mail dispatch are disabled on preview/local deployments so a preview sharing production's database cannot activate a workflow or queue client mail. Configuration and document preview remain readable. No new Gmail permission, third-party connection or client email is needed to deploy the disabled starters.
 
-Lists are bounded to 100 records. Open-project search is a separate lightweight request and respects the contact scope. Full outbox/template pagination, automatic inbound reply association, webhook delivery events, native client signing/payments and general branching workflows remain future work.
+Lists are bounded to 100 records. Active-project search is a separate lightweight request and respects the contact scope. Full outbox/template pagination, automatic inbound reply association, webhook delivery events, native client signing/payments and general branching workflows remain future work.
 
 ## Release verification
 
 Migration `20261017042746_crm_acquisition_workflows.sql` was applied to the Ops Supabase project. Remote checks confirmed RLS on all seven tables, no anonymous file reads or worker RPC execution, zero enabled workflows/ready templates/jobs/issued files, and zero published forms. The business-day/DST result was verified against the remote database. The security advisor returned the same four pre-existing findings and no CRM findings.
 
-The full suite passes 934 tests across 122 files. Coverage includes atomic enrollment, duplicate public retries, task deadlines across DST/weekends, immutable email/file snapshots and responses, lease claims, approval holds, archive/response/disable stop behavior, safe unsent retry, provider ambiguity, auth/CSRF/rate limits and preview isolation. TypeScript, production build and lint pass (10 pre-existing warnings, no errors). Desktop and 390px mobile views were checked; the temporary visual fixtures are excluded from the release. No client email was sent during verification.
+The full suite passes 936 tests across 122 files. Coverage includes atomic enrollment, duplicate public retries, task deadlines across DST/weekends, immutable email/file snapshots and responses, lease claims, approval holds, archive/response/disable stop behavior, safe unsent retry, provider ambiguity, auth/CSRF/rate limits and preview isolation. TypeScript, production build and lint pass (10 pre-existing warnings, no errors). Desktop and 390px mobile views were checked; the temporary visual fixtures are excluded from the release. No client email was sent during verification.
+
+Follow-up migration `20261017043251_crm_acquisition_booked_files.sql` distinguishes explicit office file sends from automated lead follow-ups: booked projects can receive a manually issued file, while lead sequences stay stopped. A client response cancels queued workflow messages without cancelling another explicitly requested office file send.
