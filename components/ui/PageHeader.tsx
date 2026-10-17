@@ -23,8 +23,8 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-ink-100/70 pb-5">
-      <div className="flex items-start gap-3.5">
+    <div className="flex flex-col gap-4 border-b border-ink-100/70 pb-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3.5">
         {Icon && (
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-linear-to-br from-ocean-500 to-ocean-700 text-white shadow-soft">
             <Icon className="h-5 w-5" />
@@ -42,7 +42,7 @@ export function PageHeader({
           {subtitle && <p className="mt-1 text-sm text-slate-600">{subtitle}</p>}
         </div>
       </div>
-      {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+      {children && <div className="flex flex-wrap items-center gap-2 sm:shrink-0">{children}</div>}
     </div>
   );
 }
