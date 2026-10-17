@@ -24,13 +24,13 @@ export type ProcessTask = {
 function Thumb({ url, alt }: { url: string | null; alt: string }) {
   if (!url) {
     return (
-      <div className="grid aspect-[4/3] w-full place-items-center rounded bg-slate-100 text-slate-300">
+      <div className="grid aspect-4/3 w-full place-items-center rounded-sm bg-slate-100 text-slate-300">
         <Camera className="h-5 w-5" />
       </div>
     );
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt={alt} className="aspect-[4/3] w-full rounded object-cover" />;
+  return <img src={url} alt={alt} className="aspect-4/3 w-full rounded-sm object-cover" />;
 }
 
 function TaskIcon({ status }: { status: string }) {

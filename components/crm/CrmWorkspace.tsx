@@ -18,6 +18,7 @@ import type {
   Automation,
   CrmContact,
   CrmData,
+  CrmSummary,
   CrmForm,
   Deal,
   Stage,
@@ -83,14 +84,21 @@ const tabs = [
   { key: "reports", label: "Reports", icon: BarChart3 },
 ] as const;
 type Tab = (typeof tabs)[number]["key"];
-export function CrmWorkspace() {
-  const [data, setData] = useState<CrmData | null>(null),
+export function CrmWorkspace({
+  initialData = null,
+  initialError = "",
+}: {
+  initialData?: CrmData | null;
+  initialError?: string;
+}) {
+  const [data, setData] = useState<CrmData | null>(initialData),
     [tab, setTab] = useState<Tab>("pipeline"),
     [search, setSearch] = useState(""),
     [tag, setTag] = useState(""),
     [stageFilter, setStageFilter] = useState(""),
     [owner, setOwner] = useState(""),
-    [error, setError] = useState(""),
+    [error, setError] = useState(initialError),
+    [showEmpty, setShowEmpty] = useState(false),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [modal, setModal] = useState<Modal>(null),
@@ -98,11 +106,15 @@ export function CrmWorkspace() {
     [detail, setDetail] = useState<ContactDetail | null>(null),
     [detailError, setDetailError] = useState("");
   const pageRef = useRef(0),
-    filtersRef = useRef({ search, tag, stageFilter, owner }),
-    loadSequence = useRef(0);
-  filtersRef.current = { search, tag, stageFilter, owner };
+    filtersRef = useRef({ search, tag, stageFilter, owner, tab }),
+    loadSequence = useRef(0),
+    loadController = useRef<AbortController | null>(null);
+  filtersRef.current = { search, tag, stageFilter, owner, tab };
   const load = useCallback(async (page = pageRef.current) => {
     const sequence = ++loadSequence.current;
+    loadController.current?.abort();
+    const controller = new AbortController();
+    loadController.current = controller;
     setBusy(true);
     const f = filtersRef.current;
     const params = new URLSearchParams({
@@ -111,9 +123,13 @@ export function CrmWorkspace() {
       tag: f.tag,
       stage: f.stageFilter,
       owner: f.owner,
+      section: f.tab,
     });
     try {
-      const r = await fetch(`/api/crm?${params}`, { cache: "no-store" });
+      const r = await fetch(`/api/crm?${params}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       const body = await r.json();
       if (!r.ok) throw new Error(body.error);
       if (sequence !== loadSequence.current) return;
@@ -121,7 +137,7 @@ export function CrmWorkspace() {
       pageRef.current = page;
       setError("");
     } catch (e) {
-      if (sequence === loadSequence.current)
+      if (!controller.signal.aborted && sequence === loadSequence.current)
         setError(e instanceof Error ? e.message : "Unable to load CRM.");
     } finally {
       if (sequence === loadSequence.current) setBusy(false);
@@ -133,10 +149,29 @@ export function CrmWorkspace() {
     if (!r.ok) throw new Error(b.error);
     return b as ContactDetail;
   }, []);
+  const cancelLoad = useCallback(() => {
+    ++loadSequence.current;
+    loadController.current?.abort();
+  }, []);
   useEffect(() => {
+    // Server-rendered data already covers the unfiltered first view.
+    if (
+      initialData &&
+      tab === "pipeline" &&
+      !search &&
+      !tag &&
+      !stageFilter &&
+      !owner &&
+      loadSequence.current === 0
+    )
+      return;
+    cancelLoad();
     const timer = setTimeout(() => void load(0), 250);
-    return () => clearTimeout(timer);
-  }, [load, search, tag, stageFilter, owner]);
+    return () => {
+      clearTimeout(timer);
+      cancelLoad();
+    };
+  }, [load, search, tag, stageFilter, owner, tab, initialData, cancelLoad]);
   useEffect(() => {
     if (!contactId) {
       setDetail(null);
@@ -186,6 +221,8 @@ export function CrmWorkspace() {
   const contacts = data?.contacts || [],
     deals = data?.deals || [],
     allTags = data?.tags || [];
+  const sectionReady = data?.section === tab;
+  const filtered = Boolean(search || tag || stageFilter || owner);
   function exportContacts() {
     if (!data) return;
     const csv = toCsv([
@@ -220,7 +257,7 @@ export function CrmWorkspace() {
     URL.revokeObjectURL(url);
   }
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-busy={busy}>
       <PageHeader
         eyebrow="Relationships"
         title="CRM & inquiries"
@@ -230,22 +267,73 @@ export function CrmWorkspace() {
         <button
           className="btn-secondary"
           disabled={busy}
+          aria-label="Refresh CRM"
           onClick={() => void load()}
         >
           <RefreshCw className="h-4 w-4" />
           <span className="hidden sm:inline">Refresh</span>
         </button>
       </PageHeader>
-      <nav className="flex flex-wrap gap-2" aria-label="CRM sections">
+      {data?.summary ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            [
+              "Contacts",
+              String(data.summary.contacts),
+              "Your shared client directory",
+            ],
+            [
+              "Open projects",
+              String(
+                data.summary.stages
+                  .filter((s) => s.outcome === "open")
+                  .reduce((n, s) => n + s.count, 0),
+              ),
+              "Across all active pipeline stages",
+            ],
+            [
+              "Open pipeline value",
+              money(
+                data.summary.stages
+                  .filter((s) => s.outcome === "open")
+                  .reduce((n, s) => n + s.value_cents, 0),
+              ),
+              "Estimated opportunity value",
+            ],
+            [
+              "Overdue follow-ups",
+              String(data.summary.overdue),
+              "Archived project tasks are paused",
+            ],
+          ].map(([label, value, caption]) => (
+            <article key={label} className="card p-4 sm:p-5">
+              <p className="text-xs font-medium text-slate-500">{label}</p>
+              <p className="mt-2 text-2xl font-semibold tracking-tight text-ink-950 sm:text-3xl">
+                {value}
+              </p>
+              <p className="mt-2 hidden text-xs leading-relaxed text-slate-500 sm:block">
+                {caption}
+              </p>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      <nav
+        className="flex gap-1 overflow-x-auto rounded-xl bg-ink-100/60 p-1.5"
+        aria-label="CRM sections"
+      >
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => {
               setTab(t.key);
               setSearch("");
+              setTag("");
+              setStageFilter("");
+              setOwner("");
             }}
             aria-pressed={tab === t.key}
-            className={tab === t.key ? "btn-primary" : "btn-secondary"}
+            className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-ocean-600 ${tab === t.key ? "bg-white text-ink-950 shadow-soft" : "text-slate-600 hover:bg-white/60 hover:text-ink-950"}`}
           >
             <t.icon className="h-4 w-4" />
             {t.label}
@@ -271,9 +359,11 @@ export function CrmWorkspace() {
           </button>
         </div>
       ) : null}
-      {!data ? (
+      {!data || !sectionReady ? (
         <p className="text-slate-500">
-          {busy ? "Loading your CRM…" : "CRM data is unavailable."}
+          {busy || data
+            ? "Loading your workspace…"
+            : "CRM data is unavailable."}
         </p>
       ) : (
         <>
@@ -295,7 +385,7 @@ export function CrmWorkspace() {
                     aria-label="Filter by tag"
                     value={tag}
                     onChange={(e) => setTag(e.target.value)}
-                    className="input"
+                    className="input sm:w-auto"
                   >
                     <option value="">All tags</option>
                     {allTags.map((t) => (
@@ -319,7 +409,7 @@ export function CrmWorkspace() {
                     aria-label="Filter by stage"
                     value={stageFilter}
                     onChange={(e) => setStageFilter(e.target.value)}
-                    className="input"
+                    className="input sm:w-auto"
                   >
                     <option value="">Active stages</option>
                     {data.stages.map((s) => (
@@ -332,7 +422,7 @@ export function CrmWorkspace() {
                     aria-label="Filter by owner"
                     value={owner}
                     onChange={(e) => setOwner(e.target.value)}
-                    className="input"
+                    className="input sm:w-auto"
                   >
                     <option value="">All owners</option>
                     {data.team.map((t) => (
@@ -362,107 +452,177 @@ export function CrmWorkspace() {
           ) : null}
           {tab === "pipeline" ? (
             <>
-              <div className="flex gap-4 overflow-x-auto pb-4">
-                {data.stages
-                  .filter((s) =>
-                    stageFilter
-                      ? s.id === stageFilter
-                      : s.outcome !== "archived",
-                  )
-                  .map((stage) => {
-                    const rows = deals.filter((d) => d.stage_id === stage.id);
-                    return (
-                      <section
-                        key={stage.id}
-                        className="w-72 shrink-0 rounded-2xl border border-slate-200 bg-slate-100/70 p-3"
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+                <p>
+                  {stageFilter
+                    ? data.stages.find((s) => s.id === stageFilter)?.name
+                    : "Active pipeline"}{" "}
+                  · {deals.length} projects on this page
+                </p>
+                <label className="flex min-h-11 items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={showEmpty}
+                    onChange={(e) => setShowEmpty(e.target.checked)}
+                  />
+                  Show empty stages
+                </label>
+              </div>
+              {!deals.length && !showEmpty ? (
+                <section className="card flex flex-col items-center px-6 py-14 text-center">
+                  <div className="mb-5 rounded-2xl bg-ocean-50 p-4 text-ocean-700">
+                    <ClipboardList className="h-7 w-7" />
+                  </div>
+                  <h2 className="text-2xl text-ink-950">
+                    {filtered
+                      ? "No matching projects"
+                      : "Make room for your next project"}
+                  </h2>
+                  <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-500">
+                    {filtered
+                      ? "Try another search or change your filters to find the right project."
+                      : "New inquiries and projects belong here. Your completed HoneyBook work will stay in Archived, ready whenever you need it."}
+                  </p>
+                  <div className="mt-6 flex flex-wrap justify-center gap-3">
+                    {filtered ? (
+                      <button
+                        className="btn-secondary"
+                        onClick={() => {
+                          setSearch("");
+                          setStageFilter("");
+                          setOwner("");
+                        }}
                       >
-                        <div className="mb-3 flex items-center justify-between gap-2">
-                          <button
-                            className="text-left font-semibold text-ocean-950"
-                            onClick={() => setModal({ kind: "stage", stage })}
-                          >
-                            {stage.name}{" "}
-                            <span className="ml-1 text-slate-400">
-                              {rows.length}
-                            </span>
-                          </button>
-                          <span className="text-xs text-slate-500">
-                            {money(rows.reduce((a, d) => a + d.value_cents, 0))}
-                          </span>
-                        </div>
-                        <div className="space-y-3">
-                          {rows.map((d) => (
-                            <article
-                              key={d.id}
-                              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                        Clear filters
+                      </button>
+                    ) : (
+                      <button
+                        className="btn-primary"
+                        onClick={() => setModal({ kind: "deal" })}
+                      >
+                        <Plus className="h-4 w-4" /> New project
+                      </button>
+                    )}
+                    <button
+                      className="btn-secondary"
+                      onClick={() => setModal({ kind: "historical" })}
+                    >
+                      Import HoneyBook archive
+                    </button>
+                  </div>
+                </section>
+              ) : (
+                <div className="flex gap-4 overflow-x-auto pb-4">
+                  {data.stages
+                    .filter((s) =>
+                      stageFilter
+                        ? s.id === stageFilter
+                        : s.outcome !== "archived",
+                    )
+                    .filter(
+                      (s) =>
+                        showEmpty || deals.some((d) => d.stage_id === s.id),
+                    )
+                    .map((stage) => {
+                      const rows = deals.filter((d) => d.stage_id === stage.id);
+                      return (
+                        <section
+                          key={stage.id}
+                          className="w-72 shrink-0 rounded-2xl border border-slate-200 bg-slate-100/70 p-3"
+                        >
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <button
+                              className="text-left font-semibold text-ocean-950"
+                              onClick={() => setModal({ kind: "stage", stage })}
                             >
-                              <button
-                                className="text-left font-semibold text-ocean-900 hover:underline"
-                                onClick={() =>
-                                  setModal({ kind: "deal", deal: d })
-                                }
+                              {stage.name}{" "}
+                              <span className="ml-1 text-slate-400">
+                                {rows.length}
+                              </span>
+                            </button>
+                            <span className="text-xs text-slate-500">
+                              {money(
+                                rows.reduce((a, d) => a + d.value_cents, 0),
+                              )}
+                            </span>
+                          </div>
+                          <div className="space-y-3">
+                            {rows.map((d) => (
+                              <article
+                                key={d.id}
+                                className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                               >
-                                {d.title}
-                              </button>
-                              <button
-                                className="mt-1 block text-sm text-slate-600 hover:underline"
-                                onClick={() => setContactId(d.client_id)}
-                              >
-                                {d.clients?.full_name || "Open contact"}
-                              </button>
-                              <p className="mt-3 text-sm font-medium">
-                                {money(d.value_cents)}
-                              </p>
-                              {d.project_type ? (
-                                <p className="mt-1 text-xs text-slate-500">
-                                  {d.project_type}
-                                </p>
-                              ) : null}
-                              {d.next_follow_up ? (
-                                <p
-                                  className={`mt-2 text-xs ${new Date(d.next_follow_up) < new Date() ? "text-red-700" : "text-slate-500"}`}
-                                >
-                                  Follow up {date(d.next_follow_up)}
-                                </p>
-                              ) : null}
-                              <label className="mt-3 block">
-                                <span className="sr-only">
-                                  Stage for {d.title}
-                                </span>
-                                <select
-                                  className="input w-full text-xs"
-                                  value={d.stage_id}
-                                  disabled={busy}
-                                  onChange={(e) =>
-                                    void act({
-                                      action: "deal_update",
-                                      id: d.id,
-                                      version: d.version,
-                                      data: { ...d, stage_id: e.target.value },
-                                    })
+                                <button
+                                  className="text-left font-semibold text-ocean-900 hover:underline"
+                                  onClick={() =>
+                                    setModal({ kind: "deal", deal: d })
                                   }
                                 >
-                                  {data.stages.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                            </article>
-                          ))}
-                          {!rows.length ? (
-                            <p className="py-10 text-center text-sm text-slate-400">
-                              No projects on this page
-                            </p>
-                          ) : null}
-                        </div>
-                      </section>
-                    );
-                  })}
-              </div>
+                                  {d.title}
+                                </button>
+                                <button
+                                  className="mt-1 block text-sm text-slate-600 hover:underline"
+                                  onClick={() => setContactId(d.client_id)}
+                                >
+                                  {d.clients?.full_name || "Open contact"}
+                                </button>
+                                <p className="mt-3 text-sm font-medium">
+                                  {money(d.value_cents)}
+                                </p>
+                                {d.project_type ? (
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {d.project_type}
+                                  </p>
+                                ) : null}
+                                {d.next_follow_up ? (
+                                  <p
+                                    className={`mt-2 text-xs ${new Date(d.next_follow_up) < new Date() ? "text-red-700" : "text-slate-500"}`}
+                                  >
+                                    Follow up {date(d.next_follow_up)}
+                                  </p>
+                                ) : null}
+                                <label className="mt-3 block">
+                                  <span className="sr-only">
+                                    Stage for {d.title}
+                                  </span>
+                                  <select
+                                    className="input w-full text-xs"
+                                    value={d.stage_id}
+                                    disabled={busy}
+                                    onChange={(e) =>
+                                      void act({
+                                        action: "deal_update",
+                                        id: d.id,
+                                        version: d.version,
+                                        data: {
+                                          ...d,
+                                          stage_id: e.target.value,
+                                        },
+                                      })
+                                    }
+                                  >
+                                    {data.stages.map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </article>
+                            ))}
+                            {!rows.length ? (
+                              <p className="py-10 text-center text-sm text-slate-400">
+                                No projects on this page
+                              </p>
+                            ) : null}
+                          </div>
+                        </section>
+                      );
+                    })}
+                </div>
+              )}
               <button
-                className="btn-secondary"
+                className="btn-ghost"
                 onClick={() => setModal({ kind: "stage" })}
               >
                 Add pipeline stage
@@ -623,7 +783,7 @@ export function CrmWorkspace() {
               ) : null}
             </section>
           ) : null}
-          {tab === "reports" ? <Reports /> : null}
+          {tab === "reports" ? <Reports data={data.summary} /> : null}
           {tab === "contacts" || tab === "pipeline" ? (
             <div className="flex items-center justify-between gap-3 text-sm text-slate-500">
               <span>
@@ -1145,41 +1305,7 @@ function ContactPanel({
     </div>
   );
 }
-function Reports() {
-  const [data, setData] = useState<{
-      stages: {
-        name: string;
-        count: number;
-        value_cents: number;
-        outcome: string;
-      }[];
-      sources: { name: string; count: number; value_cents: number }[];
-      overdue: number;
-      contacts: number;
-    } | null>(null),
-    [error, setError] = useState("");
-  useEffect(() => {
-    let active = true;
-    fetch("/api/crm/reports", { cache: "no-store" })
-      .then(async (r) => {
-        const b = await r.json();
-        if (!r.ok) throw new Error(b.error);
-        if (active) setData(b);
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  if (error)
-    return (
-      <p role="alert" className="text-red-700">
-        {error}
-      </p>
-    );
-  if (!data) return <p>Loading reports…</p>;
+function Reports({ data }: { data: CrmSummary }) {
   const total = data.stages
       .filter((s) => s.outcome !== "archived")
       .reduce((n, s) => n + s.count, 0),

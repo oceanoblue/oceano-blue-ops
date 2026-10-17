@@ -69,7 +69,7 @@ export function SendToEditEngine({
       {job?.status === 'done' && job.resultUrl && (
         <div className="overflow-hidden rounded-xl border border-slate-200">
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-          <video src={job.resultUrl} controls preload="metadata" className="aspect-[9/16] max-h-[420px] w-full bg-black object-contain" />
+          <video src={job.resultUrl} controls preload="metadata" className="aspect-9/16 max-h-[420px] w-full bg-black object-contain" />
           <a
             href={job.resultUrl}
             download

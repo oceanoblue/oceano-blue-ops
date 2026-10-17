@@ -105,7 +105,7 @@ export function EditingWorkspace({
 
       <div
         {...getRootProps()}
-        className={`cursor-pointer rounded-2xl border-2 border-dashed px-5 py-12 text-center text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ocean-500 ${
+        className={`cursor-pointer rounded-2xl border-2 border-dashed px-5 py-12 text-center text-sm transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ocean-500 ${
           isDragActive ? 'border-ocean-500 bg-ocean-100' : 'border-ocean-200 bg-ocean-50/40 hover:border-ocean-400 hover:bg-ocean-50'
         }`}
       >

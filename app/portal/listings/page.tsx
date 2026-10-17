@@ -89,7 +89,7 @@ export default async function ClientListingsPage() {
                     href={`/portal/listings/${l.id}`}
                     className="card-interactive group block overflow-hidden"
                   >
-                    <div className="h-1.5 w-full bg-gradient-to-r from-ocean-400 to-ocean-700" />
+                    <div className="h-1.5 w-full bg-linear-to-r from-ocean-400 to-ocean-700" />
                     <div className="p-5">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-start gap-3">

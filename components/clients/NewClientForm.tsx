@@ -51,7 +51,7 @@ export function NewClientForm() {
   }
 
   return (
-    <form onSubmit={submit} className="card absolute right-0 top-12 z-20 w-[22rem] space-y-3 p-4 shadow-lift">
+    <form onSubmit={submit} className="card absolute right-0 top-12 z-20 w-88 space-y-3 p-4 shadow-lift">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-ocean-900">New client</h3>
         <button type="button" onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-700">

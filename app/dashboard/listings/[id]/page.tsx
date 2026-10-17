@@ -140,7 +140,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {signed.map((p) => (
-                <div key={p.id} className="aspect-[3/2] overflow-hidden rounded-md ring-1 ring-slate-200">
+                <div key={p.id} className="aspect-3/2 overflow-hidden rounded-md ring-1 ring-slate-200">
                   {p.url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={p.url} alt={p.filename} className="h-full w-full object-cover" loading="lazy" />

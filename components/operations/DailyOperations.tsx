@@ -40,19 +40,19 @@ function WorkCard({
   onDraft: (draft: EmailDraft) => void;
 }) {
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300">
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-blue-300">
       <div className="flex flex-wrap gap-2 text-xs font-medium">
         {item.overdue && (
-          <span className="rounded bg-rose-50 px-2 py-1 text-rose-700">
+          <span className="rounded-sm bg-rose-50 px-2 py-1 text-rose-700">
             Overdue
           </span>
         )}
         {item.rush && (
-          <span className="rounded bg-amber-50 px-2 py-1 text-amber-800">
+          <span className="rounded-sm bg-amber-50 px-2 py-1 text-amber-800">
             Priority
           </span>
         )}
-        <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">
+        <span className="rounded-sm bg-slate-100 px-2 py-1 text-slate-600">
           {item.route === "internal"
             ? "In-house"
             : item.route === "external"
@@ -524,7 +524,7 @@ export function DailyOperations({
                   <l.icon className="h-4 w-4" />
                   {l.name}
                   <span
-                    className={`rounded px-1.5 text-xs ${lane === l.id ? "bg-white/20" : "bg-slate-100"}`}
+                    className={`rounded-sm px-1.5 text-xs ${lane === l.id ? "bg-white/20" : "bg-slate-100"}`}
                   >
                     {
                       items.filter(

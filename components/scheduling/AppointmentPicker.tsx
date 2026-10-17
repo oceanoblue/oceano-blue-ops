@@ -208,7 +208,7 @@ export function AppointmentPicker({ value, onChange, photographers, allowOverrid
             type="button"
             onClick={() => setMonthCursor(addMonths(monthCursor, -1))}
             aria-label="Previous month"
-            className="p-1 rounded hover:bg-slate-100"
+            className="p-1 rounded-sm hover:bg-slate-100"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -223,7 +223,7 @@ export function AppointmentPicker({ value, onChange, photographers, allowOverrid
             type="button"
             onClick={() => setMonthCursor(addMonths(monthCursor, 1))}
             aria-label="Next month"
-            className="p-1 rounded hover:bg-slate-100"
+            className="p-1 rounded-sm hover:bg-slate-100"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -278,7 +278,7 @@ export function AppointmentPicker({ value, onChange, photographers, allowOverrid
             <button
               type="button"
               className={cn(
-                'px-2 py-0.5 rounded transition',
+                'px-2 py-0.5 rounded-sm transition',
                 !hour24 ? 'bg-slate-800 text-white' : 'text-slate-600'
               )}
               onClick={() => setHour24(false)}
@@ -288,7 +288,7 @@ export function AppointmentPicker({ value, onChange, photographers, allowOverrid
             <button
               type="button"
               className={cn(
-                'px-2 py-0.5 rounded transition',
+                'px-2 py-0.5 rounded-sm transition',
                 hour24 ? 'bg-slate-800 text-white' : 'text-slate-600'
               )}
               onClick={() => setHour24(true)}

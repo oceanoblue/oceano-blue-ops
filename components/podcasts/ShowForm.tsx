@@ -269,7 +269,7 @@ export function ShowForm({
             <div className="flex items-center gap-2">
               <input
                 type="color"
-                className="h-9 w-12 cursor-pointer rounded border border-slate-200"
+                className="h-9 w-12 cursor-pointer rounded-sm border border-slate-200"
                 value={accent}
                 disabled={busy}
                 onChange={(e) => set('brand_color', e.target.value)}
@@ -290,9 +290,9 @@ export function ShowForm({
               <div className="flex items-center gap-3">
                 {v.logo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={v.logo_url} alt="Show logo" className="h-10 w-10 rounded object-contain ring-1 ring-slate-200" />
+                  <img src={v.logo_url} alt="Show logo" className="h-10 w-10 rounded-sm object-contain ring-1 ring-slate-200" />
                 ) : (
-                  <div className="grid h-10 w-10 place-items-center rounded bg-slate-100 text-slate-400">
+                  <div className="grid h-10 w-10 place-items-center rounded-sm bg-slate-100 text-slate-400">
                     <ImagePlus className="h-4 w-4" />
                   </div>
                 )}

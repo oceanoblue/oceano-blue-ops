@@ -102,8 +102,8 @@ export function TeamMemberActions({
           Restore
         </button>
       )}
-      {note && <span className="max-w-[14rem] text-xs text-slate-500">{note}</span>}
-      {error && <span className="max-w-[14rem] text-xs text-rose-600">{error}</span>}
+      {note && <span className="max-w-56 text-xs text-slate-500">{note}</span>}
+      {error && <span className="max-w-56 text-xs text-rose-600">{error}</span>}
     </div>
   );
 }

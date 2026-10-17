@@ -56,7 +56,7 @@ function JobCard({ job }: { job: JobRow }) {
   return (
     <Link
       href={`/dashboard/jobs/${job.id}`}
-      className="block rounded-md border border-slate-200 bg-white p-3 hover:border-ocean-300 hover:shadow-sm"
+      className="block rounded-md border border-slate-200 bg-white p-3 hover:border-ocean-300 hover:shadow-xs"
     >
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-slate-500">

@@ -71,6 +71,7 @@ export function ContactEditor({
   contact?: CrmContact;
   save: Save;
 }) {
+  const [draftId] = useState(() => crypto.randomUUID());
   const profile = contact?.crm_contact_profiles;
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -85,7 +86,7 @@ export function ContactEditor({
         try {
           await save({
             action: contact ? "contact_update" : "contact_create",
-            id: contact?.id || crypto.randomUUID(),
+            id: contact?.id || draftId,
             version: profile?.version || 1,
             data: {
               full_name: f.get("full_name"),
@@ -207,6 +208,7 @@ export function DealEditor({
   save: Save;
   clientId?: string;
 }) {
+  const [draftId] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
@@ -221,7 +223,7 @@ export function DealEditor({
         try {
           await save({
             action: deal ? "deal_update" : "deal_create",
-            id: deal?.id || crypto.randomUUID(),
+            id: deal?.id || draftId,
             version: deal?.version,
             data: {
               client_id: deal?.client_id || f.get("client_id"),
@@ -382,6 +384,7 @@ export function FormEditor({
   team: CrmData["team"];
   save: Save;
 }) {
+  const [draftId] = useState(() => crypto.randomUUID());
   const [fields, setFields] = useState<InquiryField[]>(
       form?.fields || defaultFields.map((f) => ({ ...f })),
     ),
@@ -408,7 +411,7 @@ export function FormEditor({
         try {
           await save({
             action: "form_save",
-            id: form?.id || crypto.randomUUID(),
+            id: form?.id || draftId,
             version: form?.version || 0,
             data: {
               name: f.get("name"),
@@ -717,6 +720,7 @@ export function ImportEditor({ save }: { save: Save }) {
   );
 }
 export function StageEditor({ stage, save }: { stage?: Stage; save: Save }) {
+  const [draftId] = useState(() => crypto.randomUUID());
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   return (
@@ -729,7 +733,7 @@ export function StageEditor({ stage, save }: { stage?: Stage; save: Save }) {
         try {
           await save({
             action: "stage_save",
-            id: stage?.id || crypto.randomUUID(),
+            id: stage?.id || draftId,
             data: {
               name: f.get("name"),
               position: Number(f.get("position")),
@@ -799,6 +803,7 @@ export function AutomationEditor({
   stages: Stage[];
   save: Save;
 }) {
+  const [draftId] = useState(() => crypto.randomUUID());
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   return (
@@ -811,7 +816,7 @@ export function AutomationEditor({
         try {
           await save({
             action: "automation_save",
-            id: automation?.id || crypto.randomUUID(),
+            id: automation?.id || draftId,
             data: {
               name: f.get("name"),
               enabled: f.get("enabled") === "on",

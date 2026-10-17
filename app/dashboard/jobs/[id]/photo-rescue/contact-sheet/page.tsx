@@ -53,7 +53,7 @@ export default async function ContactSheetPage(props: { params: Promise<{ id: st
             const scene = a.metadata?.scene as string | undefined;
             return (
               <div key={a.id} className="card overflow-hidden">
-                <div className="relative aspect-[3/2] bg-slate-100">
+                <div className="relative aspect-3/2 bg-slate-100">
                   {url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={url} alt={a.filename} className="h-full w-full object-cover" />

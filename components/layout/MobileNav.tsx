@@ -12,7 +12,7 @@ import { SidebarBrand, SidebarNav } from './Sidebar';
  * topbar opens a slide-over drawer that reuses the exact same nav tree.
  *
  * The drawer is portaled to <body>: it renders inside the topbar, whose
- * `glass` backdrop-blur makes the header the containing block for
+ * `glass` backdrop-blur-sm makes the header the containing block for
  * position:fixed descendants — without the portal, `inset-0` resolves to the
  * 56px header box and the drawer is clipped to a strip.
  */
@@ -64,7 +64,7 @@ export function MobileNav() {
         createPortal(
           <div className="fixed inset-0 z-50 md:hidden">
             <div
-              className="absolute inset-0 bg-ink-950/60 backdrop-blur-sm animate-fade-in"
+              className="absolute inset-0 bg-ink-950/60 backdrop-blur-xs animate-fade-in"
               onClick={() => setOpen(false)}
             />
             <div className="absolute inset-y-0 left-0 flex w-72 flex-col bg-ink-950 text-white shadow-lift animate-rise">

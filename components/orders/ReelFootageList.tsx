@@ -55,7 +55,7 @@ export function ReelFootageList({ items }: { items: FootageView[] }) {
                 <a
                   href={f.url}
                   download
-                  className="shrink-0 rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-ocean-700"
+                  className="shrink-0 rounded-sm p-1.5 text-slate-500 hover:bg-slate-100 hover:text-ocean-700"
                   title="Download"
                 >
                   <Download className="h-4 w-4" />

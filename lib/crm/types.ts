@@ -302,6 +302,8 @@ export type Automation = {
   delay_hours: number;
 };
 export type CrmData = {
+  section: CrmSection;
+  summary: CrmSummary;
   tags: string[];
   contacts: CrmContact[];
   deals: Deal[];
@@ -315,4 +317,23 @@ export type CrmData = {
   hasMore: boolean;
   hasMoreContacts: boolean;
   hasMoreDeals: boolean;
+};
+export type CrmSection =
+  | "pipeline"
+  | "contacts"
+  | "tasks"
+  | "forms"
+  | "automations"
+  | "reports";
+export type CrmSummary = {
+  contacts: number;
+  overdue: number;
+  stages: {
+    id: string;
+    name: string;
+    count: number;
+    value_cents: number;
+    outcome: string;
+  }[];
+  sources: { name: string; count: number; value_cents: number }[];
 };

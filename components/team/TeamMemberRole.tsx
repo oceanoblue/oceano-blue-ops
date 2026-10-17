@@ -67,7 +67,7 @@ export function TeamMemberRole({
         ))}
       </select>
       {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
-      {error && <span className="max-w-[12rem] text-xs text-rose-600">{error}</span>}
+      {error && <span className="max-w-48 text-xs text-rose-600">{error}</span>}
     </div>
   );
 }

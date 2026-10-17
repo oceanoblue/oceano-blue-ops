@@ -21,7 +21,7 @@ export function ClientGalleryGrid({ photos }: { photos: Photo[] }) {
           <button
             key={p.id}
             onClick={() => setLightbox(p)}
-            className="relative aspect-[3/2] overflow-hidden rounded-md ring-1 ring-slate-200 hover:ring-ocean-400"
+            className="relative aspect-3/2 overflow-hidden rounded-md ring-1 ring-slate-200 hover:ring-ocean-400"
           >
             {p.url && (
               // eslint-disable-next-line @next/next/no-img-element

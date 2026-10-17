@@ -30,7 +30,7 @@ export function MorningBrief({ name, snapshot, text, output, savedAt, role, onRo
       </div>
       {snapshot.events.length > 3 && <p className="mt-4 text-xs text-[#667269]">+{snapshot.events.length-3} more commitments in your agenda</p>}
       <div role="group" aria-label="Briefing assistant" className="mt-7 flex flex-wrap gap-2">{(["planner","handoff","delivery"] as const).map(value => <button key={value} type="button" aria-pressed={role === value} onClick={() => onRole(value)} className={`min-h-10 rounded-full px-4 text-sm transition ${role === value ? "bg-[#284d42] text-white" : "bg-white text-[#50645a] ring-1 ring-[#e3e5dd] hover:bg-[#eef1e9]"}`}>{AGENT_LABELS[value]}</button>)}</div>
-      <div className="mt-5 space-y-3 break-words text-[15px] leading-7 text-[#506057]">{text.split(/\n\s*\n/).map((paragraph,index) => <p key={index} className="whitespace-pre-wrap">{paragraph}</p>)}</div>
+      <div className="mt-5 space-y-3 wrap-break-word text-[15px] leading-7 text-[#506057]">{text.split(/\n\s*\n/).map((paragraph,index) => <p key={index} className="whitespace-pre-wrap">{paragraph}</p>)}</div>
       {output?.error && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{output.error} Showing the factual briefing.</p>}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[#d9dfd5] pt-4 text-xs text-[#667269]">
         <span className="flex items-center gap-2"><Sparkles className="h-4 w-4"/>{output && output.provider !== "rules" && output.status !== "fallback" ? `${output.provider === "openai" ? "OpenAI" : "Claude"} · ${output.model}` : "Built-in operations rules"}</span>

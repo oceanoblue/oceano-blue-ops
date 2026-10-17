@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import type { CrmSection } from "./types";
 export class CrmError extends Error {
   constructor(
     message: string,
@@ -77,56 +78,65 @@ export async function crmRead(
     tag?: string;
     stage?: string;
     owner?: string;
+    section?: CrmSection;
   } = {},
 ) {
   const db = crmDb();
+  const section = filters.section ?? "pipeline";
+  const empty = { data: [], error: null };
   const queries = await Promise.all([
-    db.rpc("crm_page", {
-      p_query: filters.query || "",
-      p_tag: filters.tag || "",
-      p_stage: filters.stage || null,
-      p_owner: filters.owner || null,
-      p_page: page,
-    }),
+    section === "pipeline" || section === "contacts"
+      ? db.rpc("crm_page", {
+          p_query: filters.query || "",
+          p_tag: filters.tag || "",
+          p_stage: filters.stage || null,
+          p_owner: filters.owner || null,
+          p_page: page,
+        })
+      : empty,
     db.from("crm_stages").select("*").order("position").order("id"),
-    db
-      .from("crm_tasks")
-      .select("*")
-      .is("paused_at", null)
-      .order("completed_at", { ascending: false, nullsFirst: true })
-      .order("due_at", { ascending: true, nullsFirst: false })
-      .limit(300),
-    db.from("crm_forms").select("*").order("created_at"),
-    db
-      .from("crm_events")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200),
-    db.from("crm_automations").select("*").order("created_at"),
+    section === "tasks"
+      ? db
+          .from("crm_tasks")
+          .select("*")
+          .is("paused_at", null)
+          .order("completed_at", { ascending: false, nullsFirst: true })
+          .order("due_at", { ascending: true, nullsFirst: false })
+          .limit(300)
+      : empty,
+    section === "forms"
+      ? db.from("crm_forms").select("*").order("created_at")
+      : empty,
+    section === "automations"
+      ? db.from("crm_automations").select("*").order("created_at")
+      : empty,
     db
       .from("team_members")
       .select("id,full_name")
       .eq("is_active", true)
       .in("role", ["admin", "coordinator"])
       .order("full_name"),
+    db.rpc("crm_report"),
   ]);
   if (queries.some((r) => r.error))
     throw new CrmError(
       "CRM is unavailable. Confirm the CRM database migration has been applied.",
       503,
     );
-  const [listing, stages, tasks, forms, events, automations, team] =
+  const [listing, stages, tasks, forms, automations, team, summary] =
     queries.map((r) => r.data ?? []);
   const contacts = listing.contacts ?? [],
     deals = listing.deals ?? [];
   return {
+    section,
+    summary,
     tags: listing.tags ?? [],
     contacts: contacts.slice(0, 100),
     deals: deals.slice(0, 100),
     stages,
     tasks,
     forms,
-    events,
+    events: [],
     automations,
     team,
     page,

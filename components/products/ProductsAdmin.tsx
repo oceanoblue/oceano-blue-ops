@@ -153,7 +153,7 @@ function ProductCard({
         product.is_active ? '' : 'opacity-60'
       }`}
     >
-      <div className="aspect-[4/3] w-full bg-gradient-to-br from-ocean-100 to-ocean-50 relative">
+      <div className="aspect-4/3 w-full bg-linear-to-br from-ocean-100 to-ocean-50 relative">
         {product.cover_image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img

@@ -58,9 +58,9 @@ export function RegisterWorkerButton() {
             API key for “{issued.name}” — copy it now, it won’t be shown again
           </div>
           <div className="mt-2 flex items-center gap-2">
-            <code className="flex-1 truncate rounded bg-white px-2 py-1 text-xs ring-1 ring-amber-200">{issued.key}</code>
+            <code className="flex-1 truncate rounded-sm bg-white px-2 py-1 text-xs ring-1 ring-amber-200">{issued.key}</code>
             <button
-              className="btn-secondary !px-2 !py-1 text-xs"
+              className="btn-secondary px-2! py-1! text-xs"
               onClick={() => navigator.clipboard?.writeText(issued.key)}
             >
               <Copy className="h-3.5 w-3.5" /> Copy

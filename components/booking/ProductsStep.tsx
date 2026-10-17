@@ -174,9 +174,9 @@ function ProductCard({
       }`}
     >
       {product.cover_image_url ? (
-        <img src={product.cover_image_url} alt="" className="aspect-[4/3] w-full object-cover" />
+        <img src={product.cover_image_url} alt="" className="aspect-4/3 w-full object-cover" />
       ) : (
-        <div className="aspect-[4/3] w-full bg-gradient-to-br from-ocean-100 to-ocean-50 grid place-items-center text-ocean-700 text-xs uppercase tracking-wide">
+        <div className="aspect-4/3 w-full bg-linear-to-br from-ocean-100 to-ocean-50 grid place-items-center text-ocean-700 text-xs uppercase tracking-wide">
           {product.kind}
         </div>
       )}
@@ -235,14 +235,14 @@ function ProductGallery({ product }: { product: Product }) {
   const [idx, setIdx] = useState(0);
   if (images.length === 0) {
     return (
-      <div className="aspect-[4/3] w-full rounded-lg bg-gradient-to-br from-ocean-100 to-ocean-50 grid place-items-center text-ocean-700 text-xs uppercase tracking-wide">
+      <div className="aspect-4/3 w-full rounded-lg bg-linear-to-br from-ocean-100 to-ocean-50 grid place-items-center text-ocean-700 text-xs uppercase tracking-wide">
         {product.kind}
       </div>
     );
   }
   return (
     <div className="space-y-2">
-      <div className="relative aspect-[4/3] w-full rounded-lg overflow-hidden bg-slate-100">
+      <div className="relative aspect-4/3 w-full rounded-lg overflow-hidden bg-slate-100">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={images[idx]} alt="" className="h-full w-full object-cover" />
       </div>

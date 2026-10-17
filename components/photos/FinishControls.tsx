@@ -11,7 +11,7 @@ const references: Record<Finish['style'], { image: string; note: string }> = {
   editorial: { image: '/products/cinematic_video.webp', note: 'Dimensional · composed' },
   flash_blend: { image: '/products/amenities.webp', note: 'Clean color · defined light' },
 };
-const selectClass = 'mt-2 w-full min-h-11 rounded-xl border border-white/15 bg-[#183438] px-3 py-2.5 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-[#a5e4d5] disabled:opacity-50';
+const selectClass = 'mt-2 w-full min-h-11 rounded-xl border border-white/15 bg-[#183438] px-3 py-2.5 text-sm text-white outline-hidden focus-visible:ring-2 focus-visible:ring-[#a5e4d5] disabled:opacity-50';
 
 export function FinishControls({ value, onChange, disabled = false, showModels = true }: { value: Finish; onChange: (finish: Finish) => void; disabled?: boolean; showModels?: boolean }) {
   const [defaults, setDefaults] = useState<FinishDefaults>(DEFAULT_FINISH_DEFAULTS);
@@ -67,7 +67,7 @@ export function FinishControls({ value, onChange, disabled = false, showModels =
           <div className="mb-3 flex items-center gap-3"><span className="text-[11px] font-mono text-[#8eb5b8]">01</span><h4 className="text-sm font-semibold">Choose your model</h4></div>
           <div role="group" aria-label="Image model" className="grid gap-3 md:grid-cols-2">
             {Object.entries(IMAGE_MODELS).map(([id, item]) => <button key={id} type="button" disabled={disabled} aria-pressed={model === id} onClick={() => change({ ...value, model: id as ImageModel })}
-              className={`group flex items-start gap-4 rounded-2xl border p-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a5e4d5] disabled:opacity-50 ${model === id ? 'border-[#a5e4d5] bg-[#1c4145]' : 'border-white/15 bg-white/[0.03] hover:border-white/40 hover:bg-white/[0.06]'}`}>
+              className={`group flex items-start gap-4 rounded-2xl border p-4 text-left transition focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a5e4d5] disabled:opacity-50 ${model === id ? 'border-[#a5e4d5] bg-[#1c4145]' : 'border-white/15 bg-white/3 hover:border-white/40 hover:bg-white/6'}`}>
               <span className="mt-1 rounded-xl bg-white/10 p-2.5 text-[#a5e4d5]">{id === IMAGE_MODEL ? <Sun className="h-5 w-5" /> : <Zap className="h-5 w-5" />}</span>
               <span className="flex-1"><span className="flex flex-wrap items-center gap-x-3 gap-y-1"><span className="text-base font-semibold">{item.label}</span><span className="text-[10px] uppercase tracking-wider text-[#b2d9d3]">{item.badge}</span></span><span className="mt-0.5 block text-xs text-[#9fbdc0]">{item.version}</span><span className="mt-2 block text-xs leading-relaxed text-[#c6d9db]">{item.description}</span></span>
               <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${model === id ? 'border-[#a5e4d5] bg-[#a5e4d5] text-[#102a2e]' : 'border-white/30'}`}>{model === id && <Check className="h-3.5 w-3.5" />}</span>
@@ -81,13 +81,13 @@ export function FinishControls({ value, onChange, disabled = false, showModels =
               const active = value.style === id;
               const ref = references[id as Finish['style']];
               return <button type="button" disabled={disabled} key={id} aria-pressed={active} onClick={() => change({ ...value, style: id as Finish['style'] })}
-                className={`group overflow-hidden rounded-2xl border text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a5e4d5] disabled:opacity-50 ${active ? 'border-[#a5e4d5] bg-[#1c4145] ring-1 ring-[#a5e4d5]' : 'border-white/15 bg-[#183438] hover:border-white/40'}`}>
-                <div className="relative aspect-[16/10] overflow-hidden">
+                className={`group overflow-hidden rounded-2xl border text-left transition focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a5e4d5] disabled:opacity-50 ${active ? 'border-[#a5e4d5] bg-[#1c4145] ring-1 ring-[#a5e4d5]' : 'border-white/15 bg-[#183438] hover:border-white/40'}`}>
+                <div className="relative aspect-16/10 overflow-hidden">
                   {/* Existing brand photographs illustrate a mood, never a simulated render. */}
                   <Image src={ref.image} alt="" fill sizes="(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw" className="object-cover transition duration-500 motion-safe:group-hover:scale-105" />
-                  <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/65 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 h-20 bg-linear-to-t from-black/65 to-transparent" />
                   <span className="absolute bottom-3 left-3 text-[10px] font-medium uppercase tracking-[0.12em] text-white">{ref.note}</span>
-                  {active && <span className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-[#a5e4d5] text-[#102a2e] shadow"><Check className="h-4 w-4" /></span>}
+                  {active && <span className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-[#a5e4d5] text-[#102a2e] shadow-sm"><Check className="h-4 w-4" /></span>}
                 </div>
                 <span className="block p-4"><span className="flex items-center justify-between text-base font-semibold text-white">{style.label}<ArrowUpRight className={`h-4 w-4 ${active ? 'text-[#a5e4d5]' : 'text-[#8eb5b8]'}`} /></span><span className="mt-2 block min-h-10 text-xs leading-relaxed text-[#c6d9db]">{style.description}</span></span>
               </button>;
@@ -106,7 +106,7 @@ export function FinishControls({ value, onChange, disabled = false, showModels =
       </div>
       <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 bg-black/10 px-5 py-4 sm:px-8">
         <p className="max-w-xl text-xs leading-relaxed text-[#b7ced0]">Window recovery uses a darker exposure of the same capture when available. Originals stay intact; new edits await your approval.</p>
-        <button type="button" disabled={disabled || saving} onClick={saveDefault} className="min-h-11 rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#a5e4d5] disabled:opacity-50">{saving ? 'Saving…' : 'Save as scene default'}</button>
+        <button type="button" disabled={disabled || saving} onClick={saveDefault} className="min-h-11 rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/10 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-[#a5e4d5] disabled:opacity-50">{saving ? 'Saving…' : 'Save as scene default'}</button>
         {status && <p role="status" className="w-full text-xs text-[#a5e4d5]">{status}</p>}
       </footer>
     </section>

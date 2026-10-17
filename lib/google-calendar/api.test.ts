@@ -4,7 +4,7 @@ import { refreshAccessToken, GoogleTokenError } from './oauth';
 import { createAdminClient } from '@/lib/supabase/server';
 vi.mock('@/lib/supabase/server',()=>({createAdminClient:vi.fn()}));
 vi.mock('./oauth',async importOriginal => ({...await importOriginal<typeof import('./oauth')>(),refreshAccessToken:vi.fn()}));
-let update: ReturnType<typeof vi.fn>;
+let update: ReturnType<typeof vi.fn<(value: unknown) => void>>;
 let row: Record<string, unknown> | null;
 let tables: Record<string, any>;
 beforeEach(() => {

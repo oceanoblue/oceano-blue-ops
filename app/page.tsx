@@ -18,7 +18,7 @@ export default function HomePage() {
       {/* Ambient ocean glows */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-56 left-1/3 h-[38rem] w-[68rem] -translate-x-1/2 opacity-30"
+        className="pointer-events-none absolute -top-56 left-1/3 h-152 w-272 -translate-x-1/2 opacity-30"
         style={{
           background:
             'radial-gradient(ellipse at center, rgba(12,141,233,0.5), rgba(12,141,233,0.08) 55%, transparent 72%)',
@@ -26,7 +26,7 @@ export default function HomePage() {
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -bottom-64 right-[-16rem] h-[34rem] w-[54rem] opacity-20"
+        className="pointer-events-none absolute -bottom-64 -right-64 h-136 w-216 opacity-20"
         style={{
           background:
             'radial-gradient(ellipse at center, rgba(124,198,252,0.35), transparent 68%)',
@@ -108,7 +108,7 @@ export default function HomePage() {
             />
             <div className="relative rounded-2xl bg-ink-900/90 shadow-2xl ring-1 ring-white/10">
               {/* Window chrome */}
-              <div className="flex items-center gap-2 border-b border-white/[0.06] px-5 py-3.5">
+              <div className="flex items-center gap-2 border-b border-white/6 px-5 py-3.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
                 <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
                 <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
@@ -146,10 +146,10 @@ export default function HomePage() {
                   ].map((g, i) => (
                     <div
                       key={i}
-                      className={`relative aspect-[4/3] rounded-md bg-gradient-to-br ${g} ring-1 ring-white/10`}
+                      className={`relative aspect-4/3 rounded-md bg-linear-to-br ${g} ring-1 ring-white/10`}
                     >
                       {i === 2 && (
-                        <span className="absolute bottom-1 right-1 rounded bg-ink-950/80 px-1 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider text-ocean-300">
+                        <span className="absolute bottom-1 right-1 rounded-sm bg-ink-950/80 px-1 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider text-ocean-300">
                           Enhanced
                         </span>
                       )}
@@ -163,7 +163,7 @@ export default function HomePage() {
       </section>
 
       {/* ─── Pipeline rail ───────────────────────────────────── */}
-      <section className="relative z-10 border-t border-white/[0.06] bg-white/[0.02]">
+      <section className="relative z-10 border-t border-white/6 bg-white/2">
         <div className="mx-auto max-w-6xl px-6 py-20">
           <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-ocean-400">
             The pipeline
@@ -231,7 +231,7 @@ export default function HomePage() {
       </section>
 
       {/* ─── Footer ──────────────────────────────────────────── */}
-      <footer className="relative z-10 border-t border-white/[0.06]">
+      <footer className="relative z-10 border-t border-white/6">
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 py-10 sm:flex-row sm:items-center">
           <div>
             <BrandLogo variant="white" className="h-6 w-auto" />
@@ -276,7 +276,7 @@ function MockJob({
   progress?: number;
 }) {
   return (
-    <div className="rounded-xl bg-white/[0.04] p-4 ring-1 ring-white/[0.08]">
+    <div className="rounded-xl bg-white/4 p-4 ring-1 ring-white/8">
       <div className="flex items-center justify-between gap-3">
         <span className="truncate text-sm font-medium text-ink-100">{address}</span>
         <span
@@ -288,7 +288,7 @@ function MockJob({
       {progress !== undefined && (
         <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-ocean-500 to-ocean-300"
+            className="h-full rounded-full bg-linear-to-r from-ocean-500 to-ocean-300"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -332,7 +332,7 @@ function Capability({
   body: string;
 }) {
   return (
-    <div className="group rounded-xl bg-white/[0.04] p-7 ring-1 ring-white/10 transition-all duration-300 ease-swift hover:-translate-y-1 hover:bg-white/[0.07] hover:ring-ocean-400/40">
+    <div className="group rounded-xl bg-white/4 p-7 ring-1 ring-white/10 transition-all duration-300 ease-swift hover:-translate-y-1 hover:bg-white/[0.07] hover:ring-ocean-400/40">
       <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-ocean-500/10 text-ocean-300 ring-1 ring-ocean-400/25">
         {icon}
       </span>

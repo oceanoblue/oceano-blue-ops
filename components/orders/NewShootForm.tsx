@@ -404,7 +404,7 @@ function Toggle({ active, onClick, disabled, children }: { active: boolean; onCl
       onClick={onClick}
       disabled={disabled}
       className={`rounded-md px-3 py-1 font-medium transition-colors disabled:opacity-40 ${
-        active ? 'bg-white text-ocean-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+        active ? 'bg-white text-ocean-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'
       }`}
     >
       {children}
@@ -429,7 +429,7 @@ function ProductRow({
           type="checkbox"
           checked={on}
           onChange={(e) => onQty(e.target.checked ? 1 : 0)}
-          className="h-4 w-4 shrink-0 rounded border-slate-300 accent-ocean-700"
+          className="h-4 w-4 shrink-0 rounded-sm border-slate-300 accent-ocean-700"
         />
         <span className="text-sm text-ocean-900">{name}</span>
       </label>

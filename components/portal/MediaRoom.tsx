@@ -104,7 +104,7 @@ export function MediaRoom({ items }: { items: DeliverableView[] }) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={d.url} alt={d.title ?? 'Floor plan'} className="w-full bg-white object-contain" />
                 ) : d.url && isPdfMime(d.mime) ? (
-                  <div className="aspect-[4/3] bg-slate-100">
+                  <div className="aspect-4/3 bg-slate-100">
                     <iframe src={d.url} title={d.title ?? 'Floor plan'} className="h-full w-full" />
                   </div>
                 ) : (
@@ -148,7 +148,7 @@ function VideoActions({ item: d }: { item: DeliverableView }) {
   if (d.locked) return null;
   const vimeoPage = d.source === 'url' && d.url ? getVimeoPageUrl(d.url) : null;
   const openUrl = vimeoPage || d.url;
-  const actionClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-ocean-200 bg-white px-3 py-2 text-sm font-medium text-ocean-700 hover:bg-ocean-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean-600';
+  const actionClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-ocean-200 bg-white px-3 py-2 text-sm font-medium text-ocean-700 hover:bg-ocean-50 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean-600';
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">

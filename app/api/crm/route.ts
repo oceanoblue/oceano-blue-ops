@@ -25,12 +25,21 @@ export async function GET(req: Request) {
         tag: z.string().max(60),
         stage: z.string().uuid().optional(),
         owner: z.string().uuid().optional(),
+        section: z.enum([
+          "pipeline",
+          "contacts",
+          "tasks",
+          "forms",
+          "automations",
+          "reports",
+        ]),
       })
       .parse({
         query: params.get("q") || "",
         tag: params.get("tag") || "",
         stage: params.get("stage") || undefined,
         owner: params.get("owner") || undefined,
+        section: params.get("section") || "pipeline",
       });
     return Response.json(await crmRead(page, filters), {
       headers: { "Cache-Control": "private, no-store" },

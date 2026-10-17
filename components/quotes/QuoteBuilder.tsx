@@ -155,7 +155,7 @@ export function QuoteBuilder({ products }: { products: QuoteProduct[] }) {
   const tier = builderTierFor(sqftNum);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr,20rem]">
+    <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
       <div className="card space-y-6 p-6">
         {/* Client type — realtor listing vs builder / architect */}
         <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
@@ -254,7 +254,7 @@ export function QuoteBuilder({ products }: { products: QuoteProduct[] }) {
                 })}
               </div>
               <label className="mt-3 flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
-                <input type="checkbox" checked={program} onChange={() => setProgram((v) => !v)} className="h-4 w-4 rounded border-slate-300 text-ocean-600" />
+                <input type="checkbox" checked={program} onChange={() => setProgram((v) => !v)} className="h-4 w-4 rounded-sm border-slate-300 text-ocean-600" />
                 <span className="text-sm text-ink-900">Builder program rate <span className="text-slate-500">— 4+ homes in 12 months</span></span>
               </label>
             </Section>
@@ -320,7 +320,7 @@ function TypeTab({ active, onClick, icon: Icon, title, sub }: { active: boolean;
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors ${active ? 'bg-white shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-ink-800'}`}
+      className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors ${active ? 'bg-white shadow-xs ring-1 ring-slate-200' : 'text-slate-500 hover:text-ink-800'}`}
     >
       <Icon className={`h-5 w-5 ${active ? 'text-ocean-700' : 'text-slate-400'}`} />
       <span>
@@ -344,7 +344,7 @@ function RealtorRow({ p, on, toggle }: { p: QuoteProduct; on: boolean; toggle: (
   return (
     <label className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 transition-colors ${on ? 'border-ocean-300 bg-ocean-50/50' : 'border-slate-200'}`}>
       <span className="flex items-center gap-2">
-        <input type="checkbox" checked={on} onChange={toggle} className="h-4 w-4 rounded border-slate-300 text-ocean-600" />
+        <input type="checkbox" checked={on} onChange={toggle} className="h-4 w-4 rounded-sm border-slate-300 text-ocean-600" />
         <span className="text-sm text-ink-900">{p.name}</span>
       </span>
       <span className="font-mono text-xs text-slate-500">{p.base_price_cents ? `from ${money(p.base_price_cents)}` : '—'}</span>
@@ -359,7 +359,7 @@ function BuilderAddonRow({ name, price, unit, qtyEnabled, qty, on, locked, onTog
   return (
     <div className={`flex items-center justify-between rounded-lg border px-3 py-2 transition-colors ${on ? 'border-ocean-300 bg-ocean-50/50' : 'border-slate-200'}`}>
       <label className="flex flex-1 cursor-pointer items-center gap-2">
-        <input type="checkbox" checked={on} disabled={locked} onChange={onToggle} className="h-4 w-4 rounded border-slate-300 text-ocean-600 disabled:opacity-60" />
+        <input type="checkbox" checked={on} disabled={locked} onChange={onToggle} className="h-4 w-4 rounded-sm border-slate-300 text-ocean-600 disabled:opacity-60" />
         <span className="text-sm text-ink-900">{name}</span>
       </label>
       <span className="flex items-center gap-2">
@@ -367,7 +367,7 @@ function BuilderAddonRow({ name, price, unit, qtyEnabled, qty, on, locked, onTog
           <input
             type="number" min={1} value={qty}
             onChange={(e) => onQty(Number(e.target.value))}
-            className="w-12 rounded border border-slate-200 px-1.5 py-0.5 text-center text-xs tabular-nums"
+            className="w-12 rounded-sm border border-slate-200 px-1.5 py-0.5 text-center text-xs tabular-nums"
             aria-label={`${name} quantity`}
           />
         )}

@@ -93,7 +93,7 @@ export function CaptureChecklist({
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => toggle(key)}
-                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-ocean-600 focus:ring-ocean-500"
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded-sm border-slate-300 text-ocean-600 focus:ring-ocean-500"
                         />
                         <span className={isChecked ? 'text-slate-400 line-through' : 'text-slate-700'}>
                           {item.text}

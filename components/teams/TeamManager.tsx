@@ -82,7 +82,7 @@ export function TeamManager({ team, members, clients }: { team: Team; members: M
                   checked={m.notify_on_delivery}
                   onChange={(e) => call(`/api/client-teams/${team.id}/members`, 'PATCH', { member_id: m.id, notify_on_delivery: e.target.checked }, m.id)}
                   disabled={busy === m.id}
-                  className="h-4 w-4 rounded border-slate-300 text-ocean-600"
+                  className="h-4 w-4 rounded-sm border-slate-300 text-ocean-600"
                 />
                 Delivery emails
               </label>

@@ -175,13 +175,13 @@ export function ScheduleStep({
             </div>
             <div className="flex items-center text-xs rounded-md bg-slate-100 p-0.5">
               <button
-                className={`px-2 py-0.5 rounded ${!hour24 ? 'bg-slate-800 text-white' : 'text-slate-600'}`}
+                className={`px-2 py-0.5 rounded-sm ${!hour24 ? 'bg-slate-800 text-white' : 'text-slate-600'}`}
                 onClick={() => setHour24(false)}
               >
                 12h
               </button>
               <button
-                className={`px-2 py-0.5 rounded ${hour24 ? 'bg-slate-800 text-white' : 'text-slate-600'}`}
+                className={`px-2 py-0.5 rounded-sm ${hour24 ? 'bg-slate-800 text-white' : 'text-slate-600'}`}
                 onClick={() => setHour24(true)}
               >
                 24h

@@ -144,7 +144,7 @@ export function AgentSettings({
                       onClick={() =>
                         void refresh(choice.provider as "openai" | "anthropic")
                       }
-                      className="rounded p-2 text-blue-600 hover:bg-blue-50"
+                      className="rounded-sm p-2 text-blue-600 hover:bg-blue-50"
                     >
                       <RefreshCw
                         className={`h-4 w-4 ${loading === choice.provider ? "animate-spin" : ""}`}

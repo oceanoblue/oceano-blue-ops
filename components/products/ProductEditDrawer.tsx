@@ -216,19 +216,19 @@ export function ProductEditDrawer({
           <section>
             <label className="label">Cover image</label>
             {draft.cover_image_url ? (
-              <div className="relative aspect-[4/3] w-full max-w-md rounded-lg overflow-hidden border border-slate-200">
+              <div className="relative aspect-4/3 w-full max-w-md rounded-lg overflow-hidden border border-slate-200">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={draft.cover_image_url} alt="" className="h-full w-full object-cover" />
                 <button
                   onClick={() => setDraft((d) => ({ ...d, cover_image_url: null }))}
-                  className="absolute top-2 right-2 bg-white/90 rounded p-1 text-slate-700 hover:bg-white"
+                  className="absolute top-2 right-2 bg-white/90 rounded-sm p-1 text-slate-700 hover:bg-white"
                   aria-label="Remove cover"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             ) : (
-              <label className="flex aspect-[4/3] max-w-md cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-slate-300 text-slate-500 hover:bg-slate-50">
+              <label className="flex aspect-4/3 max-w-md cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-slate-300 text-slate-500 hover:bg-slate-50">
                 <input
                   type="file"
                   accept="image/*"
@@ -350,7 +350,7 @@ export function ProductEditDrawer({
           {/* Pricing tiers */}
           <section>
             <div className="flex items-center justify-between mb-2">
-              <label className="label !mb-0">Pricing tiers (by sqft)</label>
+              <label className="label mb-0!">Pricing tiers (by sqft)</label>
               <button onClick={addTier} className="text-sm text-ocean-700 hover:underline inline-flex items-center gap-1">
                 <Plus className="h-3 w-3" /> Add tier
               </button>
@@ -402,7 +402,7 @@ export function ProductEditDrawer({
           {/* Gallery */}
           <section>
             <div className="flex items-center justify-between mb-2">
-              <label className="label !mb-0">Gallery images</label>
+              <label className="label mb-0!">Gallery images</label>
               <label className="text-sm text-ocean-700 hover:underline inline-flex items-center gap-1 cursor-pointer">
                 <Upload className="h-3 w-3" /> Add images
                 <input
@@ -426,7 +426,7 @@ export function ProductEditDrawer({
                     <img src={url} alt="" className="h-full w-full object-cover" />
                     <button
                       onClick={() => removeGalleryImage(url)}
-                      className="absolute top-1 right-1 bg-white/90 rounded p-1 text-slate-700 opacity-0 group-hover:opacity-100 transition"
+                      className="absolute top-1 right-1 bg-white/90 rounded-sm p-1 text-slate-700 opacity-0 group-hover:opacity-100 transition"
                       aria-label="Remove image"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
