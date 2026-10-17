@@ -88,3 +88,33 @@ it("rejects malformed JSON and non-JSON bodies", async () => {
     ),
   ).rejects.toThrow("Invalid request.");
 });
+it("routes historical imports to the archive-only RPC with the verified actor", async () => {
+  const response = await POST(
+    req({
+      action: "historical_project_import",
+      id,
+      data: {
+        projects: [
+          {
+            source_id: "hb1",
+            title: "Finished film",
+            client_name: "Test",
+            client_email: "test@example.com",
+            original_stage: "Inquiry",
+            stage_id: id,
+            next_follow_up: "2027-01-01T12:00:00Z",
+          },
+        ],
+      },
+    }),
+  );
+  expect(response.status).toBe(200);
+  expect(mock.rpc).toHaveBeenCalledWith(
+    "crm_import_honeybook_projects",
+    expect.objectContaining({
+      p_actor: actor,
+      p_id: id,
+      p_data: { projects: [expect.not.objectContaining({ stage_id: id })] },
+    }),
+  );
+});

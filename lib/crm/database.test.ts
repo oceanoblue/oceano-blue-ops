@@ -25,13 +25,19 @@ beforeAll(async () => {
  create table team_members(id uuid primary key,role text,is_active boolean);
  alter table team_members enable row level security;create policy own_team on team_members for select to authenticated using(id=auth.uid());grant select on team_members to authenticated,service_role;
  create table clients(id uuid primary key default gen_random_uuid(),full_name text,email text unique,phone text,brokerage text,notes text,billing_address text,is_archived boolean default false,created_at timestamptz default now(),updated_at timestamptz default now());
- create table projects(id uuid primary key default gen_random_uuid(),client_id uuid references clients(id),name text,description text,start_date date,created_by uuid,status text default 'active',updated_at timestamptz default now());
+ create table projects(id uuid primary key default gen_random_uuid(),client_id uuid references clients(id),name text,description text,start_date date,created_by uuid,metadata jsonb default '{}',status text default 'active',updated_at timestamptz default now());
  grant select,insert,update on clients,projects to service_role;
  insert into team_members values('${admin}','admin',true),('${coordinator}','coordinator',true),('${photographer}','photographer',true);
  `);
   await db.exec(
     readFileSync(
       "supabase/migrations/20261017032908_crm_clientflow.sql",
+      "utf8",
+    ),
+  );
+  await db.exec(
+    readFileSync(
+      "supabase/migrations/20261017034047_crm_historical_archive.sql",
       "utf8",
     ),
   );
@@ -426,4 +432,258 @@ it("searches all contacts and projects with literal text and stable pagination",
   expect((await search("%'),id.eq.secret")).contacts).toHaveLength(0);
   expect((await search("", "", 1)).contacts).toHaveLength(0);
   expect((await search("")).tags).toEqual(["commercial"]);
+});
+
+async function importProjects(
+  projects: object[],
+  id = randomUUID(),
+  actor = admin,
+) {
+  return (
+    await db.query<any>(
+      "select crm_import_honeybook_projects($1,$2,$3::jsonb) result",
+      [actor, id, JSON.stringify({ projects })],
+    )
+  ).rows[0].result;
+}
+const history = {
+  source_id: "hb-project-001",
+  title: "Finished brand film",
+  client_name: "Historic Client",
+  client_email: "history@example.test",
+  original_stage: "Inquiry",
+  project_type: "Video",
+  lead_source: "Referral",
+  project_date: "2020-03-15",
+  value_cents: 250000,
+  description: "Preserved project notes",
+};
+it("imports every historical HoneyBook project into Archived regardless of stale source stage", async () => {
+  await act("automation_save", randomUUID(), {
+    name: "Any stage",
+    enabled: true,
+    trigger: "stage_changed",
+    stage_id: null,
+    task_title: "Do not create",
+    delay_hours: 0,
+  });
+  const result = await importProjects([
+    history,
+    {
+      ...history,
+      source_id: "hb-project-002",
+      original_stage: "Proposal sent",
+      title: "Another completed project",
+    },
+  ]);
+  expect(result).toMatchObject({
+    added: 2,
+    skipped: 0,
+    destination: "archived",
+  });
+  const rows = (
+    await db.query<any>(
+      "select o.next_follow_up,o.owner_id,s.outcome,p.status,p.metadata from crm_opportunities o join crm_stages s on s.id=o.stage_id join projects p on p.id=o.project_id",
+    )
+  ).rows;
+  expect(rows).toHaveLength(2);
+  for (const row of rows)
+    expect(row).toMatchObject({
+      next_follow_up: null,
+      owner_id: null,
+      outcome: "archived",
+      status: "archived",
+      metadata: { source: "honeybook" },
+    });
+  expect((await db.query("select * from crm_tasks")).rows).toHaveLength(0);
+  expect(
+    (
+      await db.query<any>(
+        "select original_stage from crm_honeybook_projects order by source_id",
+      )
+    ).rows,
+  ).toEqual([
+    { original_stage: "Inquiry" },
+    { original_stage: "Proposal sent" },
+  ]);
+});
+it("keeps archived projects out of the active pipeline but available in Archived and contact history", async () => {
+  await importProjects([history]);
+  const archived = (
+    await db.query<any>("select id from crm_stages where outcome='archived'")
+  ).rows[0].id;
+  const active = (
+    await db.query<any>("select crm_page('','',null,null,0) result")
+  ).rows[0].result;
+  expect(active.deals).toHaveLength(0);
+  expect(active.contacts).toHaveLength(1);
+  expect(
+    (await db.query<any>("select crm_page('','',$1,null,0) result", [archived]))
+      .rows[0].result.deals,
+  ).toHaveLength(1);
+  const report = (await db.query<any>("select crm_report() result")).rows[0]
+    .result;
+  expect(report.sources).toHaveLength(0);
+  expect(report.stages.find((s: any) => s.outcome === "archived").count).toBe(
+    1,
+  );
+});
+it("skips reimported source IDs without changing projects that were intentionally reopened", async () => {
+  const batch = randomUUID();
+  expect(await importProjects([history], batch)).toMatchObject({ added: 1 });
+  expect(await importProjects([history], batch)).toMatchObject({ added: 1 });
+  const row = (await db.query<any>("select * from crm_opportunities")).rows[0];
+  const current = await deal(row.client_id);
+  await act(
+    "deal_update",
+    row.id,
+    { ...current, title: "Explicitly reopened" },
+    1,
+  );
+  expect(await importProjects([history], randomUUID())).toMatchObject({
+    added: 0,
+    skipped: 1,
+  });
+  expect(
+    (await db.query<any>("select title,stage_id from crm_opportunities"))
+      .rows[0],
+  ).toEqual({ title: "Explicitly reopened", stage_id: await stage() });
+});
+it("preserves current Ops client details and unrelated active projects during historical imports", async () => {
+  const cid = await newContact(),
+    id = randomUUID();
+  await act("deal_create", id, await deal(cid));
+  await importProjects([
+    {
+      ...history,
+      client_email: contact.email,
+      client_name: "Stale HoneyBook name",
+    },
+  ]);
+  expect(
+    (await db.query<any>("select full_name from clients where id=$1", [cid]))
+      .rows[0].full_name,
+  ).toBe(contact.full_name);
+  expect(
+    (await db.query<any>("select status from projects where id=$1", [id]))
+      .rows[0].status,
+  ).toBe("active");
+});
+it("pauses existing tasks and clears follow-up dates when archiving, without creating archive-triggered tasks", async () => {
+  const cid = await newContact(),
+    id = randomUUID(),
+    data = { ...(await deal(cid)), next_follow_up: "2026-01-01T10:00:00Z" };
+  await act("deal_create", id, data);
+  const task = randomUUID();
+  await act("task_create", task, {
+    title: "Old follow-up",
+    client_id: cid,
+    project_id: id,
+    due_at: "2026-01-01T10:00:00Z",
+    owner_id: admin,
+  });
+  const archive = (
+    await db.query<any>("select id from crm_stages where outcome='archived'")
+  ).rows[0].id;
+  await act("automation_save", randomUUID(), {
+    name: "Any stage",
+    enabled: true,
+    trigger: "stage_changed",
+    stage_id: null,
+    task_title: "Should not run",
+    delay_hours: 0,
+  });
+  await act("deal_update", id, { ...data, stage_id: archive }, 1);
+  expect(
+    (
+      await db.query<any>(
+        "select next_follow_up from crm_opportunities where id=$1",
+        [id],
+      )
+    ).rows[0].next_follow_up,
+  ).toBeNull();
+  const tasks = (
+    await db.query<any>("select completed_at,paused_at from crm_tasks")
+  ).rows;
+  expect(tasks).toHaveLength(1);
+  expect(tasks[0].completed_at).toBeNull();
+  expect(tasks[0].paused_at).not.toBeNull();
+  expect(
+    (await db.query<any>("select crm_report() result")).rows[0].result.overdue,
+  ).toBe(0);
+  expect(
+    (
+      await act("task_create", randomUUID(), {
+        title: "New follow-up",
+        client_id: cid,
+        project_id: id,
+        due_at: null,
+        owner_id: admin,
+      })
+    ).error,
+  ).toMatch(/Reopen/);
+});
+it("does not resume paused tasks when a historical project is reopened", async () => {
+  const cid = await newContact(),
+    id = randomUUID(),
+    data = await deal(cid);
+  await act("deal_create", id, data);
+  await act("task_create", randomUUID(), {
+    title: "Follow up",
+    client_id: cid,
+    project_id: id,
+    due_at: null,
+    owner_id: null,
+  });
+  const archive = (
+    await db.query<any>("select id from crm_stages where outcome='archived'")
+  ).rows[0].id;
+  await act("deal_update", id, { ...data, stage_id: archive }, 1);
+  await act("deal_update", id, data, 2);
+  expect(
+    (await db.query<any>("select status from projects where id=$1", [id]))
+      .rows[0].status,
+  ).toBe("active");
+  expect(
+    (await db.query<any>("select paused_at from crm_tasks")).rows[0].paused_at,
+  ).not.toBeNull();
+});
+it("restricts historical imports and protects original source snapshots", async () => {
+  expect(
+    (await importProjects([history], randomUUID(), photographer)).error,
+  ).toBe("Office access required.");
+  const privileges = (
+    await db.query<any>(
+      "select has_function_privilege('authenticated','crm_import_honeybook_projects(uuid,uuid,jsonb)','execute') browser_rpc,has_table_privilege('anon','crm_honeybook_projects','select') anon_read",
+    )
+  ).rows[0];
+  expect(privileges).toEqual({ browser_rpc: false, anon_read: false });
+  await importProjects([history]);
+  await expect(
+    db.exec("update crm_honeybook_projects set original_stage='Changed'"),
+  ).rejects.toThrow(/append-only/);
+});
+it("requires explicit project reopening rather than reclassifying an occupied archive stage", async () => {
+  await importProjects([history]);
+  const archive = (
+    await db.query<any>("select id from crm_stages where outcome='archived'")
+  ).rows[0].id;
+  expect(
+    (
+      await act("stage_save", archive, {
+        name: "Archived",
+        position: 110,
+        outcome: "open",
+      })
+    ).error,
+  ).toMatch(/Move projects/);
+  expect(
+    (
+      await act("stage_save", archive, {
+        name: "History",
+        position: 110,
+        outcome: "archived",
+      })
+    ).error,
+  ).toBeUndefined();
 });

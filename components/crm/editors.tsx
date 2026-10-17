@@ -10,6 +10,7 @@ import {
   type Stage,
   type Automation,
 } from "@/lib/crm/types";
+import { historicalProjectsCsv } from "@/lib/crm/historical-import";
 import { csvContacts } from "@/lib/crm/csv";
 export type Save = (action: Record<string, unknown>) => Promise<void>;
 export const Label = ({
@@ -901,5 +902,93 @@ export function AutomationEditor({
         Save automation
       </button>
     </form>
+  );
+}
+
+export function HistoricalProjectImportEditor({ save }: { save: Save }) {
+  const [projects, setProjects] = useState<
+      ReturnType<typeof historicalProjectsCsv>
+    >([]),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [importId, setImportId] = useState(() => crypto.randomUUID());
+  return (
+    <div className="space-y-4">
+      <p className="rounded-xl bg-ocean-50 p-4 text-sm text-ocean-900">
+        All imported HoneyBook projects will go into Archived, regardless of
+        their original stage. No follow-up dates or automation tasks will be
+        created. Existing Ops projects and the HoneyBook account are unaffected.
+      </p>
+      <p className="text-sm text-slate-600">
+        Use a prepared project CSV, up to 500 rows per batch. Required columns:
+        Project ID, Project name, Client name, Client email. Optional: Stage,
+        Project type, Lead source, Project date (YYYY-MM-DD), Value ($),
+        Description. The source project ID prevents duplicate imports. A
+        contact-list CSV does not contain project history.
+      </p>
+      <Label name="Choose project CSV">
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          disabled={busy}
+          onChange={async (e) => {
+            setProjects([]);
+            setError("");
+            setImportId(crypto.randomUUID());
+            const file = e.target.files?.[0];
+            if (!file) return;
+            try {
+              if (file.size > 2000000)
+                throw new Error("CSV must be under 2 MB.");
+              setProjects(historicalProjectsCsv(await file.text()));
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Unable to read CSV.");
+            }
+          }}
+        />
+      </Label>
+      {projects.length ? (
+        <>
+          <p className="font-medium">{projects.length} projects → Archived</p>
+          <div className="max-h-64 overflow-auto rounded-xl border">
+            {projects.slice(0, 20).map((p, i) => (
+              <div key={i} className="border-b p-3 text-sm">
+                <p className="font-medium">{p.title}</p>
+                <p className="text-slate-500">
+                  {p.client_name} · Original: {p.original_stage || "Unknown"} →
+                  Archived
+                </p>
+              </div>
+            ))}
+          </div>
+          <button
+            disabled={busy}
+            className="btn-primary"
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                await save({
+                  action: "historical_project_import",
+                  id: importId,
+                  data: { projects },
+                });
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Import failed.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Importing…" : "Import projects into Archived"}
+          </button>
+        </>
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-red-700">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

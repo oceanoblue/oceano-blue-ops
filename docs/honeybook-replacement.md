@@ -29,6 +29,16 @@ The live website's contact destination is `https://www.oceanoblue.net/contact/1`
 
 The inspected default form asks for name, email, phone, project date, address, project type, guest count, estimated time, budget, referral source, and project details. Ops provides a **draft** with those labels. Original project-type and referral dropdown choices, conditional behavior, branding, routing, redirects, notification recipients, and the other forms still need reconciliation. The replacement uses text for the unverified dropdown choices rather than inventing source values.
 
+## Historical archive policy (confirmed by the owner)
+
+All existing HoneyBook projects will be imported into **Archived** in Ops, regardless of their stale source stage. The HoneyBook account itself stays unchanged. Original stages and stable source project IDs are retained as history. A prepared project CSV importer is available from **CRM → Pipeline → Import HoneyBook archive**; a contacts CSV cannot substitute for a project export.
+
+Historical import creates archived Ops project/opportunity records, adds no follow-up dates or tasks, and does not run inquiry/stage-change automations. Imported clients remain usable for future work. Source IDs and import batch IDs make reimports safe; an intentionally reopened project is not re-archived by a later import.
+
+The default pipeline excludes archived records. Selecting Archived retrieves them. Archiving a CRM project clears its next-follow-up date and pauses existing open project tasks without marking them completed; reopening does not automatically resume those tasks. Historical values remain visible in Archived, while archived records are excluded from conversion and lead-source totals. Existing Ops projects, invoices, payment schedules and unrelated contact tasks are unaffected.
+
+Prepared project CSV columns: **Project ID, Project name, Client name, Client email** (required); **Stage, Project type, Lead source, Project date, Value, Description** (optional). Dates use `YYYY-MM-DD`; values are dollars, or provide a `Value cents` column. Up to 500 projects per batch. The archive policy is implemented; no source projects have been imported yet. The archive migration was applied as `20261017034047_crm_historical_archive.sql`; source mapping history is protected by RLS and its import RPC is service-only. No new security-advisor findings were introduced.
+
 ## Implemented by this change
 
 - `/dashboard/crm`: global contact/project search; paginated contacts; tags, company, phone, address, notes, lead/client/archive relationship; editable pipeline stages and project owners, values, dates, sources, loss reasons and next follow-up.
@@ -68,12 +78,12 @@ These already exist; a link or similar feature is not proof of HoneyBook parity:
 6. Cover time tracking, expenses/profitability/tax exports, advanced saved views/custom fields/bulk edits, global attachment search, reporting exports, accounting integrations, AI-assisted drafting/enrichment and mobile workflows if required by the account inventory. HoneyBook-provided financing, payment processing and third-party integrations require replacement providers, not UI imitation.
 7. Export/archive and reconcile all contacts, projects, participants, notes, form answers, messages and attachments, smart files/templates, original executed contracts and audit trails, invoices, payments and bookings. Keep source IDs and import manifests. A contacts CSV alone does not contain this history.
 8. Resolve the repository's dependency release gate, then verify authenticated workflows on the deployed preview. Test end-to-end with isolated records and mail/payment sandboxes.
-9. Publish the verified Ops form, submit an isolated inquiry, check office notification and follow-up, reconcile it with the new contact/project, and only then replace the exact HoneyBook placement on `/contact/1`. Inspect other website pages for placements too.
+9. Import existing HoneyBook projects into Archived under the confirmed historical archive policy; reserve active stages for new inquiries or projects explicitly reopened by the office. Publish the verified Ops form, submit an isolated inquiry, check office notification and follow-up, reconcile it with the new contact/project, and only then replace the exact HoneyBook placement on `/contact/1`. Inspect other website pages for placements too.
 10. Reconcile active bookings, open balances and in-flight signatures; run both systems through a verified transition window. Retire HoneyBook only when every required capability and historical record is accounted for.
 
 ## Validation and release state
 
-CRM tests cover public retry/idempotency, preservation of existing client data, CSV quoting and formula safety, authorization and RPC grants, immutable audit history, version conflicts, atomic project linkage and task automation, global search and pagination. The final full suite passed all 874 tests across 117 files, including 34 CRM-specific tests. Type checking and scoped ESLint passed. A production Webpack build passed; local Turbopack encountered a subprocess port restriction.
+CRM tests cover public retry/idempotency, preservation of existing client data, CSV quoting and formula safety, authorization and RPC grants, immutable audit history, version conflicts, atomic project linkage and task automation, global search and pagination. The final full suite passed all 886 tests across 118 files, including 46 CRM-specific tests. Type checking and scoped ESLint passed. A production Webpack build passed; local Turbopack encountered a subprocess port restriction.
 
 The repository's dependency audit currently reports 12 findings (3 moderate, 7 high, 2 critical), involving the existing Tailwind/ESLint/Vitest toolchain. Available fixes require major toolchain changes or incompatible downgrades, so `npm audit fix --force` was not used. CI's high-severity dependency gate remains a release blocker. See the PR's current checks for the final commit result.
 

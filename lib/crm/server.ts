@@ -92,6 +92,7 @@ export async function crmRead(
     db
       .from("crm_tasks")
       .select("*")
+      .is("paused_at", null)
       .order("completed_at", { ascending: false, nullsFirst: true })
       .order("due_at", { ascending: true, nullsFirst: false })
       .limit(300),
@@ -130,5 +131,7 @@ export async function crmRead(
     team,
     page,
     hasMore: contacts.length > 100 || deals.length > 100,
+    hasMoreContacts: contacts.length > 100,
+    hasMoreDeals: deals.length > 100,
   };
 }

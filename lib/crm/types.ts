@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { historicalProjectSchema } from "./historical-schema";
 
 const text = (max: number) => z.string().trim().max(max);
 export const fieldSchema = z.object({
@@ -119,6 +120,13 @@ export const formSchema = z
       ctx.addIssue({ code: "custom", message: "Select fields need options." });
   });
 export const actions = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("historical_project_import"),
+    id: uuid,
+    data: z.object({
+      projects: z.array(historicalProjectSchema).min(1).max(500),
+    }),
+  }),
   z.object({
     action: z.literal("contact_create"),
     id: uuid,
@@ -273,6 +281,7 @@ export type Task = {
   due_at: string | null;
   owner_id: string | null;
   completed_at: string | null;
+  paused_at: string | null;
   version: number;
 };
 export type CrmEvent = {
@@ -304,4 +313,6 @@ export type CrmData = {
   team: { id: string; full_name: string }[];
   page: number;
   hasMore: boolean;
+  hasMoreContacts: boolean;
+  hasMoreDeals: boolean;
 };

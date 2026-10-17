@@ -31,6 +31,7 @@ import {
   DealEditor,
   FormEditor,
   ImportEditor,
+  HistoricalProjectImportEditor,
   StageEditor,
   AutomationEditor,
   Label,
@@ -48,6 +49,7 @@ type Modal =
   | { kind: "deal"; deal?: Deal; clientId?: string }
   | { kind: "form"; form?: CrmForm }
   | { kind: "import" }
+  | { kind: "historical" }
   | { kind: "stage"; stage?: Stage }
   | { kind: "automation"; automation?: Automation }
   | null;
@@ -164,8 +166,11 @@ export function CrmWorkspace() {
     if (!r.ok) throw new Error(body.error);
     setModal(null);
     setNotice(
-      action.action === "import"
-        ? `${body.added} contacts imported; ${body.skipped} existing email addresses skipped.`
+      action.action === "import" ||
+        action.action === "historical_project_import"
+        ? action.action === "historical_project_import"
+          ? `${body.added} projects imported into Archived; ${body.skipped} previously imported projects skipped.`
+          : `${body.added} contacts imported; ${body.skipped} existing email addresses skipped.`
         : "Saved.",
     );
     await load();
@@ -316,7 +321,7 @@ export function CrmWorkspace() {
                     onChange={(e) => setStageFilter(e.target.value)}
                     className="input"
                   >
-                    <option value="">All stages</option>
+                    <option value="">Active stages</option>
                     {data.stages.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
@@ -336,6 +341,12 @@ export function CrmWorkspace() {
                       </option>
                     ))}
                   </select>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setModal({ kind: "historical" })}
+                  >
+                    Import HoneyBook archive
+                  </button>
                 </>
               )}
               <button
@@ -353,7 +364,11 @@ export function CrmWorkspace() {
             <>
               <div className="flex gap-4 overflow-x-auto pb-4">
                 {data.stages
-                  .filter((s) => !stageFilter || s.id === stageFilter)
+                  .filter((s) =>
+                    stageFilter
+                      ? s.id === stageFilter
+                      : s.outcome !== "archived",
+                  )
                   .map((stage) => {
                     const rows = deals.filter((d) => d.stage_id === stage.id);
                     return (
@@ -623,7 +638,12 @@ export function CrmWorkspace() {
                   Previous
                 </button>
                 <button
-                  disabled={busy || !data.hasMore}
+                  disabled={
+                    busy ||
+                    !(tab === "contacts"
+                      ? data.hasMoreContacts
+                      : data.hasMoreDeals)
+                  }
                   onClick={() => void load(data.page + 1)}
                   className="btn-secondary"
                 >
@@ -683,6 +703,7 @@ export function CrmWorkspace() {
                   deal: "Project",
                   form: "Contact form",
                   import: "Import contacts",
+                  historical: "Import historical projects",
                   stage: "Pipeline stage",
                   automation: "Task automation",
                 }[modal.kind]
@@ -700,6 +721,8 @@ export function CrmWorkspace() {
                 />
               ) : modal.kind === "form" ? (
                 <FormEditor form={modal.form} team={data.team} save={save} />
+              ) : modal.kind === "historical" ? (
+                <HistoricalProjectImportEditor save={save} />
               ) : modal.kind === "import" ? (
                 <ImportEditor save={save} />
               ) : modal.kind === "stage" ? (
@@ -840,17 +863,17 @@ function TaskList({
           checked={showDone}
           onChange={(e) => setShowDone(e.target.checked)}
         />
-        Show completed tasks
+        Show completed and paused tasks
       </label>
       {tasks
-        .filter((t) => showDone || !t.completed_at)
+        .filter((t) => showDone || (!t.completed_at && !t.paused_at))
         .map((t) => (
           <article key={t.id} className="card flex items-center gap-3 p-4">
             <input
               type="checkbox"
               aria-label={`Complete ${t.title}`}
               checked={!!t.completed_at}
-              disabled={busy}
+              disabled={busy || !!t.paused_at}
               onChange={async (e) => {
                 setBusy(true);
                 try {
@@ -877,9 +900,14 @@ function TaskList({
                 {t.title}
               </p>
               <p
-                className={`mt-1 text-xs ${t.due_at && new Date(t.due_at) < new Date() && !t.completed_at ? "text-red-700" : "text-slate-500"}`}
+                className={`mt-1 text-xs ${t.due_at && new Date(t.due_at) < new Date() && !t.completed_at && !t.paused_at ? "text-red-700" : "text-slate-500"}`}
               >
-                {t.due_at ? date(t.due_at) : "No due date"} ·{" "}
+                {t.paused_at
+                  ? "Paused for archived project"
+                  : t.due_at
+                    ? date(t.due_at)
+                    : "No due date"}{" "}
+                ·{" "}
                 {team.find((m) => m.id === t.owner_id)?.full_name ||
                   "Unassigned"}
               </p>
@@ -1152,7 +1180,9 @@ function Reports() {
       </p>
     );
   if (!data) return <p>Loading reports…</p>;
-  const total = data.stages.reduce((n, s) => n + s.count, 0),
+  const total = data.stages
+      .filter((s) => s.outcome !== "archived")
+      .reduce((n, s) => n + s.count, 0),
     won = data.stages
       .filter((s) => s.outcome === "won")
       .reduce((n, s) => n + s.count, 0);
@@ -1176,8 +1206,9 @@ function Reports() {
         ))}
       </div>
       <p className="text-sm text-slate-500">
-        All CRM projects. Values are opportunity estimates; received revenue is
-        in the billing reports.
+        Archived history is excluded from conversion and lead-source totals.
+        Values are opportunity estimates; received revenue is in the billing
+        reports.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card p-5">

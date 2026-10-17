@@ -44,13 +44,20 @@ export async function POST(req: Request) {
     const actor = await crmActor();
     sameOrigin(req);
     const body = actions.parse(await readJson(req, 2000000));
-    const { data, error } = await crmDb().rpc("crm_action", {
-      p_actor: actor,
-      p_action: body.action,
-      p_id: body.id,
-      p_version: "version" in body ? body.version : null,
-      p_data: body.data,
-    });
+    const { data, error } =
+      body.action === "historical_project_import"
+        ? await crmDb().rpc("crm_import_honeybook_projects", {
+            p_actor: actor,
+            p_id: body.id,
+            p_data: body.data,
+          })
+        : await crmDb().rpc("crm_action", {
+            p_actor: actor,
+            p_action: body.action,
+            p_id: body.id,
+            p_version: "version" in body ? body.version : null,
+            p_data: body.data,
+          });
     if (error)
       throw new CrmError(
         "Changes could not be saved. Check required fields and try again.",
