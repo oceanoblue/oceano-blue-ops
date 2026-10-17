@@ -264,6 +264,14 @@ export function CrmWorkspace({
         subtitle="From your first conversation to the next project."
         icon={Users}
       >
+        <Link
+          href="/dashboard/crm/acquisition"
+          className="btn-primary"
+          aria-label="Acquisition workflows"
+        >
+          <Workflow className="h-4 w-4" />
+          <span className="hidden md:inline">Acquisition</span>
+        </Link>
         <button
           className="btn-secondary"
           disabled={busy}
@@ -747,6 +755,19 @@ export function CrmWorkspace({
           ) : null}
           {tab === "automations" ? (
             <section className="space-y-4">
+              <Link
+                className="card flex flex-wrap items-center justify-between gap-3 p-5 text-ocean-800"
+                href="/dashboard/crm/acquisition"
+              >
+                <span>
+                  <strong>Replies, follow-ups & smart files</strong>
+                  <span className="mt-1 block text-sm text-slate-500">
+                    Build an inquiry workflow with email approvals and client
+                    file responses.
+                  </span>
+                </span>
+                <ArrowRight className="h-5 w-5" />
+              </Link>
               <div className="flex justify-between">
                 <p className="text-sm text-slate-600">
                   Internal task automation for new inquiries and stage changes.
@@ -814,6 +835,7 @@ export function CrmWorkspace({
           ) : null}
           <div className="flex flex-wrap gap-4 border-t border-slate-200 pt-4 text-sm text-ocean-700">
             {[
+              ["Acquisition workflows", "/dashboard/crm/acquisition"],
               ["Quotes", "/dashboard/quotes"],
               ["Invoices", "/dashboard/invoices"],
               ["Schedule", "/dashboard/schedule"],
@@ -1126,13 +1148,19 @@ function ContactPanel({
         <p className="mt-1 text-sm text-slate-600">
           {c.crm_contact_profiles?.company || c.brokerage}
         </p>
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           <button className="btn-secondary" onClick={edit}>
             Edit contact
           </button>
           <button className="btn-primary" onClick={newDeal}>
             New project
           </button>
+          <Link
+            className="btn-secondary mb-4"
+            href={`/dashboard/crm/acquisition?contact=${c.id}`}
+          >
+            Smart files & follow-ups
+          </Link>
         </div>
       </div>
       {c.notes ? (
