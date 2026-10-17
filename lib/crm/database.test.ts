@@ -41,6 +41,12 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    readFileSync(
+      "supabase/migrations/20261017042746_crm_acquisition_workflows.sql",
+      "utf8",
+    ),
+  );
 }, 60000);
 afterAll(async () => {
   await db?.close();
@@ -686,4 +692,517 @@ it("requires explicit project reopening rather than reclassifying an occupied ar
       })
     ).error,
   ).toBeUndefined();
+});
+
+async function acquisition(
+  action: string,
+  id: string,
+  data: object,
+  version = 0,
+  actor = admin,
+) {
+  return (
+    await db.query<any>(
+      "select crm_acquisition_action($1,$2,$3,$4,$5::jsonb) result",
+      [actor, action, id, version, JSON.stringify(data)],
+    )
+  ).rows[0].result;
+}
+async function acquisitionFlow(approval = false) {
+  const formId = await form(),
+    message = randomUUID(),
+    file = randomUUID(),
+    sequence = randomUUID();
+  expect(
+    await acquisition("message_template_save", message, {
+      name: "Reply",
+      subject: "Hi {{first_name}}",
+      body: "Received {{project_name}}",
+      ready: true,
+    }),
+  ).toMatchObject({ version: 1 });
+  const blocks = [
+    {
+      id: randomUUID(),
+      kind: "text",
+      title: "Brief",
+      body: "Tell us about your project.",
+    },
+    {
+      id: randomUUID(),
+      kind: "question",
+      field: { key: "goals", label: "Goals", type: "textarea", required: true },
+    },
+  ];
+  expect(
+    await acquisition("file_template_save", file, {
+      name: "Brief",
+      title: "Project brief",
+      description: "",
+      blocks,
+      ready: true,
+    }),
+  ).toMatchObject({ version: 1 });
+  const steps = [
+    {
+      id: randomUUID(),
+      kind: "email",
+      delay: 0,
+      unit: "hours",
+      message_template_id: message,
+      file_template_id: file,
+      task_title: "",
+      requires_approval: approval,
+    },
+    {
+      id: randomUUID(),
+      kind: "task",
+      delay: 2,
+      unit: "business_days",
+      task_title: "Follow up",
+    },
+  ];
+  const settings = {
+    name: "Flow",
+    form_id: formId,
+    enabled: true,
+    timezone: "America/New_York",
+    steps,
+  };
+  expect(await acquisition("sequence_save", sequence, settings)).toMatchObject({
+    version: 1,
+  });
+  const submission = randomUUID();
+  await submit(formId, submission);
+  const job = (
+    await db.query<any>(
+      "select * from crm_acquisition_jobs where submission_id=$1",
+      [submission],
+    )
+  ).rows[0];
+  return { formId, message, file, sequence, settings, submission, job };
+}
+it("enrolls only new inquiries atomically, freezes content and deduplicates public retries", async () => {
+  const f = await acquisitionFlow();
+  await submit(f.formId, f.submission);
+  expect(
+    (
+      await db.query(
+        "select * from crm_acquisition_jobs where submission_id=$1",
+        [f.submission],
+      )
+    ).rows,
+  ).toHaveLength(1);
+  expect(
+    (
+      await db.query("select * from crm_tasks where project_id=$1", [
+        f.job.project_id,
+      ])
+    ).rows,
+  ).toHaveLength(1);
+  await acquisition(
+    "message_template_save",
+    f.message,
+    { name: "New", subject: "Changed", body: "Changed", ready: true },
+    1,
+  );
+  expect(
+    (
+      await db.query<any>(
+        "select subject from crm_acquisition_jobs where id=$1",
+        [f.job.id],
+      )
+    ).rows[0].subject,
+  ).toBe("Hi {{first_name}}");
+});
+it("computes business-day delays over weekends and DST in the configured timezone", async () => {
+  const result = await db.query<any>(
+    "select crm_due_at('2026-03-06 15:00:00Z',2,'business_days','America/New_York') result",
+  );
+  expect(new Date(result.rows[0].result).toISOString()).toBe(
+    "2026-03-10T14:00:00.000Z",
+  );
+});
+it("holds approval-required emails until an office actor approves them", async () => {
+  const f = await acquisitionFlow(true);
+  expect(
+    (await db.query("select * from crm_claim_acquisition(5)")).rows,
+  ).toHaveLength(0);
+  expect(await acquisition("job_approve", f.job.id, {})).toMatchObject({
+    id: f.job.id,
+  });
+  const jobs = (await db.query<any>("select * from crm_claim_acquisition(5)"))
+    .rows;
+  expect(jobs).toHaveLength(1);
+  expect(
+    (await db.query("select * from crm_claim_acquisition(5)")).rows,
+  ).toHaveLength(0);
+  const job = jobs[0];
+  const prepared = (
+    await db.query<any>("select crm_prepare_acquisition($1,$2,true) result", [
+      job.id,
+      job.lease_token,
+    ])
+  ).rows[0].result;
+  expect(prepared.job.id).toBe(job.id);
+  expect(prepared.file_token).toMatch(/^[a-f0-9]{64}$/);
+  expect(
+    (
+      await db.query<any>(
+        "select crm_finish_acquisition($1,$2,'accepted','provider1') result",
+        [job.id, job.lease_token],
+      )
+    ).rows[0].result,
+  ).toBe(true);
+  expect(
+    (
+      await db.query<any>(
+        "select crm_finish_acquisition($1,$2,'accepted','provider1') result",
+        [job.id, job.lease_token],
+      )
+    ).rows[0].result,
+  ).toBe(false);
+});
+it("blocks missing mail configuration and never labels an unsent email accepted", async () => {
+  await acquisitionFlow();
+  const job = (await db.query<any>("select * from crm_claim_acquisition(5)"))
+    .rows[0];
+  expect(
+    (
+      await db.query<any>(
+        "select crm_prepare_acquisition($1,$2,false) result",
+        [job.id, job.lease_token],
+      )
+    ).rows[0].result,
+  ).toEqual({ skip: true });
+  expect(
+    (
+      await db.query<any>(
+        "select status,attempts from crm_acquisition_jobs where id=$1",
+        [job.id],
+      )
+    ).rows[0],
+  ).toEqual({ status: "blocked", attempts: 0 });
+});
+it("stops pending messages and pauses tasks when the project is archived, without reenrolling on reopen", async () => {
+  const f = await acquisitionFlow();
+  const archive = (
+    await db.query<any>("select id from crm_stages where outcome='archived'")
+  ).rows[0].id;
+  const d = await deal(f.job.client_id);
+  await act("deal_update", f.job.project_id, { ...d, stage_id: archive }, 1);
+  expect(
+    (
+      await db.query<any>(
+        "select status from crm_acquisition_jobs where id=$1",
+        [f.job.id],
+      )
+    ).rows[0].status,
+  ).toBe("cancelled");
+  expect(
+    (
+      await db.query<any>(
+        "select paused_at from crm_tasks where project_id=$1",
+        [f.job.project_id],
+      )
+    ).rows[0].paused_at,
+  ).toBeTruthy();
+  await act("deal_update", f.job.project_id, d, 2);
+  expect(
+    (await db.query("select * from crm_claim_acquisition(5)")).rows,
+  ).toHaveLength(0);
+});
+it("pauses workflows and honours a stop after claim but before provider dispatch", async () => {
+  const f = await acquisitionFlow();
+  const job = (await db.query<any>("select * from crm_claim_acquisition(5)"))
+    .rows[0];
+  await acquisition("project_pause", job.project_id, {
+    reason: "Client replied.",
+  });
+  expect(
+    (
+      await db.query<any>("select crm_prepare_acquisition($1,$2,true) result", [
+        job.id,
+        job.lease_token,
+      ])
+    ).rows[0].result,
+  ).toEqual({ skip: true });
+  expect(
+    (
+      await db.query<any>(
+        "select status from crm_acquisition_jobs where id=$1",
+        [job.id],
+      )
+    ).rows[0].status,
+  ).toBe("cancelled");
+});
+it("stops queued messages when a workflow is disabled", async () => {
+  const f = await acquisitionFlow();
+  await acquisition(
+    "sequence_save",
+    f.sequence,
+    { ...f.settings, enabled: false },
+    1,
+  );
+  expect(
+    (
+      await db.query<any>(
+        "select status from crm_acquisition_jobs where id=$1",
+        [f.job.id],
+      )
+    ).rows[0].status,
+  ).toBe("cancelled");
+});
+it("keeps issued content immutable and records a client response only once", async () => {
+  const f = await acquisitionFlow();
+  const file = (
+    await db.query<any>("select * from crm_issued_files where id=$1", [
+      f.job.file_id,
+    ])
+  ).rows[0];
+  await acquisition(
+    "file_template_save",
+    f.file,
+    {
+      name: "Changed",
+      title: "Changed",
+      description: "",
+      blocks: [{ id: randomUUID(), kind: "text", title: "", body: "Changed" }],
+      ready: true,
+    },
+    1,
+  );
+  expect(
+    (
+      await db.query<any>("select title from crm_issued_files where id=$1", [
+        file.id,
+      ])
+    ).rows[0].title,
+  ).toBe("Project brief");
+  const rid = randomUUID();
+  const respond = () =>
+    db.query<any>(
+      "select crm_file_event($1,'respond',$2,'hash','{\"goals\":\"Film\"}'::jsonb) result",
+      [file.access_token, rid],
+    );
+  expect((await respond()).rows[0].result).toEqual({ ok: true });
+  expect((await respond()).rows[0].result).toEqual({ ok: true });
+  expect(
+    (
+      await db.query("select * from crm_file_responses where file_id=$1", [
+        file.id,
+      ])
+    ).rows,
+  ).toHaveLength(1);
+  expect(
+    (
+      await db.query<any>(
+        "select status from crm_acquisition_jobs where id=$1",
+        [f.job.id],
+      )
+    ).rows[0].status,
+  ).toBe("cancelled");
+});
+it("revokes client-file links without removing response history", async () => {
+  const f = await acquisitionFlow();
+  const file = (
+    await db.query<any>("select * from crm_issued_files where id=$1", [
+      f.job.file_id,
+    ])
+  ).rows[0];
+  await acquisition("file_revoke", file.id, {});
+  expect(
+    (
+      await db.query<any>(
+        "select crm_file_event($1,'view',$2,'','{}') result",
+        [file.access_token, randomUUID()],
+      )
+    ).rows[0].result,
+  ).toEqual({ error: "File unavailable." });
+});
+it("does not replay an ambiguous send after a worker interruption", async () => {
+  await acquisitionFlow();
+  const job = (await db.query<any>("select * from crm_claim_acquisition(5)"))
+    .rows[0];
+  await db.query("select crm_prepare_acquisition($1,$2,true)", [
+    job.id,
+    job.lease_token,
+  ]);
+  await db.query(
+    "update crm_acquisition_jobs set locked_at=now()-interval '10 minutes' where id=$1",
+    [job.id],
+  );
+  expect(
+    (await db.query("select * from crm_claim_acquisition(5)")).rows,
+  ).toHaveLength(0);
+  expect(
+    (
+      await db.query<any>(
+        "select status from crm_acquisition_jobs where id=$1",
+        [job.id],
+      )
+    ).rows[0].status,
+  ).toBe("needs_review");
+});
+it("rejects contractor mutations and denies anonymous access to files, responses and worker RPCs", async () => {
+  expect(
+    await acquisition(
+      "project_pause",
+      randomUUID(),
+      { reason: "Wrong role" },
+      0,
+      photographer,
+    ),
+  ).toEqual({ error: "Office access required." });
+  await db.exec("savepoint access_check;set local role anon");
+  await expect(db.query("select * from crm_issued_files")).rejects.toThrow();
+  await db.exec("rollback to access_check;set local role anon");
+  await expect(db.query("select crm_claim_acquisition(5)")).rejects.toThrow();
+  await db.exec("rollback to access_check");
+});
+it("issues a manual client file once and rejects a changed payload using the same request ID", async () => {
+  const f = await acquisitionFlow();
+  const request = randomUUID(),
+    payload = {
+      project_id: f.job.project_id,
+      message_template_id: f.message,
+      file_template_id: f.file,
+    };
+  const first = await acquisition("issue_file", request, payload);
+  expect(first.file_id).toBeTruthy();
+  expect(await acquisition("issue_file", request, payload)).toMatchObject({
+    file_id: first.file_id,
+  });
+  expect(
+    (
+      await db.query("select * from crm_acquisition_jobs where id=$1", [
+        request,
+      ])
+    ).rows,
+  ).toHaveLength(1);
+  expect(
+    await acquisition("issue_file", request, {
+      ...payload,
+      message_template_id: randomUUID(),
+    }),
+  ).toEqual({ error: "Request ID already used." });
+});
+it("returns to a safe paused state when an active workflow template becomes a draft", async () => {
+  const f = await acquisitionFlow();
+  await acquisition(
+    "message_template_save",
+    f.message,
+    { name: "Draft", subject: "Draft", body: "Draft", ready: false },
+    1,
+  );
+  expect(
+    (
+      await db.query<any>(
+        "select enabled,version from crm_sequences where id=$1",
+        [f.sequence],
+      )
+    ).rows[0],
+  ).toEqual({ enabled: false, version: 2 });
+  expect(
+    (
+      await db.query<any>(
+        "select status from crm_acquisition_jobs where id=$1",
+        [f.job.id],
+      )
+    ).rows[0].status,
+  ).toBe("cancelled");
+});
+it("allows retry of a blocked unsent email and refuses replay after an attempted send", async () => {
+  await acquisitionFlow();
+  let job = (await db.query<any>("select * from crm_claim_acquisition(5)"))
+    .rows[0];
+  await db.query("select crm_prepare_acquisition($1,$2,false)", [
+    job.id,
+    job.lease_token,
+  ]);
+  expect(await acquisition("job_retry", job.id, {})).toMatchObject({
+    id: job.id,
+  });
+  job = (await db.query<any>("select * from crm_claim_acquisition(5)")).rows[0];
+  await db.query("select crm_prepare_acquisition($1,$2,true)", [
+    job.id,
+    job.lease_token,
+  ]);
+  await db.query("select crm_finish_acquisition($1,$2,'needs_review',null)", [
+    job.id,
+    job.lease_token,
+  ]);
+  expect(await acquisition("job_retry", job.id, {})).toEqual({
+    error: "Only an email with no previous send attempt can be retried.",
+  });
+});
+it("rejects mutation of issued snapshots at the database boundary", async () => {
+  const f = await acquisitionFlow();
+  await db.exec("savepoint immutable_file");
+  await expect(
+    db.query("update crm_issued_files set snapshot='{}' where id=$1", [
+      f.job.file_id,
+    ]),
+  ).rejects.toThrow("immutable");
+  await db.exec("rollback to immutable_file");
+});
+it("rejects stale workflow edits and keeps expired or unrelated client tokens unavailable", async () => {
+  const f = await acquisitionFlow();
+  expect(
+    await acquisition(
+      "sequence_save",
+      f.sequence,
+      { ...f.settings, name: "Stale" },
+      0,
+    ),
+  ).toEqual({ error: "Record changed. Reload before saving." });
+  expect(
+    (
+      await db.query<any>(
+        "select crm_file_event($1,'view',$2,'','{}') result",
+        ["0".repeat(64), randomUUID()],
+      )
+    ).rows[0].result,
+  ).toEqual({ error: "File unavailable." });
+});
+it("keeps migration starters inactive and never enrolls pre-existing history", async () => {
+  expect(
+    (await db.query("select * from crm_sequences where enabled")).rows,
+  ).toHaveLength(0);
+  expect(
+    (await db.query("select * from crm_message_templates where ready")).rows,
+  ).toHaveLength(0);
+  expect(
+    (await db.query("select * from crm_file_templates where ready")).rows,
+  ).toHaveLength(0);
+  expect(
+    (await db.query("select * from crm_acquisition_jobs")).rows,
+  ).toHaveLength(0);
+});
+it("keeps a queued email snapshot immutable at the database boundary", async () => {
+  const f = await acquisitionFlow();
+  await db.exec("savepoint immutable_mail");
+  await expect(
+    db.query("update crm_acquisition_jobs set body='Changed' where id=$1", [
+      f.job.id,
+    ]),
+  ).rejects.toThrow("immutable");
+  await db.exec("rollback to immutable_mail");
+});
+it("does not accept views or answers after a client link has expired", async () => {
+  const f = await acquisitionFlow();
+  const file = (
+    await db.query<any>(
+      "insert into crm_issued_files(template_id,project_id,client_id,title,snapshot,context,expires_at) select template_id,project_id,client_id,title,snapshot,context,now()-interval '1 day' from crm_issued_files where id=$1 returning access_token",
+      [f.job.file_id],
+    )
+  ).rows[0];
+  expect(
+    (
+      await db.query<any>(
+        "select crm_file_event($1,'respond',$2,'hash','{}') result",
+        [file.access_token, randomUUID()],
+      )
+    ).rows[0].result,
+  ).toEqual({ error: "File unavailable." });
 });
