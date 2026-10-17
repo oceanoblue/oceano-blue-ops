@@ -161,3 +161,17 @@ it('does not invent replacement events when a conflicting event cannot be verifi
   await expect(insertEvent('person','calendar',hold,'none','order:calendar')).rejects.toThrow('calendar_read_503');
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+it('preserves exact event identity so rescheduling can ignore only its own Ops mirror',async()=>{
+ const calendar='person@example.com',start='2026-09-25T15:00:00Z',end='2026-09-25T16:00:00Z';
+ vi.mocked(fetch).mockResolvedValueOnce(list([{id:calendar,accessRole:'owner'}])).mockResolvedValueOnce(Response.json({items:[
+  {id:'ops-session-deterministic-id',start:{dateTime:start},end:{dateTime:end},extendedProperties:{private:{ops_session_id:'session-fixture'}}},
+  {id:'unrelated-meeting-same-time',start:{dateTime:start},end:{dateTime:end}},
+ ]}));
+ const result=await fetchMemberBusy(...range);
+ expect(result.busy).toEqual([
+  {start:'2026-09-25T15:00:00.000Z',end:'2026-09-25T16:00:00.000Z',eventId:'ops-session-deterministic-id',calendarId:calendar,opsSessionId:'session-fixture'},
+  {start:'2026-09-25T15:00:00.000Z',end:'2026-09-25T16:00:00.000Z',eventId:'unrelated-meeting-same-time',calendarId:calendar},
+ ]);
+ const fields=new URL(String(vi.mocked(fetch).mock.calls[1][0])).searchParams.get('fields');expect(fields).toContain('items(id,');expect(fields).toContain('extendedProperties(private)');
+ expect(result.busy.filter(r=>r.eventId!=='ops-session-deterministic-id')).toHaveLength(1);
+});

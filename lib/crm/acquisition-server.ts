@@ -37,7 +37,7 @@ export async function acquisitionRead(
   let jobQuery = db
     .from("crm_acquisition_jobs")
     .select(
-      "id,project_id,client_id,sequence_id,status,due_at,subject,body,context,recipient,file_id,attempts,provider_id,last_error,first_attempt_at,created_at,accepted_at",
+      "id,project_id,client_id,sequence_id,status,due_at,subject,body,cta_label,cta_url,context,recipient,file_id,attempts,provider_id,last_error,first_attempt_at,created_at,accepted_at",
     )
     .order("created_at", { ascending: false })
     .limit(100);
@@ -52,6 +52,8 @@ export async function acquisitionRead(
     jobQuery = jobQuery.eq("client_id", clientId);
     issuedQuery = issuedQuery.eq("client_id", clientId);
   }
+  let enrollmentQuery = db.from("crm_sequence_enrollments").select("id,project_id,sequence_id,started_at,started_by").order("started_at", { ascending: false }).limit(100);
+  if (clientId) enrollmentQuery = enrollmentQuery.eq("client_id", clientId);
   const result = await Promise.all([
     db.from("crm_message_templates").select("*").order("created_at").limit(100),
     db.from("crm_file_templates").select("*").order("created_at").limit(100),
@@ -64,13 +66,14 @@ export async function acquisitionRead(
     jobQuery,
     issuedQuery,
     acquisitionProjects(query, clientId),
+    enrollmentQuery,
   ]);
   if (result.some((r) => r.error))
     throw new CrmError(
       "Acquisition workspace is temporarily unavailable.",
       503,
     );
-  const [messages, files, sequences, forms, jobs, issued, rows] = result.map(
+  const [messages, files, sequences, forms, jobs, issued, rows, enrollments] = result.map(
     (r) => r.data ?? [],
   );
   return {
@@ -80,6 +83,7 @@ export async function acquisitionRead(
     forms,
     jobs,
     issued,
+    enrollments,
     projects: rows,
     email: {
       configured: isEmailConfigured(),

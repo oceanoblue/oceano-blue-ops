@@ -9,6 +9,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 // to /login and fails with 405.
 const PUBLIC_PATHS = [
   '/', '/inquire', '/api/inquiry-forms', '/smart-files', '/api/smart-files', '/book', '/login', '/gallery', '/portal', '/property', '/property-report', '/api/property-public',
+  '/meet', '/pay/project', '/api/crm/billing/checkout',
+  '/api/crm/scheduling/public', '/api/crm/scheduling/manage',
+  '/api/crm/scheduling/notifications',
   '/auth',             // magic-link / OAuth code-exchange callback — must be
                        // reachable BEFORE a session exists, or login can't complete.
   '/quote',            // shareable client quote pages (SSR, token-gated)
@@ -72,7 +75,7 @@ export async function proxy(request: NextRequest) {
   // Public routes don't require auth (unless they're a staff-only exception
   // that merely lives under a public prefix).
   if (isPublic(pathname) && !staffOnlyException) {
-    if(pathname.startsWith('/property-report/') || pathname.startsWith('/smart-files/') || pathname.startsWith('/api/smart-files/')) {response.headers.set('Cache-Control','private, no-store');response.headers.set('Referrer-Policy','no-referrer');response.headers.set('X-Robots-Tag','noindex, nofollow');}
+    if(pathname.startsWith('/property-report/') || pathname.startsWith('/smart-files/') || pathname.startsWith('/api/smart-files/') || pathname.startsWith('/meet/manage/') || pathname.startsWith('/api/crm/scheduling/manage/') || pathname.startsWith('/pay/project/') || pathname.startsWith('/api/crm/billing/checkout/')) {response.headers.set('Cache-Control','private, no-store');response.headers.set('Referrer-Policy','no-referrer');response.headers.set('X-Robots-Tag','noindex, nofollow');}
     return response;
   }
 

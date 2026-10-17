@@ -53,6 +53,7 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  await db.exec(readFileSync("supabase/migrations/20261017114950_crm_onboarding_email.sql", "utf8"));
 }, 60000);
 afterAll(async () => {
   await db?.close();
@@ -1290,4 +1291,90 @@ it("preserves explicit office file sends when a client responds to an earlier fi
       )
     ).rows[0].status,
   ).toBe("queued");
+});
+
+async function bookedOnboarding(approval = true) {
+  const f = await acquisitionFlow(true);
+  const project = await deal(f.job.client_id);
+  const planning = (await db.query<any>("select id from crm_stages where name='Planning'")).rows[0].id;
+  await act("deal_update", f.job.project_id, { ...project, stage_id: planning }, 1);
+  const sequence = randomUUID();
+  const settings = { ...f.settings, name: "Booked onboarding", enrollment_kind: "onboarding", form_id: null, steps: f.settings.steps.map(s => ({ ...s, requires_approval: approval })) };
+  expect(await acquisition("sequence_save", sequence, settings)).toMatchObject({ version: 1 });
+  return { ...f, onboarding: sequence, onboardingSettings: settings, project, planning };
+}
+it("queues a standalone booked-client email without a file, freezes its CTA and deduplicates retries", async () => {
+  const f = await bookedOnboarding();
+  await acquisition("message_template_save", f.message, { name: "Planning call", subject: "Choose a time", body: "Hi {{first_name}}", cta_label: "Choose a time", cta_url: "https://ops.example/schedule/planning", ready: true }, 1);
+  const id = randomUUID();
+  const payload = { project_id: f.job.project_id, message_template_id: f.message, file_template_id: null, due_at: null };
+  expect(await acquisition("send_message", id, payload)).toMatchObject({ id });
+  expect(await acquisition("send_message", id, payload)).toMatchObject({ id });
+  const rows = (await db.query<any>("select * from crm_acquisition_jobs where id=$1", [id])).rows;
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ file_id: null, cta_label: "Choose a time", cta_url: "https://ops.example/schedule/planning", status: "queued" });
+  await expect(db.query("update crm_acquisition_jobs set cta_url='https://changed.example' where id=$1", [id])).rejects.toThrow("immutable");
+});
+it("enrolls a booked project explicitly exactly once with one immutable enrollment and scheduled tasks", async () => {
+  const f = await bookedOnboarding();
+  const before = (await db.query<any>("select count(*)::int total from crm_tasks where project_id=$1", [f.job.project_id])).rows[0].total;
+  const id = randomUUID();
+  const payload = { project_id: f.job.project_id, sequence_id: f.onboarding, resume_followups: true };
+  expect(await acquisition("sequence_start", id, payload)).toMatchObject({ id });
+  expect(await acquisition("sequence_start", randomUUID(), payload)).toMatchObject({ id, already_started: true });
+  const jobs = (await db.query<any>("select * from crm_acquisition_jobs where enrollment_id=$1", [id])).rows;
+  expect(jobs).toHaveLength(1);
+  expect(jobs[0]).toMatchObject({ status: "needs_approval", project_id: f.job.project_id });
+  expect((await db.query<any>("select count(*)::int total from crm_tasks where project_id=$1", [f.job.project_id])).rows[0].total).toBe(before + 1);
+  await expect(db.query("update crm_sequence_enrollments set started_at=now()+interval '1 hour' where id=$1", [id])).rejects.toThrow("append-only");
+});
+it("requires explicit resumption of a stopped project and does not resurrect cancelled inquiry jobs", async () => {
+  const f = await bookedOnboarding();
+  await acquisition("project_pause", f.job.project_id, { reason: "Client replied" });
+  const payload = { project_id: f.job.project_id, sequence_id: f.onboarding, resume_followups: false };
+  expect(await acquisition("sequence_start", randomUUID(), payload)).toMatchObject({ error: expect.stringContaining("resuming") });
+  expect((await db.query("select * from crm_sequence_enrollments")).rows).toHaveLength(0);
+  await acquisition("sequence_start", randomUUID(), { ...payload, resume_followups: true });
+  expect((await db.query<any>("select status from crm_acquisition_jobs where id=$1", [f.job.id])).rows[0].status).toBe("cancelled");
+});
+it("keeps booked onboarding eligible across planning stages but cancels it on archive", async () => {
+  const f = await bookedOnboarding(false);
+  const id = randomUUID();
+  await acquisition("sequence_start", id, { project_id: f.job.project_id, sequence_id: f.onboarding, resume_followups: true });
+  const retainer = (await db.query<any>("select id from crm_stages where name='Retainer paid'")).rows[0].id;
+  await act("deal_update", f.job.project_id, { ...f.project, stage_id: retainer }, 2);
+  const job = (await db.query<any>("select * from crm_claim_acquisition(5)")).rows[0];
+  expect(job.enrollment_id).toBe(id);
+  expect((await db.query<any>("select crm_prepare_acquisition($1,$2,true) result", [job.id, job.lease_token])).rows[0].result.job.id).toBe(job.id);
+  // A separate not-yet-sending job must stop immediately on archival.
+  const queued = randomUUID();
+  await acquisition("send_message", queued, { project_id: f.job.project_id, message_template_id: f.message });
+  const archived = (await db.query<any>("select id from crm_stages where name='Archived'")).rows[0].id;
+  await act("deal_update", f.job.project_id, { ...f.project, stage_id: archived }, 3);
+  expect((await db.query<any>("select status from crm_acquisition_jobs where id=$1", [queued])).rows[0].status).toBe("cancelled");
+});
+it("does not autoenroll onboarding when new inquiries or booked projects are created", async () => {
+  const f = await bookedOnboarding();
+  await submit(f.formId, randomUUID(), "another", { full_name: "Another Lead", email: "another@example.test", project_type: "Video" });
+  expect((await db.query("select * from crm_sequence_enrollments")).rows).toHaveLength(0);
+  expect((await db.query("select * from crm_acquisition_jobs where sequence_id=$1", [f.onboarding])).rows).toHaveLength(0);
+});
+it("rejects onboarding for unbooked clients and prevents workflow type changes after use", async () => {
+  const f = await bookedOnboarding();
+  const cid = await newContact(), pid = randomUUID();
+  await act("deal_create", pid, await deal(cid), 0);
+  expect(await acquisition("sequence_start", randomUUID(), { project_id: pid, sequence_id: f.onboarding })).toMatchObject({ error: expect.stringContaining("booked") });
+  expect(await acquisition("sequence_save", f.sequence, { ...f.settings, enrollment_kind: "onboarding", form_id: null }, 1)).toMatchObject({ error: expect.stringContaining("after use") });
+});
+it("rejects insecure scheduling CTAs and avoids issuing orphan files for an invalid email template", async () => {
+  const f = await bookedOnboarding();
+  expect(await acquisition("message_template_save", randomUUID(), { name: "Unsafe", subject: "Hello", body: "Hi", cta_label: "Book", cta_url: "https://user:pass@ops.example", ready: true })).toHaveProperty("error");
+  const before = (await db.query("select * from crm_issued_files")).rows.length;
+  expect(await acquisition("send_message", randomUUID(), { project_id: f.job.project_id, message_template_id: randomUUID(), file_template_id: f.file })).toHaveProperty("error");
+  expect((await db.query("select * from crm_issued_files")).rows).toHaveLength(before);
+});
+it("requires office access for manual onboarding and standalone emails", async () => {
+  const f = await bookedOnboarding();
+  expect(await acquisition("sequence_start", randomUUID(), { project_id: f.job.project_id, sequence_id: f.onboarding }, 0, photographer)).toEqual({ error: "Office access required." });
+  expect(await acquisition("send_message", randomUUID(), { project_id: f.job.project_id, message_template_id: f.message }, 0, photographer)).toEqual({ error: "Office access required." });
 });

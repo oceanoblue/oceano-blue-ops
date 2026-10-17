@@ -3,10 +3,12 @@ import Stripe from 'stripe';
 import { POST } from '@/app/api/stripe/webhook/route';
 import { getStripe } from '@/lib/stripe/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { settleCrmBillingCheckout } from '@/lib/crm/billing-server';
 
 vi.mock('@/lib/stripe/server', () => ({ getStripe: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: vi.fn() }));
 vi.mock('@/lib/observability/report', () => ({ captureError: vi.fn() }));
+vi.mock('@/lib/crm/billing-server', () => ({ settleCrmBillingCheckout: vi.fn() }));
 const stripe = new Stripe('sk_test_local_fixture_only');
 const secret = 'whsec_local_fixture_only';
 const rpc = vi.fn();
@@ -16,13 +18,14 @@ beforeEach(() => {
   vi.mocked(getStripe).mockReturnValue(stripe);
   rpc.mockResolvedValue({ data: 'paid', error: null });
   vi.mocked(createAdminClient).mockReturnValue({ rpc } as any);
+  vi.mocked(settleCrmBillingCheckout).mockResolvedValue('settled');
 });
 afterEach(() => vi.unstubAllEnvs());
 
-function request(paymentStatus: string, type = 'checkout.session.completed', mode = 'payment') {
+function request(paymentStatus: string, type = 'checkout.session.completed', mode = 'payment', metadata: Record<string,string> = { order_id: '00000000-0000-4000-8000-000000000001' }) {
   const body = JSON.stringify({ id: 'evt_fixture', type, data: { object: {
     id: 'cs_fixture', mode, payment_status: paymentStatus, amount_total: paymentStatus === 'no_payment_required' ? 0 : 25000,
-    metadata: { order_id: '00000000-0000-4000-8000-000000000001' },
+    metadata,
   } } });
   const signature = stripe.webhooks.generateTestHeaderString({ payload: body, secret });
   return new Request('https://example.com/api/stripe/webhook', {
@@ -59,5 +62,21 @@ it('rejects a forged signature before any database write', async () => {
 });
 it('does not apply a subscription payment to order downloads', async () => {
   expect((await POST(request('paid', 'checkout.session.completed', 'subscription'))).status).toBe(200);
+  expect(rpc).not.toHaveBeenCalled();
+});
+
+it.each(['checkout.session.completed', 'checkout.session.async_payment_succeeded'])('settles CRM project checkout from %s without touching order downloads', async type => {
+  const metadata = { crm_billing_checkout_id: '00000000-0000-4000-8000-000000000002', order_id: '00000000-0000-4000-8000-000000000001' };
+  expect((await POST(request('paid', type, 'payment', metadata))).status).toBe(200);
+  expect(settleCrmBillingCheckout).toHaveBeenCalledWith(expect.objectContaining({ payment_status: 'paid', metadata }), 'evt_fixture');
+  expect(rpc).not.toHaveBeenCalled();
+});
+it('does not settle an unpaid CRM checkout', async () => {
+  expect((await POST(request('unpaid', 'checkout.session.completed', 'payment', { crm_billing_checkout_id: '00000000-0000-4000-8000-000000000002' }))).status).toBe(200);
+  expect(settleCrmBillingCheckout).not.toHaveBeenCalled();
+});
+it('asks Stripe to retry if CRM payment persistence fails', async () => {
+  vi.mocked(settleCrmBillingCheckout).mockRejectedValue(new Error('database unavailable'));
+  expect((await POST(request('paid', 'checkout.session.completed', 'payment', { crm_billing_checkout_id: '00000000-0000-4000-8000-000000000002' }))).status).toBe(500);
   expect(rpc).not.toHaveBeenCalled();
 });

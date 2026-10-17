@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe/server';
 import { captureError } from '@/lib/observability/report';
+import { settleCrmBillingCheckout } from '@/lib/crm/billing-server';
 
 export const dynamic = 'force-dynamic';
 // Stripe needs the raw, unparsed body to verify the signature.
@@ -38,6 +39,15 @@ export async function POST(req: Request) {
     // Checkout can complete while a delayed payment is still pending. Only
     // settlement (or a fully discounted checkout) may unlock the downloads.
     if (session.mode !== 'payment' || !['paid', 'no_payment_required'].includes(session.payment_status)) {
+      return NextResponse.json({ received: true });
+    }
+    if (session.metadata?.crm_billing_checkout_id) {
+      try {
+        await settleCrmBillingCheckout(session, event.id);
+      } catch (error) {
+        captureError('stripe.crmBillingPersistence', error, { eventId: event.id, sessionId: session.id });
+        return NextResponse.json({ error: 'payment_persistence_failed' }, { status: 500 });
+      }
       return NextResponse.json({ received: true });
     }
     const orderId = session.metadata?.order_id;
