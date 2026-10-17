@@ -1,6 +1,6 @@
 # HoneyBook replacement: implementation and migration ledger
 
-This is an ongoing replacement of HoneyBook inside Oceano Blue Ops. The CRM and intake foundation is implemented in this change. Full feature parity and retirement of HoneyBook are not complete.
+This is the migration ledger for the ongoing replacement of HoneyBook inside Oceano Blue Ops. Dated release evidence below is historical; the October 17 addendum records subsequent work. Full feature parity and retirement of HoneyBook are not yet certified.
 
 ## Verified account and website inventory (October 16, 2026)
 
@@ -31,13 +31,13 @@ The inspected default form asks for name, email, phone, project date, address, p
 
 ## Historical archive policy (confirmed by the owner)
 
-All existing HoneyBook projects will be imported into **Archived** in Ops, regardless of their stale source stage. The HoneyBook account itself stays unchanged. Original stages and stable source project IDs are retained as history. A prepared project CSV importer is available from **CRM → Pipeline → Import HoneyBook archive**; a contacts CSV cannot substitute for a project export.
+The default for historical HoneyBook projects is import into **Archived** in Ops, regardless of stale source stage. Explicit active commitments identified by the owner are exceptions and must remain active. Onellis’s January 7, 2027 wedding is an active Planning exception. The HoneyBook account itself stays unchanged. Original stages and stable source project IDs are retained as history. A prepared project CSV importer is available from **CRM → Pipeline → Import HoneyBook archive**; a contacts CSV cannot substitute for a project export.
 
 Historical import creates archived Ops project/opportunity records, adds no follow-up dates or tasks, and does not run inquiry/stage-change automations. Imported clients remain usable for future work. Source IDs and import batch IDs make reimports safe; an intentionally reopened project is not re-archived by a later import.
 
 The default pipeline excludes archived records. Selecting Archived retrieves them. Archiving a CRM project clears its next-follow-up date and pauses existing open project tasks without marking them completed; reopening does not automatically resume those tasks. Historical values remain visible in Archived, while archived records are excluded from conversion and lead-source totals. Existing Ops projects, invoices, payment schedules and unrelated contact tasks are unaffected.
 
-Prepared project CSV columns: **Project ID, Project name, Client name, Client email** (required); **Stage, Project type, Lead source, Project date, Value, Description** (optional). Dates use `YYYY-MM-DD`; values are dollars, or provide a `Value cents` column. Up to 500 projects per batch. The archive policy is implemented; no source projects have been imported yet. The archive migration was applied as `20261017034047_crm_historical_archive.sql`; source mapping history is protected by RLS and its import RPC is service-only. No new security-advisor findings were introduced.
+Prepared project CSV columns: **Project ID, Project name, Client name, Client email** (required); **Stage, Project type, Lead source, Project date, Value, Description** (optional). Dates use `YYYY-MM-DD`; values are dollars, or provide a `Value cents` column. Up to 500 projects per batch. At the initial archive release, no source projects had been imported. This is a dated baseline, not the current migration total; see the October 17 addendum. The archive migration was applied as `20261017034047_crm_historical_archive.sql`; source mapping history is protected by RLS and its import RPC is service-only. No new security-advisor findings were introduced.
 
 ## Implemented by this change
 
@@ -51,9 +51,9 @@ Prepared project CSV columns: **Project ID, Project name, Client name, Client em
 - Reports over all CRM opportunities: value by stage, source, won-project count, contact count and overdue tasks. Opportunity estimates are separate from collected revenue.
 - Office-only APIs and RLS: active admins and coordinators. Clients, contractors, photographers and editors cannot use the CRM. Service-only RPCs recheck the actual session actor. Mutations use optimistic versions; audit/submission/import history is append-only.
 
-The additive migration is applied to Supabase project `hcxqqbnoextequclrvff` as `20261017032908_crm_clientflow.sql`. Remote verification found 13 stages, zero published forms, zero CRM opportunities, 21 existing clients available in the first page, RLS enabled on all nine new tables, and no anonymous access to submissions or action RPCs. Existing security advisor findings were unchanged; none referenced CRM.
+The additive migration is applied to Supabase project `hcxqqbnoextequclrvff` as `20261017032908_crm_clientflow.sql`. Initial migration verification found 13 stages, zero published forms, zero CRM opportunities, 21 existing clients available in the first page, RLS enabled on all nine new tables, and no anonymous access to submissions or action RPCs. Those row counts describe that initial verification only. Existing security advisor findings were unchanged; none referenced CRM.
 
-No HoneyBook contacts or projects have been imported. The contact export UI was opened and its Download spreadsheet action attempted, but a completed usable download could not be verified. No client message, signature, payment, subscription cancellation or website cutover was performed.
+At the initial CRM release, no HoneyBook contacts or projects had been imported. The contact export UI was opened and its Download spreadsheet action attempted, but a completed usable download could not be verified. No client message, signature, payment, subscription cancellation or website cutover was performed in that release. Subsequent source observations and the explicit active wedding exception are tracked below.
 
 ## Existing Ops features that need parity verification
 
@@ -62,9 +62,9 @@ These already exist; a link or similar feature is not proof of HoneyBook parity:
 | Area | Existing implementation | Remaining parity work |
 | --- | --- | --- |
 | Quotes/services | Products, shareable priced quotes | General service packages, client selection, upsells, discounts, taxes, configurable proposals and quote-to-CRM conversion |
-| Billing/payments | Order invoices, Stripe checkout, due dates, payment-gated downloads, billing reports | General invoices without real-estate orders, deposits/installments, recurring billing, gratuity, refunds/disputes, autopay, reconciliation and historical payment mapping |
+| Billing/payments | Order invoices, Stripe checkout, due dates, payment-gated downloads, billing reports | October 17 adds general project receivables, immutable source credits, installments, reconciliation holds and client-initiated Stripe checkout. Recurring billing, gratuity, refunds/disputes, autopay and complete historical reconciliation still need parity verification |
 | Contracts | Contractor master agreement signing and audit | Client contracts, multiple signers/countersigning, reusable clauses, project variables, verified signer consent, immutable issued versions, PDF/audit exports and historical signed originals |
-| Scheduling | Real-estate booking, availability, Google Calendar, rescheduling and crew assignment | General meeting/session types, reusable links, conferencing, questionnaires, reminders, cancel policies, time zones, historical HoneyBook bookings and calendar deduplication |
+| Scheduling | Real-estate booking, availability, Google Calendar, rescheduling and crew assignment | October 17 adds general session types, reusable links, host-calendar checks, time zones, client management links, confirmations and reminders. Verify published settings and historical appointments; conferencing, questionnaires and source-policy parity still need reconciliation |
 | Delivery/client portal | Photo galleries, invoices, downloads, revisions, property sites | Unified client/project portal for conversations, smart files, signatures, questionnaires, payment schedules and participants |
 | Team | Office/field permissions and contractors | HoneyBook-equivalent collaborators, project participants and finer permission scopes |
 
@@ -72,13 +72,13 @@ These already exist; a link or similar feature is not proof of HoneyBook parity:
 
 1. Finish the account audit: all form settings and published placements, services, smart-file/email/contract templates, configured automations, scheduling types and availability, company settings, reports, integrations, and mobile-only workflows.
 2. Complete client smart-file parity. The acquisition extension now supplies ordered text, secure links, questionnaires, immutable issuance, private recipient links and response tracking. Native proposals/services, contracts/invoices, multi-page layouts, images/uploads, conditional questions and audit/PDF export remain.
-3. Implement client agreements and the billing gaps above, with verified payment webhooks and exact monetary totals. Preserve original signed files and payment evidence; historical documents must not be re-signed or past invoices recharged.
+3. Finish client agreements and the remaining billing gaps above. Verify the new project-receivable checkout/webhook path and exact source credits before enabling collection. Preserve original signed files and payment evidence; historical documents must not be re-signed or past invoices recharged.
 4. Implement project messaging/inbox: verified sending identity, templates and drafts, explicit send controls, inbound reply association, attachments, delivery/bounce states, conversation history and recipient permissions. New inquiry email replies and scheduled follow-ups are now configurable in the acquisition workspace; automatic inbound reply association and office email notifications remain.
-5. Complete general scheduling and workflow parity. Inquiry-triggered sequences now support timed emails/files, approval holds, business-day office tasks, stop controls and an outbox. General branching, scheduling/payment/signature triggers and inbound email response triggers remain. Existing Make/podcast automations do not supply those missing capabilities.
+5. Verify the general scheduling links, connected host calendars, notifications and imported bookings end-to-end. Inquiry-triggered sequences support timed emails/files, approval holds, business-day office tasks, stop controls and an outbox; explicit booked-client onboarding is added in the October 17 extension. General branching, scheduling/payment/signature triggers and inbound email response triggers remain. Existing Make/podcast automations do not supply those missing capabilities.
 6. Cover time tracking, expenses/profitability/tax exports, advanced saved views/custom fields/bulk edits, global attachment search, reporting exports, accounting integrations, AI-assisted drafting/enrichment and mobile workflows if required by the account inventory. HoneyBook-provided financing, payment processing and third-party integrations require replacement providers, not UI imitation.
 7. Export/archive and reconcile all contacts, projects, participants, notes, form answers, messages and attachments, smart files/templates, original executed contracts and audit trails, invoices, payments and bookings. Keep source IDs and import manifests. A contacts CSV alone does not contain this history.
 8. Verify the remaining workflows end-to-end with isolated records and mail/payment sandboxes. The dependency release gate is preserved and the upgraded dependency tree audits clean.
-9. Import existing HoneyBook projects into Archived under the confirmed historical archive policy; reserve active stages for new inquiries or projects explicitly reopened by the office. Publish the verified Ops form, submit an isolated inquiry, check office notification and follow-up, reconcile it with the new contact/project, and only then replace the exact HoneyBook placement on `/contact/1`. Inspect other website pages for placements too.
+9. Review this year’s and next year’s source commitments before a broad archive import. Import historical projects into Archived under the confirmed default; keep owner-confirmed active projects, including Onellis’s wedding, in their active stage. Publish the verified Ops form, submit an isolated inquiry, check office notification and follow-up, reconcile it with the new contact/project, and only then replace the exact HoneyBook placement on `/contact/1`. Inspect other website pages for placements too.
 10. Reconcile active bookings, open balances and in-flight signatures; run both systems through a verified transition window. Retire HoneyBook only when every required capability and historical record is accounted for.
 
 ## Interface and performance improvements
@@ -100,3 +100,21 @@ Source references for expected HoneyBook behavior: [contact forms](https://help.
 ## Acquisition extension
 
 The reply/workflow and smart-file extension is documented in [acquisition-workflows.md](acquisition-workflows.md). It preserves the historical archive policy and does not publish a form or change the website placement. Starters remain disabled and no existing records are enrolled. Email provider/cron configuration names were confirmed present; no credential values were read or changed and no real client email was sent during development.
+
+
+## October 17, 2026 implementation and migration addendum
+
+The owner explicitly identified **Onellis’s wedding on January 7, 2027** as active work. Its Ops project is in **Planning**, with assigned internal follow-through; it must not be swept into a historical archive batch. Its stable HoneyBook source mapping protects it from duplicate import or rearchival. This exception does not authorize changing HoneyBook’s pipeline or contacting the client.
+
+The account audit is now checking source projects dated in 2026 and 2027, outstanding-payment evidence and scheduled sessions. The old zero-import statements above describe the initial release. They must not be used as current totals, and source UI pipeline counts must not be represented as a reconciled migration export. Current observations, uncertainty flags, office owners and next steps belong in the [Migration review queue](crm-migration-audit.md). The audit remains in progress until source balances, schedules and commitments have been checked and linked to their Ops records. No completion count is asserted by this addendum.
+
+This release extends the CRM with:
+
+- **Project Receivables** at `/dashboard/crm/billing`: evidence-backed source totals and paid credits, remaining installments, verified/uncertain dates, explicit reconciliation and collection holds, external receipts, private payment links and Stripe settlement review. Importing evidence never enables collections. Confirm the source can no longer charge or accept another payment before enabling Ops links; do not recreate a paid invoice as a fresh charge.
+- **Scheduling links** at `/dashboard/crm/scheduling`, with public booking at `/meet/[slug]`: general meeting/session types, host Google Calendar checks, buffer/notice/horizon controls, bounded booking and management APIs, private client change links, office cancellation and notification status. Source appointments require explicit evidence and deduplication; a project date by itself is not a verified appointment time.
+- **Client emails and onboarding** in `/dashboard/crm/acquisition`: standalone ready-template emails with optional smart files, future send times, separate reviewed HTTPS scheduling buttons and an explicit booked-project onboarding start. A unique project/workflow enrollment prevents repeat starts from sending duplicates. Historical imports never enroll a client. New wedding/consultation copy and the planning questionnaire remain drafts until reviewed; enabling a workflow is separate from starting a client.
+- **Migration review** at `/dashboard/crm/migration`: immutable dated source facts, uncertainty flags, owner/next-action/follow-up tracking, versioned review decisions and append-only reasons. All source rows are searchable with server pagination and global counts. A resolved review is separate from payment reconciliation or project completion.
+
+New public scheduling and checkout APIs use durable rate limits that fail closed if counts cannot be verified. Client token pages suppress caching, referrers and indexing. Office billing, scheduling, acquisition and migration endpoints retain session and role checks; public booking/manage/checkout routes authorize using their own scoped links and validation. Worker routes require their server secret independently of public page routing.
+
+Native client agreements/e-signatures, full smart-file proposal/payment blocks, inbound mailbox reply association, delivery/bounce synchronization, complete source archives and remaining payment/accounting parity are still tracked gaps. A successful deployment of these extensions is not permission to cancel HoneyBook while active balances, scheduled sessions or required records remain unresolved.

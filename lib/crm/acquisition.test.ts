@@ -189,3 +189,21 @@ it("rejects duplicate question keys and block IDs", () => {
     }).success,
   ).toBe(false);
 });
+it("renders standalone onboarding email with a separate escaped secure scheduling button", () => {
+  const result = acquisitionEmail({ ...job, cta_label: 'Book <planning>', cta_url: 'https://ops.example/schedule/planning?a=1&b=2' });
+  expect(result.html).toContain('Book &lt;planning&gt;');
+  expect(result.html).toContain('https://ops.example/schedule/planning?a=1&amp;b=2');
+  expect(result.html).not.toContain('Open your project file');
+  expect(() => acquisitionEmail({ ...job, cta_label: "Book", cta_url: "https://user:pass@ops.example" })).toThrow();
+  expect(() => acquisitionEmail({ ...job, cta_label: "Book", cta_url: "javascript:alert(1)" })).toThrow();
+});
+it("requires both email button fields and distinguishes inquiry from manual onboarding sources", () => {
+  const message = { name: "Call", subject: "Planning", body: "Hello", ready: false };
+  expect(messageTemplateSchema.safeParse({ ...message, cta_label: "Choose a time" }).success).toBe(false);
+  expect(messageTemplateSchema.safeParse({ ...message, cta_url: "https://ops.example/schedule" }).success).toBe(false);
+  expect(messageTemplateSchema.safeParse({ ...message, cta_label: "Choose a time", cta_url: "https://ops.example/schedule" }).success).toBe(true);
+  const flow = { name: "Onboarding", enrollment_kind: "onboarding", form_id: null, enabled: false, timezone: "America/New_York", steps: [{ id, kind: "task", delay: 0, unit: "hours", task_title: "Review" }] };
+  expect(sequenceSchema.safeParse(flow).success).toBe(true);
+  expect(sequenceSchema.safeParse({ ...flow, form_id: id }).success).toBe(false);
+  expect(sequenceSchema.safeParse({ ...flow, enrollment_kind: "inquiry" }).success).toBe(false);
+});

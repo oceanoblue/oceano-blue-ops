@@ -1,0 +1,7 @@
+import { crmActor,crmDb,crmError,CrmError,readJson,sameOrigin } from '@/lib/crm/server';
+import { billingActionSchema } from '@/lib/crm/billing-types';
+import { billingRead,refreshBillingCheckouts } from '@/lib/crm/billing-server';
+import {resolveBillingReview} from '@/lib/crm/billing-review-server';
+export const dynamic='force-dynamic';
+export async function GET(){try{await crmActor();return Response.json(await billingRead(),{headers:{'Cache-Control':'private, no-store'}});}catch(e){return crmError(e);}}
+export async function POST(req:Request){try{const actor=await crmActor();sameOrigin(req);if(process.env.VERCEL_ENV!=='production')throw new CrmError('Open production Ops to save billing changes.',403);const b=billingActionSchema.parse(await readJson(req,85000));if(b.action==='resolve_review')return Response.json(await resolveBillingReview(actor,b.id,b.version,b.data.resolution,b.data.note),{headers:{'Cache-Control':'no-store'}});const{data,error}=await crmDb().rpc('crm_billing_action',{p_actor:actor,p_action:b.action==='refresh_checkouts'?'hold':b.action,p_id:b.id,p_version:'version'in b?b.version:null,p_data:b.data});if(error)throw new CrmError('Billing changes could not be saved.',503);if(data?.error)throw new CrmError(data.error,data.error.includes('Record changed')?409:400);const warnings=['hold','refresh_checkouts'].includes(b.action)?await refreshBillingCheckouts(b.id,req):[];return Response.json({...data,warnings},{headers:{'Cache-Control':'no-store'}});}catch(e){return crmError(e);}}

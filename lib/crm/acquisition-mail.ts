@@ -1,7 +1,7 @@
 import { isEmailConfigured, sendEmail } from "@/lib/email/resend";
 import { crmDb } from "./server";
 import { appBase } from "./acquisition-server";
-import { mergeText, type FileContext } from "./acquisition-types";
+import { mergeText, safeLink, type FileContext } from "./acquisition-types";
 export const escapeEmail = (v: string) =>
   v.replace(
     /[&<>"']/g,
@@ -11,7 +11,7 @@ export const escapeEmail = (v: string) =>
       ]!,
   );
 export function acquisitionEmail(
-  job: { subject: string; body: string; context: FileContext },
+  job: { subject: string; body: string; context: FileContext; cta_url?: string; cta_label?: string },
   token?: string | null,
 ) {
   const subject = mergeText(job.subject, job.context)
@@ -22,6 +22,8 @@ export function acquisitionEmail(
     "<br>",
   );
   const link = token ? `${appBase()}/smart-files/${token}` : null;
+  const cta = job.cta_url ? safeLink.parse(job.cta_url) : null;
+  if (cta && !job.cta_label?.trim()) throw new Error("Missing email button label.");
   if (
     link &&
     (!/^[a-f0-9]{64}$/.test(token!) || new URL(link).protocol !== "https:")
@@ -29,7 +31,7 @@ export function acquisitionEmail(
     throw new Error("Invalid client file link.");
   return {
     subject,
-    html: `<!doctype html><html><body style="margin:0;background:#f4f6f8;color:#1d2935;font-family:Arial,sans-serif"><div style="max-width:560px;margin:auto;padding:32px 20px"><p style="font-size:20px;font-weight:700">Oceano Blue Media</p><div style="background:#fff;padding:28px;border-radius:16px;font-size:15px;line-height:1.65">${body}${link ? `<p style="margin:24px 0 0"><a href="${escapeEmail(link)}" style="display:inline-block;background:#072849;color:white;padding:12px 20px;border-radius:8px;text-decoration:none">Open your project file</a></p>` : ""}</div><p style="font-size:12px;color:#50677c">Oceano Blue Media · Reply to this email to reach our office.</p></div></body></html>`,
+    html: `<!doctype html><html><body style="margin:0;background:#f4f6f8;color:#1d2935;font-family:Arial,sans-serif"><div style="max-width:560px;margin:auto;padding:32px 20px"><p style="font-size:20px;font-weight:700">Oceano Blue Media</p><div style="background:#fff;padding:28px;border-radius:16px;font-size:15px;line-height:1.65">${body}${cta ? `<p style="margin:24px 0 0"><a href="${escapeEmail(cta)}" style="display:inline-block;background:#072849;color:white;padding:12px 20px;border-radius:8px;text-decoration:none">${escapeEmail(job.cta_label!)}</a></p>` : ""}${link ? `<p style="margin:24px 0 0"><a href="${escapeEmail(link)}" style="display:inline-block;background:#072849;color:white;padding:12px 20px;border-radius:8px;text-decoration:none">Open your project file</a></p>` : ""}</div><p style="font-size:12px;color:#50677c">Oceano Blue Media · Reply to this email to reach our office.</p></div></body></html>`,
   };
 }
 export async function runAcquisition() {

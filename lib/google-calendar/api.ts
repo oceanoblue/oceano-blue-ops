@@ -57,7 +57,7 @@ export async function getAccessToken(teamMemberId: string): Promise<string | nul
   }
 }
 
-export interface FreeBusyRange { start: string; end: string }
+export interface FreeBusyRange { start: string; end: string; eventId?: string; calendarId?: string; opsSessionId?: string }
 
 /**
  * Where a person's busy time came from: their own OAuth connection, a calendar
@@ -134,7 +134,7 @@ async function readableBusy(token: string, calendarId: string, startIso: string,
     url.searchParams.set('timeMax', endIso);
     url.searchParams.set('singleEvents', 'true');
     url.searchParams.set('maxResults', '2500');
-    url.searchParams.set('fields', 'items(status,transparency,eventType,start,end,attendees(self,responseStatus)),nextPageToken');
+    url.searchParams.set('fields', 'items(id,status,transparency,eventType,start,end,attendees(self,responseStatus),extendedProperties(private)),nextPageToken');
     if (pageToken) url.searchParams.set('pageToken', pageToken);
     const r = await fetch(url, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) });
     if (!r.ok) {
@@ -150,7 +150,14 @@ async function readableBusy(token: string, calendarId: string, startIso: string,
       const start = allDay ? localToUtc(String(e.start.date).slice(0, 10), '00:00', timezone).getTime() : Date.parse(e.start?.dateTime);
       // An all-day event's end date is exclusive: midnight starting that day.
       const end = allDay ? localToUtc(String(e.end?.date ?? e.start.date).slice(0, 10), '00:00', timezone).getTime() : Date.parse(e.end?.dateTime);
-      if (Number.isFinite(start) && end > start) busy.push({ start: new Date(start).toISOString(), end: new Date(end).toISOString() });
+      if (Number.isFinite(start) && end > start) busy.push({
+        start: new Date(start).toISOString(), end: new Date(end).toISOString(),
+        // Only event-backed ranges have identity. Free/busy-only ranges retain
+        // no identifiers and must never be hidden merely for sharing a time.
+        ...(typeof e.id === 'string' && e.id ? { eventId: e.id, calendarId } : {}),
+        ...(typeof e.extendedProperties?.private?.ops_session_id === 'string'
+          ? { opsSessionId: e.extendedProperties.private.ops_session_id } : {}),
+      });
     }
     pageToken = data.nextPageToken;
     if (!pageToken) return busy;

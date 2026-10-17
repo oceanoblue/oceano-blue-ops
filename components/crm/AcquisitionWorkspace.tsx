@@ -41,7 +41,8 @@ type Modal =
   | { kind: "message"; item?: MessageTemplate }
   | { kind: "file"; item?: FileTemplate }
   | { kind: "sequence"; item?: Sequence }
-  | { kind: "send" }
+  | { kind: "send"; fileRequired?: boolean }
+  | { kind: "start" }
   | { kind: "issued"; item: IssuedFile }
   | null;
 const sections = [
@@ -118,9 +119,9 @@ export function AcquisitionWorkspace({
       if (!r.ok) throw new Error(body.error);
       setModal(null);
       setNotice(
-        action.action === "issue_file"
-          ? "File issued and email queued. The outbox records provider acceptance."
-          : "Saved.",
+        ["issue_file", "send_message"].includes(String(action.action))
+          ? "Email queued. Review its status in Outbox; provider acceptance is recorded separately from delivery."
+          : action.action === "sequence_start" ? body.already_started ? "This onboarding already started. No duplicate emails or tasks were created." : "Onboarding started. Review email approvals in Outbox and scheduled tasks in CRM." : "Saved.",
       );
       await load();
     } finally {
@@ -138,7 +139,7 @@ export function AcquisitionWorkspace({
     <div className="space-y-6">
       <PageHeader
         eyebrow="Acquisition"
-        title="From inquiry to next steps"
+        title="A connected client experience"
         subtitle="Reply with care. Follow through on time. Keep every client file connected."
         icon={Workflow}
       >
@@ -151,6 +152,7 @@ export function AcquisitionWorkspace({
           <RefreshCw className="h-4 w-4" />
           <span className="hidden sm:inline">Refresh</span>
         </button>
+        <button className="btn-primary" onClick={() => setModal({ kind: "send" })}><Send className="h-4 w-4" />Send client email</button>
       </PageHeader>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
@@ -159,6 +161,7 @@ export function AcquisitionWorkspace({
         >
           ← CRM & inquiries
         </Link>
+        <Link className="text-sm text-ocean-700 hover:underline" href="/dashboard/crm/scheduling">Scheduling links →</Link>
         <p className="text-xs text-slate-500">
           {data?.email.configured
             ? `Email configured · replies go to ${data.email.replyTo}`
@@ -228,12 +231,10 @@ export function AcquisitionWorkspace({
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <h2 className="text-2xl text-ink-950">
-                    Every inquiry has a next step
+                    A next step for every client
                   </h2>
                   <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                    Choose a contact form, a reply, and a follow-up schedule.
-                    Workflows enroll future inquiries only. Business days count
-                    Monday through Friday in your selected timezone.
+                    Connect future inquiries to a reply and follow-up schedule, or explicitly start onboarding for one booked project. Business days count Monday through Friday in your selected timezone.
                   </p>
                 </div>
                 <button
@@ -244,6 +245,7 @@ export function AcquisitionWorkspace({
                   New workflow
                 </button>
               </div>
+              <button className="btn-secondary" onClick={() => setModal({ kind: "start" })}>Start client onboarding</button>
               {data.sequences.map((s) => (
                 <article key={s.id} className="card p-5 sm:p-6">
                   <div className="flex flex-wrap items-start justify-between gap-4">
@@ -255,7 +257,7 @@ export function AcquisitionWorkspace({
                       </p>
                       <h3 className="font-semibold text-ink-950">{s.name}</h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        {data.forms.find((f) => f.id === s.form_id)?.name} ·{" "}
+                        {s.enrollment_kind === "onboarding" ? "Booked client · manual start" : data.forms.find((f) => f.id === s.form_id)?.name} ·{" "}
                         {s.timezone}
                       </p>
                     </div>
@@ -275,7 +277,7 @@ export function AcquisitionWorkspace({
                         <span className="text-xs text-slate-500">
                           {i + 1}.{" "}
                           {step.delay
-                            ? `${step.delay} ${step.unit === "hours" ? "hours" : "business days"} after inquiry`
+                            ? `${step.delay} ${step.unit === "hours" ? "hours" : "business days"} after ${s.enrollment_kind === "onboarding" ? "manual start" : "inquiry"}`
                             : "Immediately"}
                         </span>
                         <p className="mt-2 text-sm font-medium text-ink-900">
@@ -308,8 +310,7 @@ export function AcquisitionWorkspace({
                   Smart-file responses stop scheduled messages automatically.
                   Email replies arrive in your office inbox; use “Client replied
                   / stop follow-ups” for that project in the outbox. Archiving a
-                  project, moving it out of the open pipeline, or pausing a
-                  workflow also stops queued emails. An email already handed to
+                  project or pausing a workflow stops queued emails. Inquiry workflows stop on booking; onboarding workflows run for booked projects only. An email already handed to
                   the provider may finish sending.
                 </p>
               </div>
@@ -383,7 +384,7 @@ export function AcquisitionWorkspace({
                 <div className="flex flex-wrap gap-2">
                   <button
                     className="btn-secondary"
-                    onClick={() => setModal({ kind: "send" })}
+                    onClick={() => setModal({ kind: "send", fileRequired: true })}
                   >
                     <Send className="h-4 w-4" />
                     Send a file
@@ -533,6 +534,7 @@ export function AcquisitionWorkspace({
                         <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
                           {mergeText(j.body, j.context)}
                         </p>
+                        {j.cta_url && <p className="text-sm text-ocean-700">Button: {j.cta_label} · <a href={j.cta_url} target="_blank" rel="noreferrer" className="underline break-all">{j.cta_url}</a></p>}
                         {j.file_id && (
                           <p className="text-sm text-ocean-700">
                             Includes a private client-file link.
@@ -629,10 +631,10 @@ export function AcquisitionWorkspace({
                   : modal.kind === "file"
                     ? "Smart-file builder"
                     : modal.kind === "sequence"
-                      ? "Inquiry workflow"
+                      ? "Client workflow"
                       : modal.kind === "send"
-                        ? "Send a client file"
-                        : "Issued client file"
+                        ? "Send a client email"
+                        : modal.kind === "start" ? "Start client onboarding" : "Issued client file"
               }
               close={() => setModal(null)}
             >
@@ -647,7 +649,10 @@ export function AcquisitionWorkspace({
                   data={data}
                   save={save}
                   contactId={contactId}
+                  fileRequired={modal.fileRequired}
                 />
+              ) : modal.kind === "start" ? (
+                <StartOnboardingEditor data={data} save={save} contactId={contactId} />
               ) : (
                 <IssuedFileViewer item={modal.item} save={save} />
               )}
@@ -708,6 +713,8 @@ function MessageEditor({ item, save }: { item?: MessageTemplate; save: Save }) {
             name: f.get("name"),
             subject,
             body,
+            cta_label: f.get("cta_label"),
+            cta_url: f.get("cta_url"),
             ready: f.get("ready") === "on",
           },
         });
@@ -745,6 +752,11 @@ function MessageEditor({ item, save }: { item?: MessageTemplate; save: Save }) {
         Personalize with {variables.map((v) => `{{${v}}}`).join(", ")}. A
         selected smart file is added as a button below the message.
       </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Label name="Scheduling / action button label (optional)"><input className="input" name="cta_label" maxLength={80} defaultValue={item?.cta_label ?? ""} placeholder="Choose a time" /></Label>
+        <Label name="Secure scheduling / action URL"><input className="input" name="cta_url" type="url" maxLength={2000} defaultValue={item?.cta_url ?? ""} placeholder="https://…" /></Label>
+      </div>
+      <p className="text-xs text-slate-500">Add both fields to include a separate button. Use a published Ops scheduling link. Review the destination before marking this template ready.</p>
       <div className="rounded-xl border border-ink-100 bg-ink-50 p-5">
         <p className="text-xs font-medium uppercase tracking-wide text-ocean-700">
           Sample preview
@@ -1103,6 +1115,7 @@ function SequenceEditor({
         },
       ],
     );
+  const [enrollmentKind, setEnrollmentKind] = useState<Sequence["enrollment_kind"]>(item?.enrollment_kind ?? "inquiry");
   const { busy, error, submit } = useEditorSave(save);
   const patch = (i: number, p: Partial<Sequence["steps"][number]>) =>
     setSteps((old) => old.map((s, n) => (n === i ? { ...s, ...p } : s)));
@@ -1118,7 +1131,8 @@ function SequenceEditor({
           version: item?.version ?? 0,
           data: {
             name: f.get("name"),
-            form_id: f.get("form_id"),
+            enrollment_kind: enrollmentKind,
+            form_id: enrollmentKind === "inquiry" ? f.get("form_id") : null,
             timezone: f.get("timezone"),
             enabled: f.get("enabled") === "on",
             steps,
@@ -1135,7 +1149,8 @@ function SequenceEditor({
           defaultValue={item?.name}
         />
       </Label>
-      <Label name="Contact form">
+      <Label name="Start this workflow"><select className="input" value={enrollmentKind} onChange={e => setEnrollmentKind(e.target.value as Sequence["enrollment_kind"])}><option value="inquiry">Automatically for future website inquiries</option><option value="onboarding">Manually for one booked client project</option></select></Label>
+      {enrollmentKind === "inquiry" && <Label name="Contact form">
         <select
           className="input"
           name="form_id"
@@ -1149,7 +1164,7 @@ function SequenceEditor({
             </option>
           ))}
         </select>
-      </Label>
+      </Label>}
       <Label name="Business timezone">
         <input
           className="input"
@@ -1192,7 +1207,7 @@ function SequenceEditor({
               </select>
             </Label>
             <div className="grid grid-cols-2 gap-3">
-              <Label name="Delay after inquiry">
+              <Label name={enrollmentKind === "onboarding" ? "Delay after manual start" : "Delay after inquiry"}>
                 <input
                   className="input"
                   type="number"
@@ -1312,7 +1327,7 @@ function SequenceEditor({
             steps.some((s) => s.kind === "email")
           }
         />
-        Enable for future inquiries
+        {enrollmentKind === "onboarding" ? "Enable for explicit client onboarding starts" : "Enable for future inquiries"}
       </label>
       <p className="text-xs leading-relaxed text-slate-500">
         Email and smart-file templates must be ready before enabling. Task steps
@@ -1327,14 +1342,56 @@ function SequenceEditor({
     </form>
   );
 }
+function StartOnboardingEditor({ data, save, contactId }: { data: AcquisitionData; save: Save; contactId?: string }) {
+  const [id] = useState(() => crypto.randomUUID());
+  const [projectId, setProjectId] = useState("");
+  const [sequenceId, setSequenceId] = useState("");
+  const [resume, setResume] = useState(false);
+  const [query, setQuery] = useState("");
+  const [projects, setProjects] = useState(data.projects);
+  const [searchError, setSearchError] = useState("");
+  const { busy, error, submit } = useEditorSave(save);
+  useEffect(() => {
+    if (!query) { setProjects(data.projects); setSearchError(""); return; }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const p = new URLSearchParams({ q: query, projects_only: "1" });
+      if (contactId) p.set("contact", contactId);
+      void fetch(`/api/crm/acquisition?${p}`, { cache: "no-store", signal: controller.signal }).then(async r => {
+        const body = await r.json();
+        if (!r.ok) throw new Error(body.error);
+        if (!controller.signal.aborted) { setProjects(body.projects); setSearchError(""); }
+      }).catch(e => { if (!controller.signal.aborted) setSearchError(e.message); });
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [query, contactId, data.projects]);
+  const sequence = data.sequences.find(s => s.id === sequenceId);
+  const project = projects.find(p => p.id === projectId);
+  const started = data.enrollments?.find(e => e.project_id === projectId && e.sequence_id === sequenceId);
+  return <form className="space-y-5" onSubmit={e => { e.preventDefault(); void submit({ action: "sequence_start", id, data: { project_id: projectId, sequence_id: sequenceId, resume_followups: resume } }); }}>
+    <p className="text-sm leading-relaxed text-slate-600">Start a reviewed onboarding workflow for one booked project. This creates its office tasks and scheduled email approvals. Starting the same workflow twice cannot duplicate emails or tasks.</p>
+    <Label name="Find a booked project"><input className="input" value={query} maxLength={120} onChange={e => { setQuery(e.target.value); setProjectId(""); }} placeholder="Project name…" /></Label>
+    <Label name="Booked project & recipient"><select className="input" required value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">Choose a booked project</option>{projects.filter(p => p.crm_stages?.outcome === "won").map(p => <option key={p.id} value={p.id}>{p.title} · {p.clients?.full_name} · {p.clients?.email}</option>)}</select></Label>
+    <Label name="Enabled onboarding workflow"><select className="input" required value={sequenceId} onChange={e => setSequenceId(e.target.value)}><option value="">Choose an enabled workflow</option>{data.sequences.filter(s => s.enrollment_kind === "onboarding" && s.enabled).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Label>
+    {!data.sequences.some(s => s.enrollment_kind === "onboarding" && s.enabled) && <p className="rounded-xl bg-ocean-50 p-4 text-sm text-ocean-900">Review the wedding starter or create an onboarding workflow, mark its templates ready, and enable it before starting a client.</p>}
+    {project && sequence && <div className="rounded-xl border border-ink-100 p-5"><p className="font-medium">{project.title}</p><p className="mt-2 text-sm text-slate-600">{sequence.steps.filter(s => s.kind === "email").length} emails · {sequence.steps.filter(s => s.kind === "task").length} office tasks · {sequence.timezone}</p><ol className="mt-4 space-y-2 text-sm text-slate-600">{sequence.steps.map(s => <li key={s.id}>{s.delay ? `${s.delay} ${s.unit === "hours" ? "hours" : "business days"} after start` : "Immediately"} · {s.kind === "task" ? s.task_title : `${data.messages.find(m => m.id === s.message_template_id)?.name ?? "Email"}${s.requires_approval ? " · approval required" : " · sends automatically"}`}</li>)}</ol></div>}
+    <label className="flex min-h-11 items-start gap-3 text-sm leading-relaxed"><input className="mt-1" type="checkbox" checked={resume} onChange={e => setResume(e.target.checked)} />Resume follow-ups for this project if the office previously stopped them. Previously cancelled emails stay cancelled.</label>
+    {started && <p role="status" className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">Already started {fmtDateTime(started.started_at)}. Review its outbox and tasks; this workflow will not restart.</p>}
+    <Feedback error={error || searchError} />
+    <button className="btn-primary" disabled={busy || !data.email.sendingEnabled || !project || !sequence || !!started}>{busy ? "Starting…" : "Start onboarding for this project"}</button>
+  </form>;
+}
+
 function IssueFileEditor({
   data,
   save,
   contactId,
+  fileRequired = false,
 }: {
   data: AcquisitionData;
   save: Save;
   contactId?: string;
+  fileRequired?: boolean;
 }) {
   const [id] = useState(() => crypto.randomUUID()),
     [projects, setProjects] = useState(data.projects),
@@ -1342,6 +1399,7 @@ function IssueFileEditor({
     [projectId, setProjectId] = useState(""),
     [messageId, setMessageId] = useState(""),
     [fileId, setFileId] = useState(""),
+    [sendAt, setSendAt] = useState(""),
     [searchError, setSearchError] = useState("");
   const { busy, error, submit } = useEditorSave(save);
   useEffect(() => {
@@ -1392,20 +1450,19 @@ function IssueFileEditor({
       onSubmit={(e) => {
         e.preventDefault();
         void submit({
-          action: "issue_file",
+          action: fileRequired ? "issue_file" : "send_message",
           id,
           data: {
             project_id: projectId,
             message_template_id: messageId,
-            file_template_id: fileId,
+            file_template_id: fileId || null,
+            ...(fileRequired ? {} : { due_at: sendAt ? new Date(sendAt).toISOString() : null }),
           },
         });
       }}
     >
       <p className="text-sm leading-relaxed text-slate-600">
-        Issue a fixed copy of a ready template and email its private link to the
-        project’s contact. Review the recipient, message, and file below before
-        sending.
+        Send a reviewed template to this project’s contact. A smart file is optional. Review the recipient, message, and scheduling button before queueing the email.
       </p>
       <Label name="Find an active project by name">
         <input
@@ -1443,11 +1500,11 @@ function IssueFileEditor({
         <select
           className="input"
           name="file_template_id"
-          required
+          required={fileRequired}
           value={fileId}
           onChange={(e) => setFileId(e.target.value)}
         >
-          <option value="">Choose a ready file</option>
+          <option value="">{fileRequired ? "Choose a ready file" : "No file · email only"}</option>
           {data.files
             .filter((f) => f.ready)
             .map((f) => (
@@ -1475,7 +1532,8 @@ function IssueFileEditor({
             ))}
         </select>
       </Label>
-      {project && message && file && (
+      {!fileRequired && <Label name="Send later (optional · your local time)"><input className="input" type="datetime-local" value={sendAt} onChange={e => setSendAt(e.target.value)} /></Label>}
+      {project && message && (!fileRequired || file) && (
         <section className="space-y-5 rounded-xl border border-ink-100 p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-ocean-700">
             Send preview
@@ -1490,11 +1548,10 @@ function IssueFileEditor({
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
               {mergeText(message.body, context)}
             </p>
-            <p className="text-xs text-ocean-700">
-              The email includes an “Open your project file” button.
-            </p>
+            {message.cta_url && <p className="text-sm text-ocean-700">Button: {message.cta_label} · <a className="underline break-all" href={message.cta_url} target="_blank" rel="noreferrer">{message.cta_url}</a></p>}
+            {file && <p className="text-xs text-ocean-700">The email includes an “Open your project file” button.</p>}
           </div>
-          <SmartFileDocument document={file} context={context} disabled />
+          {file && <SmartFileDocument document={file} context={context} disabled />}
         </section>
       )}
       <p className="text-xs leading-relaxed text-slate-500">
@@ -1511,11 +1568,11 @@ function IssueFileEditor({
           !data.email.sendingEnabled ||
           !project ||
           !message ||
-          !file
+          (fileRequired && !file)
         }
       >
         <Send className="h-4 w-4" />
-        {busy ? "Issuing file…" : "Send file by email"}
+        {busy ? "Queueing email…" : sendAt ? "Schedule client email" : "Queue client email"}
       </button>
     </form>
   );

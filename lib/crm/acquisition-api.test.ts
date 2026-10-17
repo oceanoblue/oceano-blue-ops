@@ -120,18 +120,18 @@ it("rejects invalid templates before a write", async () => {
   ).toBe(400);
   expect(mock.rpc).not.toHaveBeenCalled();
 });
-it.each(["job_approve", "job_retry", "issue_file"])(
+it.each(["job_approve", "job_retry", "issue_file", "send_message", "sequence_start"])(
   "prevents %s from creating production mail through a preview",
   async (action) => {
     vi.stubEnv("VERCEL_ENV", "preview");
     const data =
-      action === "issue_file"
+      ["issue_file", "send_message"].includes(action)
         ? {
             project_id: id,
             message_template_id: actor,
             file_template_id: actor,
           }
-        : {};
+        : action === "sequence_start" ? { project_id: id, sequence_id: actor, resume_followups: false } : {};
     expect((await POST(req({ action, id, data }))).status).toBe(403);
     expect(mock.rpc).not.toHaveBeenCalled();
   },

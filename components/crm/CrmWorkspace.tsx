@@ -291,13 +291,13 @@ export function CrmWorkspace({
               "Your shared client directory",
             ],
             [
-              "Open projects",
+              "Pipeline projects",
               String(
                 data.summary.stages
-                  .filter((s) => s.outcome === "open")
+                  .filter((s) => s.outcome === "open" || s.outcome === "won")
                   .reduce((n, s) => n + s.count, 0),
               ),
-              "Across all active pipeline stages",
+              "Outside Archived and Lost",
             ],
             [
               "Open pipeline value",

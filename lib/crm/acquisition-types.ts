@@ -8,22 +8,27 @@ export const variables = [
   "project_name",
   "project_type",
 ] as const;
-export const messageTemplateSchema = z.object({
-  name: text(120).min(1),
-  subject: text(200)
-    .min(1)
-    .refine((v) => !/[\r\n]/.test(v), "Use a single-line subject."),
-  body: text(10000).min(1),
-  ready: z.boolean().default(false),
-});
-const safeLink = z
+export const safeLink = z
   .string()
   .url()
   .max(2000)
   .refine((v) => {
     const url = new URL(v);
     return url.protocol === "https:" && !url.username && !url.password;
-  }, "Use a secure HTTPS link.");
+  }, "Use a secure HTTPS link without login details.");
+export const messageTemplateSchema = z.object({
+  name: text(120).min(1),
+  subject: text(200)
+    .min(1)
+    .refine((v) => !/[\r\n]/.test(v), "Use a single-line subject."),
+  body: text(10000).min(1),
+  cta_label: text(80).default(""),
+  cta_url: z.union([z.literal(""), safeLink]).default(""),
+  ready: z.boolean().default(false),
+}).superRefine((v, ctx) => {
+  if (!!v.cta_label !== !!v.cta_url)
+    ctx.addIssue({ code: "custom", message: "Add both a button label and a secure URL, or leave both blank." });
+});
 export const fileBlockSchema = z.discriminatedUnion("kind", [
   z.object({
     id: uuid,
@@ -87,7 +92,8 @@ export const sequenceStepSchema = z
 export const sequenceSchema = z
   .object({
     name: text(120).min(1),
-    form_id: uuid,
+    enrollment_kind: z.enum(["inquiry", "onboarding"]).default("inquiry"),
+    form_id: uuid.nullable().default(null),
     enabled: z.boolean().default(false),
     timezone: text(80)
       .min(1)
@@ -102,6 +108,8 @@ export const sequenceSchema = z
     steps: z.array(sequenceStepSchema).min(1).max(12),
   })
   .superRefine((v, ctx) => {
+    if ((v.enrollment_kind === "inquiry") !== !!v.form_id)
+      ctx.addIssue({ code: "custom", message: "Inquiry workflows need a form; onboarding workflows start from a booked project." });
     if (new Set(v.steps.map((s) => s.id)).size !== v.steps.length)
       ctx.addIssue({ code: "custom", message: "Step IDs must be unique." });
   });
@@ -121,6 +129,25 @@ export const acquisitionActionSchema = z.discriminatedUnion("action", [
     ...base,
     action: z.literal("sequence_save"),
     data: sequenceSchema,
+  }),
+  z.object({
+    id: uuid,
+    action: z.literal("send_message"),
+    data: z.object({
+      project_id: uuid,
+      message_template_id: uuid,
+      file_template_id: uuid.nullable().default(null),
+      due_at: z.string().datetime({ offset: true }).nullable().default(null),
+    }),
+  }),
+  z.object({
+    id: uuid,
+    action: z.literal("sequence_start"),
+    data: z.object({
+      project_id: uuid,
+      sequence_id: uuid,
+      resume_followups: z.boolean().default(false),
+    }),
   }),
   z.object({
     id: uuid,
@@ -181,6 +208,8 @@ export type MailJob = {
   due_at: string;
   subject: string;
   body: string;
+  cta_label?: string;
+  cta_url?: string;
   context: FileContext;
   recipient: string;
   file_id: string | null;
@@ -198,6 +227,13 @@ export type AcquisitionData = {
   forms: { id: string; name: string; published: boolean }[];
   jobs: MailJob[];
   issued: IssuedFile[];
+  enrollments?: {
+    id: string;
+    project_id: string;
+    sequence_id: string;
+    started_at: string;
+    started_by: string;
+  }[];
   projects: {
     id: string;
     title: string;
