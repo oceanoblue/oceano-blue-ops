@@ -27,7 +27,7 @@ beforeAll(async () => {
     create table business_settings(id boolean primary key,buffer_minutes int,min_notice_hours int,max_notice_days int,default_timezone text);
     create table team_members(id uuid primary key,is_active boolean,role text,email text,phone text);
     create table team_availability(team_member_id uuid,is_active boolean,day_of_week int,start_local time,end_local time,timezone text);
-    create table schedule_blocks(team_member_id uuid,is_available boolean,starts_at timestamptz,ends_at timestamptz);
+    create table schedule_blocks(team_member_id uuid,is_available boolean,starts_at timestamptz,ends_at timestamptz,id uuid default gen_random_uuid(),reason text);
     create table contractors(id uuid primary key,team_member_id uuid,is_active boolean,pay_rate_cents int);
     create function price_for_sqft(uuid,int) returns int language sql as $$select 20000$$;
   `);
@@ -56,6 +56,7 @@ beforeAll(async () => {
     create table delivery_links(id uuid primary key default gen_random_uuid(),order_id uuid references orders(id) on delete cascade,token text unique,created_by uuid,expires_at timestamptz,created_at timestamptz default now());`);
   await db.exec(readFileSync('supabase/migrations/20260917111545_client_gallery_delivery.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20261008112200_allow_delivery_status_without_rescheduling.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261018185935_crm_order_schedule_hold_guard.sql','utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -162,6 +163,15 @@ describe('public booking transaction', () => {
   it('rejects long blocks that span the entire selected day', async () => {
     await db.query(`insert into schedule_blocks values($1,false,$2::timestamptz-interval '7 days',$2::timestamptz+interval '7 days')`,[photographer,payload.scheduled_at]);
     await expect(book()).rejects.toThrow('slot_unavailable');
+  });
+  it('shares CRM reservations with public booking and releases capacity only after the hold is released', async () => {
+    await db.query("insert into schedule_blocks(team_member_id,is_available,starts_at,ends_at,reason) values($1,false,$2,$2::timestamptz+interval '1 hour','crm-session:source-reference')", [photographer, payload.scheduled_at]);
+    await expect(book()).rejects.toThrow('slot_unavailable');
+    expect((await db.query('select count(*)::int n from orders')).rows).toEqual([{ n: 0 }]);
+    await db.exec("update schedule_blocks set is_available=true,reason='crm-session-cancelled:source-reference'");
+    const id = (await book()).rows[0].id;
+    expect((await db.query('select project_type from orders where id=$1', [id])).rows).toEqual([{ project_type: 'mls_real_estate' }]);
+    expect((await db.query('select count(*)::int n from booking_followups where order_id=$1', [id])).rows).toEqual([{ n: 4 }]);
   });
   it('rejects an existing photographer conflict atomically', async () => {
     await book();

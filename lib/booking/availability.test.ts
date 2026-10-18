@@ -65,3 +65,10 @@ it('releases each crew member outside their own visit, retaining the travel buff
  expect(offered('16:30','karen')).toBe(true);
  expect(offered('16:30','gustavo')).toBe(false);
 });
+it('blocks CRM session reservations only for their host and preserves other real estate crew capacity',async()=>{
+ tables.schedule_blocks=[{team_member_id:'gustavo',starts_at:'2026-09-22T12:30:00Z',ends_at:'2026-09-22T14:30:00Z',is_available:false,reason:'crm-session:confirmed'}];
+ const result=await getAvailability('2026-09-22',60,undefined,{...options,allCandidates:true});
+ expect(result.slots.some(s=>s.photographer_id==='gustavo'&&s.iso==='2026-09-22T13:00:00.000Z')).toBe(false);
+ expect(result.slots.some(s=>s.photographer_id==='karen'&&s.iso==='2026-09-22T13:00:00.000Z')).toBe(true);
+ expect(result.slots.some(s=>s.photographer_id==='gustavo'&&s.iso==='2026-09-22T15:00:00.000Z')).toBe(true);
+});

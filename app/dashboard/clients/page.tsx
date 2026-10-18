@@ -1,3 +1,4 @@
+import { officeClientOptions } from '@/lib/clients/office-options';
 import { Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -16,10 +17,7 @@ const COLUMNS: Column<any>[] = [
 
 export default async function ClientsPage() {
   const supabase = await createClient();
-  const { data: clients, error } = await supabase
-    .from('clients')
-    .select('id, full_name, email, brokerage, phone, created_at')
-    .order('full_name', { ascending: true });
+  const { data: clients, error } = await officeClientOptions(supabase, { columns: 'id, full_name, email, brokerage, phone, created_at' });
 
   return (
     <div className="space-y-6">

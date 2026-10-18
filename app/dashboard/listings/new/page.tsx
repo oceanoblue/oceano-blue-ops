@@ -1,3 +1,4 @@
+import { officeClientOptions } from '@/lib/clients/office-options';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -7,11 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function NewListingPage() {
   const supabase = await createClient();
-  const { data: clients } = await supabase
-    .from('clients')
-    .select('id, full_name, brokerage')
-    .eq('is_archived', false)
-    .order('full_name');
+  const { data: clients, error: clientError } = await officeClientOptions(supabase, { columns: 'id, full_name, brokerage', activeOnly: true });
 
   return (
     <div className="space-y-6">
@@ -24,7 +21,7 @@ export default async function NewListingPage() {
           Start a property by address, then add a photo order from the listing page.
         </p>
       </div>
-      <NewListingForm clients={(clients ?? []) as any} />
+      {clientError ? <p role="alert" className="card p-5 text-rose-700">{clientError.message}</p> : <NewListingForm clients={(clients ?? []) as any} />}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { officeClientOptions } from '@/lib/clients/office-options';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -30,9 +31,9 @@ export default async function DeliveriesPage(
   if (status) query = query.eq('status', status);
   if (type) query = query.eq('delivery_type', type);
 
-  const [{ data: deliveries }, { data: clientRows }, { data: links }] = await Promise.all([
+  const [{ data: deliveries }, { data: clientRows, error: clientError }, { data: links }] = await Promise.all([
     query,
-    supabase.from('clients').select('id, full_name').eq('is_archived', false).order('full_name'),
+    officeClientOptions(supabase, { activeOnly: true }),
     supabase
       .from('delivery_links')
       .select('delivery_version_id, view_count, download_count')
@@ -73,7 +74,7 @@ export default async function DeliveriesPage(
           <span className="mr-1 w-12 shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">
             Client
           </span>
-          <ClientFilterSelect clients={(clientRows ?? []) as any} value={client} status={status} type={type} />
+          <>{clientError ? <p role="alert" className="text-sm text-rose-700">{clientError.message}</p> : <ClientFilterSelect clients={(clientRows ?? []) as any} value={client} status={status} type={type} />}</>
         </div>
       </div>
 

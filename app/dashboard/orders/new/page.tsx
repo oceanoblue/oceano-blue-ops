@@ -1,3 +1,4 @@
+import { officeClientOptions } from '@/lib/clients/office-options';
 import Link from 'next/link';
 import { ArrowLeft, Zap } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -14,13 +15,9 @@ export const dynamic = 'force-dynamic';
 export default async function NewShootPage() {
   const supabase = await createClient();
 
-  const [{ data: clients }, { data: contractorRows }, { data: team }, { data: productRows }] =
+  const [{ data: clients, error: clientError }, { data: contractorRows }, { data: team }, { data: productRows }] =
     await Promise.all([
-      supabase
-        .from('clients')
-        .select('id, full_name, brokerage')
-        .eq('is_archived', false)
-        .order('full_name'),
+      officeClientOptions(supabase, { columns: 'id, full_name, brokerage', activeOnly: true }),
       supabase
         .from('contractors')
         .select('id, full_name, pay_rate_cents, team_member_id')
@@ -63,13 +60,13 @@ export default async function NewShootPage() {
         </div>
       </div>
 
-      <NewShootForm
+      {clientError ? <p role="alert" className="card p-5 text-rose-700">{clientError.message}</p> : <NewShootForm
         clients={(clients ?? []) as any}
         contractors={(contractorRows ?? []) as any}
         team={photographers}
         videographers={videographers}
         products={(productRows ?? []) as any}
-      />
+      />}
     </div>
   );
 }

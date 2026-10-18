@@ -1,3 +1,4 @@
+import { officeClientOptions } from '@/lib/clients/office-options';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Users2 } from 'lucide-react';
@@ -23,11 +24,7 @@ export default async function TeamDetailPage(props: { params: Promise<{ id: stri
     .eq('team_id', params.id)
     .order('created_at', { ascending: true });
 
-  const { data: clients } = await supabase
-    .from('clients')
-    .select('id, full_name, email')
-    .eq('is_archived', false)
-    .order('full_name', { ascending: true });
+  const { data: clients, error: clientError } = await officeClientOptions(supabase, { columns: 'id, full_name, email', activeOnly: true });
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -46,7 +43,7 @@ export default async function TeamDetailPage(props: { params: Promise<{ id: stri
         </div>
       </div>
 
-      <TeamManager team={team} members={members ?? []} clients={clients ?? []} />
+      {clientError ? <p role="alert" className="card p-5 text-rose-700">{clientError.message}</p> : <TeamManager team={team} members={members ?? []} clients={clients as any} />}
     </div>
   );
 }

@@ -53,23 +53,26 @@ export async function sessionAvailability(type: SessionType, day: string, ignore
     const start = new Date(`${day}T00:00:00Z`).getTime() - 86400000, end = start + 3 * 86400000;
     const from = new Date(start).toISOString(), to = new Date(end).toISOString();
     const db = crmDb();
-    const [blocks, orders, external, primary] = await Promise.all([
+    const [blocks, orders, external, primary, settings] = await Promise.all([
         db.from("schedule_blocks").select("id,starts_at,ends_at").eq("team_member_id", type.owner_id).eq("is_available", false).lt("starts_at", to).gt("ends_at", from).limit(1201),
         db.from("orders").select("scheduled_at,duration_minutes,photographer_id,videographer_id,photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,contractors(team_member_id)").gte("scheduled_at", from).lte("scheduled_at", to).not("status", "in", "(cancelled,draft)").limit(1201),
         fetchMemberBusy(type.owner_id, from, to),
         sessionCalendarWriteAccess(type.owner_id),
+        db.from("business_settings").select("buffer_minutes").eq("id", true).maybeSingle(),
     ]);
-    if (blocks.error || orders.error || (blocks.data?.length ?? 0) > 1200 || (orders.data?.length ?? 0) > 1200)
+    if (blocks.error || orders.error || settings.error || (blocks.data?.length ?? 0) > 1200 || (orders.data?.length ?? 0) > 1200)
         throw new CrmError("Calendar availability could not be verified. Please contact the office.", 503);
     if (external.source !== "own")
         throw new CrmError("The host’s calendar needs to be connected before booking. Please contact the office.", 503);
     const ownEventId = ignoreAppointment ? createHash("sha256").update(`crm-session/${ignoreAppointment.id}`).digest("hex") : null;
     const busy: SessionRange[] = [...external.busy.filter(b => !(ownEventId && b.eventId === ownEventId && b.calendarId?.toLowerCase() === primary)), ...(blocks.data ?? []).filter(b => b.id !== ignoreAppointment?.schedule_block_id).map(b => ({ start: b.starts_at, end: b.ends_at }))];
+    // Shoot travel time is additional to the session’s own buffers; CRM-only holds keep their configured buffers.
+    const shootBufferMs = (settings.data?.buffer_minutes ?? 30) * 60000;
     for (const row of orders.data ?? []) {
         const o = { ...row, contractors: Array.isArray(row.contractors) ? row.contractors[0] : row.contractors };
         for (const w of memberWindows(o, type.owner_id))
             if (w.start && w.end)
-                busy.push({ start: w.start, end: w.end });
+                busy.push({ start: new Date(Date.parse(w.start) - shootBufferMs).toISOString(), end: new Date(Date.parse(w.end) + shootBufferMs).toISOString() });
     }
     return { slots: sessionSlots(type, day, busy), checkedAt: new Date().toISOString() };
 }
