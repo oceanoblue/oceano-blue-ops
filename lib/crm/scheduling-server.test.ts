@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import { createHash } from "node:crypto";
-const m = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn(), busy: vi.fn(), scope: "", blocks: [] as any[], external: [] as any[] }));
+const m = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn(), busy: vi.fn(), scope: "", blocks: [] as any[], orders: [] as any[], orgBuffer: 30, settingsError: null as object | null, external: [] as any[] }));
 vi.mock("./server", () => ({ crmDb: () => ({ from: m.from, rpc: m.rpc }), CrmError: class extends Error {
         constructor(message: string, public status = 400) { super(message); }
     } }));
@@ -16,11 +16,14 @@ beforeEach(() => {
     vi.stubEnv("VERCEL_ENV", "production");
     m.scope = "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events";
     m.blocks = [];
+    m.orders = [];
+    m.orgBuffer = 30;
+    m.settingsError = null;
     m.external = [];
     m.busy.mockImplementation(async () => ({ source: "own", busy: m.external }));
     m.rpc.mockResolvedValue({ data: { ok: true, id: "booked", token: "a".repeat(64) }, error: null });
     m.from.mockImplementation((table: string) => {
-        const result = () => ({ data: table === "team_calendar_connections" ? { scope: m.scope, is_active: true, account_email: "host@example.test" } : table === "schedule_blocks" ? m.blocks : table === "orders" ? [] : table === "crm_session_types" ? t : null, error: null });
+        const result = () => ({ data: table === "team_calendar_connections" ? { scope: m.scope, is_active: true, account_email: "host@example.test" } : table === "schedule_blocks" ? m.blocks : table === "orders" ? m.orders : table === "business_settings" ? { buffer_minutes: m.orgBuffer } : table === "crm_session_types" ? t : null, error: table === "business_settings" ? m.settingsError : null });
         const chain: any = {};
         for (const method of ["select", "eq", "lt", "gt", "gte", "lte", "not", "limit"])
             chain[method] = () => chain;
@@ -66,4 +69,29 @@ it("preserves source date holds through the office read without exposing manage 
 });
 it("requires a callable phone number for phone sessions before calendar or mutation work",async()=>{
  await expect(bookSession("planning",{id:"00000000-0000-4000-8000-000000000003",starts_at:"2026-10-19T13:15:00Z",full_name:"Test Client",email:"client@example.test",email_consent:false,phone:"123"})).rejects.toThrow("phone number");expect(m.busy).not.toHaveBeenCalled();expect(m.rpc).not.toHaveBeenCalled();
+});
+it("adds the organization shoot travel buffer to the session's before buffer without widening CRM-only holds", async () => {
+    m.orders = [{ scheduled_at: "2026-10-19T13:00:00Z", duration_minutes: 60, photographer_id: t.owner_id }];
+    let slots = (await sessionAvailability(t, "2026-10-19")).slots;
+    expect(slots).not.toContain("2026-10-19T14:00:00.000Z");
+    expect(slots).not.toContain("2026-10-19T14:15:00.000Z");
+    expect(slots).toContain("2026-10-19T14:30:00.000Z");
+    slots = (await sessionAvailability({ ...t, buffer_before_minutes: 15 }, "2026-10-19")).slots;
+    expect(slots).not.toContain("2026-10-19T14:30:00.000Z");
+    expect(slots).toContain("2026-10-19T14:45:00.000Z");
+    m.orders = [];
+    m.orgBuffer = 60;
+    m.blocks = [{ id: "another-session", starts_at: "2026-10-19T14:00:00Z", ends_at: "2026-10-19T14:30:00Z" }];
+    expect((await sessionAvailability(t, "2026-10-19")).slots).toContain("2026-10-19T14:30:00.000Z");
+});
+it("uses the actual video visit and the session's after buffer before a shoot", async () => {
+    m.orders = [{ scheduled_at: "2026-10-19T13:00:00Z", duration_minutes: 120, photographer_id: "other-host", videographer_id: t.owner_id, videographer_start_offset_minutes: 120, videographer_duration_minutes: 60 }];
+    const slots = (await sessionAvailability({ ...t, buffer_after_minutes: 15 }, "2026-10-19")).slots;
+    expect(slots).toContain("2026-10-19T13:45:00.000Z");
+    expect(slots).not.toContain("2026-10-19T14:00:00.000Z");
+});
+it("fails closed before commit when the existing organization buffer cannot be read", async () => {
+    m.settingsError = { message: "unavailable" };
+    await expect(bookSession("planning", { id: "00000000-0000-4000-8000-000000000003", starts_at: "2026-10-19T13:15:00Z", full_name: "Test Client", email: "client@example.test", email_consent: false, phone: "8435550100" })).rejects.toThrow("could not be verified");
+    expect(m.rpc).not.toHaveBeenCalled();
 });

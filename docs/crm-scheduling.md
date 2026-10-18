@@ -3,7 +3,7 @@
 Ops scheduling is separate from the existing property booking checkout. The
 office workspace is `/dashboard/crm/scheduling`; a published reusable link is
 `/meet/<slug>`. Sessions support 15–720 minutes, multiple weekly windows,
-IANA timezones, 0–30 days minimum notice, symmetric buffers and a 1–365 day
+IANA timezones, 0–30 days minimum notice, separate before/after buffers and a 1–365 day
 booking horizon or an exact 1–12 calendar-month rolling horizon. Start-time
 increments are configurable per link. The public page shows the visitor's timezone while identifying
 the host's calendar date timezone. A configuration can remain a draft.
@@ -17,6 +17,14 @@ holds. Calendar errors close availability. SQL repeats notice, hours and interna
 conflict checks under the same owner advisory lock used by property checkout.
 The appointment atomically reserves a `schedule_blocks` row, including its buffer,
 so property bookings also see it. Two session links cannot reserve the same host.
+
+Sessions also preserve the organization's existing shoot travel buffer around
+each assigned crew visit. This travel time is additional to the session's own
+before/after buffer, in either booking direction; CRM-to-CRM holds keep only
+their configured session buffers. Staff shoot rescheduling respects CRM holds
+and retains the existing explicit overlap override. Updates that leave the crew
+and schedule unchanged can still complete delivery and payment work. This does
+not add route-specific travel estimates to CRM scheduling.
 
 Each new booking reuses a matching email contact and creates an inquiry project,
 an assigned attendance task and an immutable CRM event. Phone sessions require

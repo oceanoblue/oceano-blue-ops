@@ -1,3 +1,4 @@
+import { officeClientOptions } from '@/lib/clients/office-options';
 import { fmtDate } from '@/lib/utils/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -14,13 +15,13 @@ export default async function ShowDetailPage(props: { params: Promise<{ id: stri
   const params = await props.params;
   const supabase = await createClient();
 
-  const [{ data: show }, { data: clients }] = await Promise.all([
+  const [{ data: show }, { data: clients, error: clientError }] = await Promise.all([
     supabase
       .from('podcast_shows')
       .select('id, name, slug, client_id, hosts, description, default_language, tagline, mood, tone, brand_color, logo_url, publishing_platforms, transistor_show_id, make_youtube_connection_id, routes_provisioned_at, clients(full_name)')
       .eq('id', params.id)
       .maybeSingle(),
-    supabase.from('clients').select('id, full_name').order('full_name'),
+    officeClientOptions(supabase),
   ]);
   if (!show) notFound();
   const s = show as any;
@@ -64,7 +65,7 @@ export default async function ShowDetailPage(props: { params: Promise<{ id: stri
       <div className="grid gap-4 lg:grid-cols-5">
         <section className="card p-5 lg:col-span-2">
           <h2 className="mb-3 font-semibold text-slate-900">Show settings</h2>
-          <ShowForm
+          {clientError ? <p role="alert" className="text-sm text-rose-700">{clientError.message}</p> : <ShowForm
             clients={(clients ?? []) as any}
             initial={{
               id: s.id,
@@ -82,7 +83,7 @@ export default async function ShowDetailPage(props: { params: Promise<{ id: stri
               publishing_platforms: (s.publishing_platforms ?? ['youtube']) as string[],
               transistor_show_id: s.transistor_show_id ?? '',
             }}
-          />
+          />}
           <p className="mt-3 text-xs text-slate-400">
             The Make scenario routes files to this show via <code className="font-mono">show_slug</code> — change the slug
             only if you also update the scenario/folder naming.

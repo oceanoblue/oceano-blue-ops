@@ -18,14 +18,20 @@ beforeAll(async () => {
  create table projects(id uuid primary key default gen_random_uuid(),client_id uuid references clients(id),name text,description text,start_date date,created_by uuid,metadata jsonb default '{}',status text default 'active',updated_at timestamptz default now());
  create table schedule_blocks(id uuid primary key,team_member_id uuid,starts_at timestamptz,ends_at timestamptz,reason text,is_available boolean);
  create table contractors(id uuid primary key,team_member_id uuid);
- create table orders(id uuid primary key,status text,scheduled_at timestamptz,duration_minutes integer,photographer_id uuid,videographer_id uuid,contractor_id uuid,photographer_start_offset_minutes integer,photographer_duration_minutes integer,videographer_start_offset_minutes integer,videographer_duration_minutes integer);
+ create table business_settings(id boolean primary key,buffer_minutes integer);insert into business_settings values(true,30);
+ create table orders(id uuid primary key,status text,scheduled_at timestamptz,duration_minutes integer,photographer_id uuid,videographer_id uuid,contractor_id uuid,photographer_start_offset_minutes integer default 0,photographer_duration_minutes integer,videographer_start_offset_minutes integer default 0,videographer_duration_minutes integer);
  insert into team_members values('${actor}','admin',true),('${photographer}','photographer',true);`);
     await db.exec(readFileSync("supabase/migrations/20261017032908_crm_clientflow.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/20261017034047_crm_historical_archive.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/20261017115510_crm_general_scheduling.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/20261017120411_crm_scheduling_source_precision.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/20261017122113_crm_scheduling_asymmetric_buffers.sql", "utf8"));
-    await db.exec("grant select,insert,update on clients,projects,schedule_blocks,contractors,orders to service_role");
+    const crew = readFileSync("supabase/migrations/20260923104656_manual_assignment_review.sql", "utf8").match(/create function public\.crew_windows\([\s\S]*?\$\$;/i)?.[0];
+    if (!crew) throw new Error("Production crew window function is missing");
+    await db.exec(crew);
+    await db.exec(readFileSync("supabase/migrations/20261018185935_crm_order_schedule_hold_guard.sql", "utf8"));
+    await db.exec(readFileSync("supabase/migrations/20261018185938_crm_session_shoot_travel_buffer.sql", "utf8"));
+    await db.exec("grant select,insert,update on clients,projects,schedule_blocks,contractors,orders,business_settings to service_role");
 }, 60000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => { await db.exec("begin"); });
@@ -152,4 +158,41 @@ it("freezes preparation instructions at booking across later template edits and 
     await change(b.id, b.token, "reschedule", 1, new Date(start.getTime() + 86400000).toISOString(), 2);
     const { rows } = await db.query<any>("select a.confirmation_instructions as snapshot,t.confirmation_instructions as current from crm_appointments a join crm_session_types t on t.id=a.session_type_id where a.id=$1", [b.id]);
     expect(rows[0]).toEqual({ snapshot: original, current: "New instructions for future bookings." });
+});
+it("preserves organization shoot travel time even for a session with zero buffers", async () => {
+    await typeSave({ ...settings, buffer_minutes: 0 });
+    await db.query("insert into orders(id,status,scheduled_at,duration_minutes,photographer_id) values($1,'scheduled',$2,60,$3)", [randomUUID(), start.toISOString(), actor]);
+    expect(await failed(() => book(randomUUID(), { starts_at: new Date(start.getTime() + 60 * 60000).toISOString() }))).toContain("just booked");
+    await book(randomUUID(), { starts_at: new Date(start.getTime() + 90 * 60000).toISOString() });
+});
+it("adds distinct session before/after buffers to shoot travel time on create and reschedule", async () => {
+    await typeSave({ ...settings, buffer_before_minutes: 15, buffer_after_minutes: 60 });
+    await db.query("insert into orders(id,status,scheduled_at,duration_minutes,photographer_id) values($1,'scheduled',$2,60,$3)", [randomUUID(), start.toISOString(), actor]);
+    expect(await failed(() => book(randomUUID(), { starts_at: new Date(start.getTime() + 90 * 60000).toISOString() }))).toContain("just booked");
+    const b = await book(randomUUID(), { starts_at: new Date(start.getTime() + 105 * 60000).toISOString() });
+    const next = start.getTime() + 86400000;
+    await db.query("insert into orders(id,status,scheduled_at,duration_minutes,videographer_id,photographer_id,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes) values($1,'scheduled',$2,180,$3,$4,60,105,60)", [randomUUID(), new Date(next).toISOString(), actor, photographer]);
+    expect(await failed(() => change(b.id, b.token, "reschedule", 1, new Date(next).toISOString()))).toContain("just booked");
+    await change(b.id, b.token, "reschedule", 1, new Date(next - 15 * 60000).toISOString());
+    const reservation = (await db.query<any>("select (extract(epoch from (a.starts_at-b.starts_at))/60)::int as before,(extract(epoch from (b.ends_at-a.ends_at))/60)::int as after,a.buffer_before_minutes,a.buffer_after_minutes from crm_appointments a join schedule_blocks b on b.id=a.schedule_block_id where a.id=$1", [b.id])).rows[0];
+    expect(reservation).toEqual({ before: 15, after: 60, buffer_before_minutes: 15, buffer_after_minutes: 60 });
+});
+it.each([0, 30, 60])("enforces both booking directions with %i minutes organization travel and asymmetric CRM buffers", async travel => {
+    await db.query("update business_settings set buffer_minutes=$1", [travel]);
+    await typeSave({ ...settings, buffer_before_minutes: 15, buffer_after_minutes: 60 });
+    const b = await book();
+    const insertShoot = (at: number) => db.query("insert into orders(id,status,scheduled_at,duration_minutes,photographer_id) values($1,'scheduled',$2,60,$3)", [randomUUID(), new Date(at).toISOString(), actor]);
+    // A shoot follows the CRM hold: session ends at +30, holds +60, shoot needs its own travel gap.
+    const afterBoundary = start.getTime() + (30 + 60 + travel) * 60000;
+    expect(await failed(() => insertShoot(afterBoundary - 15 * 60000))).toContain("client session reservation");
+    await insertShoot(afterBoundary);
+    // A shoot precedes the CRM hold: its end must allow the session's 15-minute preparation and shoot travel.
+    const beforeBoundary = start.getTime() - (60 + 15 + travel) * 60000;
+    expect(await failed(() => insertShoot(beforeBoundary + 15 * 60000))).toContain("client session reservation");
+    await insertShoot(beforeBoundary);
+    // Reverse the write order, keeping those exact same two boundaries.
+    await change(b.id, b.token, "cancel");
+    expect(await failed(() => book(randomUUID(), { starts_at: new Date(start.getTime() + 15 * 60000).toISOString() }))).toContain("just booked");
+    expect(await failed(() => book(randomUUID(), { starts_at: new Date(start.getTime() - 15 * 60000).toISOString() }))).toContain("just booked");
+    await book();
 });

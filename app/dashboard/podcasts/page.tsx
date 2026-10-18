@@ -1,3 +1,4 @@
+import { officeClientOptions } from '@/lib/clients/office-options';
 import { fmtDate } from '@/lib/utils/format';
 import Link from 'next/link';
 import { Mic } from 'lucide-react';
@@ -9,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function PodcastsPage() {
   const supabase = await createClient();
-  const [{ data: shows }, { data: episodes }, { data: clients }] = await Promise.all([
+  const [{ data: shows }, { data: episodes }, { data: clients, error: clientError }] = await Promise.all([
     supabase
       .from('podcast_shows')
       .select('id, name, slug, hosts, default_language, brand_color, logo_url, clients(full_name), episodes:podcast_episodes(id)')
@@ -19,7 +20,7 @@ export default async function PodcastsPage() {
       .select('id, title, status, episode_number, created_at, podcast_shows(name, slug)')
       .order('created_at', { ascending: false })
       .limit(100),
-    supabase.from('clients').select('id, full_name').order('full_name'),
+    officeClientOptions(supabase),
   ]);
 
   return (
@@ -31,7 +32,7 @@ export default async function PodcastsPage() {
             Shows per client + episodes flowing through the Make pipeline. Production OS is the source of truth.
           </p>
         </div>
-        <NewShowPanel clients={(clients ?? []) as any} />
+        {clientError ? <p role="alert" className="text-sm text-rose-700">{clientError.message}</p> : <NewShowPanel clients={(clients ?? []) as any} />}
       </div>
 
       {/* Shows */}
