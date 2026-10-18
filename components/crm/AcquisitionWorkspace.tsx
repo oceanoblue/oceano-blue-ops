@@ -157,9 +157,9 @@ export function AcquisitionWorkspace({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           className="text-sm text-ocean-700 hover:underline"
-          href="/dashboard/crm"
+          href="/dashboard/crm/inquiries"
         >
-          ← CRM & inquiries
+          ← Inquiry inbox
         </Link>
         <Link className="text-sm text-ocean-700 hover:underline" href="/dashboard/crm/scheduling">Scheduling links →</Link>
         <p className="text-xs text-slate-500">
