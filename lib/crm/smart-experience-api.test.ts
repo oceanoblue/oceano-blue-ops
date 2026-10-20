@@ -1,0 +1,18 @@
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+const mock=vi.hoisted(()=>({file:vi.fn(),state:vi.fn(),accept:vi.fn(),book:vi.fn(),checkout:vi.fn(),limit:vi.fn(),from:vi.fn()}));
+vi.mock('./server',async()=>({...await vi.importActual<typeof import('./server')>('./server'),crmDb:()=>({from:mock.from})}));
+vi.mock('./smart-experience-server',()=>({experienceFile:mock.file,experienceState:mock.state,acceptExperience:mock.accept}));
+vi.mock('./billing-server',()=>({projectCheckout:mock.checkout}));
+vi.mock('@/lib/security/crm-public-rate-limit',()=>({enforceCrmPublicRateLimit:mock.limit}));
+vi.mock('./scheduling-server',async()=>({...await vi.importActual<typeof import('./scheduling-server')>('./scheduling-server'),bookSession:mock.book}));
+import {POST} from '@/app/api/smart-files/[token]/experience/route';
+const token='a'.repeat(64),id='11111111-1111-4111-8111-111111111111';
+const book={action:'book',id,starts_at:'2026-11-01T15:00:00Z',phone:'1234567890',email_consent:false};
+const req=(body:unknown,origin='https://ops.test')=>new Request(`https://ops.test/api/smart-files/${token}/experience`,{method:'POST',headers:{origin,'Content-Type':'application/json'},body:JSON.stringify(body)});
+const ctx={params:Promise.resolve({token})};
+beforeEach(()=>{vi.resetAllMocks();vi.stubEnv('VERCEL_ENV','production');mock.limit.mockResolvedValue(null);mock.file.mockResolvedValue({file:{id},config:{session_slug:'headshots'}});mock.state.mockResolvedValue({acceptance:null,appointment:null,installments:[],payment_review:false});});
+afterEach(()=>vi.unstubAllEnvs());
+it('blocks preview writes and cross-origin mutations before provider calls',async()=>{vi.stubEnv('VERCEL_ENV','preview');expect((await POST(req(book),ctx)).status).toBe(403);vi.stubEnv('VERCEL_ENV','production');expect((await POST(req(book,'https://attacker.test'),ctx)).status).toBe(403);expect(mock.book).not.toHaveBeenCalled();expect(mock.checkout).not.toHaveBeenCalled();});
+it('requires a signature before booking and never accepts caller project/client identity',async()=>{expect((await POST(req(book),ctx)).status).toBe(409);mock.state.mockResolvedValue({acceptance:{signer_name:'Morgan',signer_email:'morgan@example.com'}});mock.book.mockResolvedValue({ok:true});expect((await POST(req({...book,email:'attacker@example.com',project_id:id}),ctx)).status).toBe(200);expect(mock.book).toHaveBeenCalledWith('headshots',expect.objectContaining({email:'morgan@example.com',full_name:'Morgan'}),token);});
+it('blocks checkout for unsigned, unreserved and cancelled sessions or unrelated installments',async()=>{const pay={action:'checkout',installment_id:id};expect((await POST(req(pay),ctx)).status).toBe(409);mock.state.mockResolvedValue({acceptance:{},appointment:{status:'cancelled'},installments:[{id}]});expect((await POST(req(pay),ctx)).status).toBe(409);mock.state.mockResolvedValue({acceptance:{},appointment:{status:'confirmed'},installments:[]});expect((await POST(req(pay),ctx)).status).toBe(404);expect(mock.checkout).not.toHaveBeenCalled();});
+it('fails closed when the durable rate limiter fails',async()=>{mock.limit.mockResolvedValue(new Response(null,{status:503}));expect((await POST(req(book),ctx)).status).toBe(503);expect(mock.file).not.toHaveBeenCalled();});

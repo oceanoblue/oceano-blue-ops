@@ -66,3 +66,58 @@ The start dialog shows every step and its approval rule. If a prior reply or arc
 Onboarding stays eligible as a booked project moves between its planning stages, and stops if it returns to an open lead stage or is lost/archived. A client questionnaire response or office reply hold still stops scheduled workflow emails. Existing internal review tasks remain useful follow-up work; archive continues to pause them under the original archive policy. Reopening a project does not restart an old onboarding run.
 
 Migration `20261017114950_crm_onboarding_email.sql` adds the enrollment ledger with office-only RLS and service-only mutation access. Local database tests cover explicit starts, duplicate requests, frozen scheduling buttons, manual emails without files, stage transitions, holds, approval, archival, template readiness, append-only history, and preview isolation. No client or provider email call was made during these tests. Delivery/bounce callbacks and inbound mailbox association remain separate from provider acceptance and are not claimed by this feature.
+
+## Guided booking smart files
+
+The **Booking experience** block adds packages and optional extras, an approved
+client agreement, typed electronic signature with explicit consent, optional
+native session scheduling, and deposit/balance payments. Add image blocks (HTTPS
+URLs or office-only JPEG/PNG/WebP uploads) and page breaks for the visual proposal.
+The template preview uses the actual client renderer without enabling mutations.
+Existing text/link/question files retain their original view and response flow.
+
+Use new projects with no existing invoice. Review actual deliverables, prices,
+tax, agreement text and payment schedule before marking a template ready; nothing
+is automatically imported from HoneyBook. Every package in one file shares its
+configured session calendar. Publish that calendar and verify the host connection.
+The full payment is due on signing unless the office chooses a deposit percentage;
+any balance is due the configured number of days after signing, in New York time.
+
+The client reviews the proposal, chooses one package and optional extras, answers
+questions and signs. The server validates the answers and recipient email. SQL
+calculates prices from the frozen issued snapshot, records immutable acceptance,
+and atomically creates a native Ops invoice. Replays reuse the signed record;
+changed submissions, a second accepted file or an existing invoice on that project
+are blocked. Typed signatures record consent, signing time, recipient email,
+SHA-256 of the original document/context, hashed IP and user agent. The private
+link and email match do not establish government-verified identity. Clients can
+print/save a PDF copy; office staff can inspect the signature, terms and answers
+in the issued-file viewer after link expiry or revocation.
+
+Scheduling uses the existing live-calendar/conflict checks and binds the session,
+attendance task and notifications to the original project. A session reservation
+is persistent even if the client abandons payment; it does not auto-expire. The
+client chooses session email consent; existing office notifications still apply.
+An existing reservation must be changed using **Manage session**. Cancellation or
+file revocation holds new invoice collection. An already-processing Stripe session
+can still finish and follows the existing invoice-version/payment-review checks.
+
+Payment uses existing Stripe Checkout with a frozen return path to the smart
+file. Browser redirects never settle invoices. The signed/payment state reloads
+from Ops, and the final confirmation requires a paid deposit and a confirmed
+session when scheduling is requested. Balances remain visible separately. New
+booking-file links last through the configured balance window plus a grace period;
+old issued links keep their original expiration. Revocation remains permanent.
+
+Apply `20261020230557_crm_smart_file_experience.sql` before deploying the app changes.
+The migration does not issue files, send messages, publish calendars or collect
+payments. It preserves legacy scheduling by extending the current function with
+asserted anchors; if the scheduler definition has changed, migration aborts.
+Uploads reuse the public-assets bucket, strip metadata and normalize images; only
+use approved portfolio imagery. No client file uploads or conditional question
+logic is introduced by this release.
+
+A verified booking installment credit advances an open project to the first
+booked stage (normally **Retainer paid**). Paying only the later balance does not
+advance it. Existing booked/planning, archived or lost stages are preserved;
+onboarding still requires its explicit office start.

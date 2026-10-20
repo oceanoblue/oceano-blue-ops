@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fieldSchema } from "./types";
+import { experienceBlockSchema } from "./smart-experience-types";
 const text = (max: number) => z.string().trim().max(max);
 const uuid = z.string().uuid();
 export const variables = [
@@ -16,20 +17,40 @@ export const safeLink = z
     const url = new URL(v);
     return url.protocol === "https:" && !url.username && !url.password;
   }, "Use a secure HTTPS link without login details.");
-export const messageTemplateSchema = z.object({
-  name: text(120).min(1),
-  subject: text(200)
-    .min(1)
-    .refine((v) => !/[\r\n]/.test(v), "Use a single-line subject."),
-  body: text(10000).min(1),
-  cta_label: text(80).default(""),
-  cta_url: z.union([z.literal(""), safeLink]).default(""),
-  ready: z.boolean().default(false),
-}).superRefine((v, ctx) => {
-  if (!!v.cta_label !== !!v.cta_url)
-    ctx.addIssue({ code: "custom", message: "Add both a button label and a secure URL, or leave both blank." });
-});
+export const messageTemplateSchema = z
+  .object({
+    name: text(120).min(1),
+    subject: text(200)
+      .min(1)
+      .refine((v) => !/[\r\n]/.test(v), "Use a single-line subject."),
+    body: text(10000).min(1),
+    cta_label: text(80).default(""),
+    cta_url: z.union([z.literal(""), safeLink]).default(""),
+    ready: z.boolean().default(false),
+  })
+  .superRefine((v, ctx) => {
+    if (!!v.cta_label !== !!v.cta_url)
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Add both a button label and a secure URL, or leave both blank.",
+      });
+  });
 export const fileBlockSchema = z.discriminatedUnion("kind", [
+  experienceBlockSchema,
+  z.object({
+    id: uuid,
+    kind: z.literal("image"),
+    title: text(180),
+    url: safeLink,
+    body: text(1000).default(""),
+  }),
+  z.object({
+    id: uuid,
+    kind: z.literal("page"),
+    title: text(180).min(1),
+    body: text(1000).default(""),
+  }),
   z.object({
     id: uuid,
     kind: z.literal("text"),
@@ -61,6 +82,41 @@ export const fileTemplateSchema = z
     blocks: z.array(fileBlockSchema).min(1).max(40),
   })
   .superRefine((v, ctx) => {
+    if (v.blocks.filter((b) => b.kind === "experience").length > 1)
+      ctx.addIssue({
+        code: "custom",
+        message: "Use one booking experience per file.",
+      });
+    for (const b of v.blocks)
+      if (b.kind === "experience") {
+        const ids = [...b.packages, ...b.addons].map((p) => p.id);
+        const maxSubtotal =
+          Math.max(...b.packages.map((p) => p.price_cents)) +
+          b.addons.reduce((n, a) => n + a.price_cents, 0);
+        if (
+          maxSubtotal + Math.round((maxSubtotal * b.tax_bps) / 10000) >
+          2000000000
+        )
+          ctx.addIssue({
+            code: "custom",
+            message: "Package and extra prices exceed the supported total.",
+          });
+        if (new Set(ids).size !== ids.length)
+          ctx.addIssue({
+            code: "custom",
+            message: "Package and extra IDs must be unique.",
+          });
+        if (
+          v.ready &&
+          (!b.terms.trim() ||
+            b.packages.some((p) => !p.title.trim() || p.price_cents < 1))
+        )
+          ctx.addIssue({
+            code: "custom",
+            message:
+              "Add your approved agreement and package prices before marking ready.",
+          });
+      }
     const keys = v.blocks
       .filter((b) => b.kind === "question")
       .map((b) => b.field.key);
@@ -109,7 +165,11 @@ export const sequenceSchema = z
   })
   .superRefine((v, ctx) => {
     if ((v.enrollment_kind === "inquiry") !== !!v.form_id)
-      ctx.addIssue({ code: "custom", message: "Inquiry workflows need a form; onboarding workflows start from a booked project." });
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Inquiry workflows need a form; onboarding workflows start from a booked project.",
+      });
     if (new Set(v.steps.map((s) => s.id)).size !== v.steps.length)
       ctx.addIssue({ code: "custom", message: "Step IDs must be unique." });
   });

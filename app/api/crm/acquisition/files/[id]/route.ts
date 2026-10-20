@@ -22,9 +22,16 @@ export async function GET(
     if (!data) throw new CrmError("File not found.", 404);
     const { access_token, ...safe } = data;
     const responses = data.crm_file_responses;
+    let acceptance = null;
+    if (data.snapshot?.blocks?.some((b: { kind: string }) => b.kind === "experience")) {
+      const result = await crmDb().from("crm_file_acceptances").select("package_id,addon_ids,signer_name,signer_email,agreement,consent_text,answers,document_hash,total_cents,deposit_cents,accepted_at,invoice_id").eq("file_id", id).maybeSingle();
+      if (result.error) throw new CrmError("Signed booking details are unavailable.", 503);
+      acceptance = result.data;
+    }
     return Response.json(
       {
         ...safe,
+        acceptance,
         crm_file_responses: Array.isArray(responses)
           ? responses
           : responses

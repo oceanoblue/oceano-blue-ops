@@ -76,12 +76,12 @@ export async function sessionAvailability(type: SessionType, day: string, ignore
     }
     return { slots: sessionSlots(type, day, busy), checkedAt: new Date().toISOString() };
 }
-export async function bookSession(slug: string, input: unknown) {
+export async function bookSession(slug: string, input: unknown, smartFileToken?: string) {
     schedulingProduction();
     const booking = sessionBookingSchema.parse(input);
     if (booking.website)
         throw new CrmError("Unable to book. Please contact the office.", 400);
-    const hash = createHash("sha256").update(JSON.stringify({ ...booking, starts_at: new Date(booking.starts_at).toISOString(), slug })).digest("hex");
+    const hash = createHash("sha256").update(JSON.stringify({ ...booking, starts_at: new Date(booking.starts_at).toISOString(), slug, ...(smartFileToken ? { smart_file_token: smartFileToken } : {}) })).digest("hex");
     const previous = await crmDb().from("crm_appointments").select("id,payload_hash,manage_token,session_type_id,crm_session_types(slug)").eq("id", booking.id).maybeSingle();
     if (previous.error)
         throw new CrmError("Booking is unavailable.", 503);
@@ -95,7 +95,7 @@ export async function bookSession(slug: string, input: unknown) {
     const available = await sessionAvailability(type, localSessionDay(new Date(booking.starts_at), type.timezone));
     if (!available.slots.includes(new Date(booking.starts_at).toISOString()))
         throw new CrmError("That time is no longer available. Choose another time.", 409);
-    const { data, error } = await crmDb().rpc("crm_session_commit", { p_id: booking.id, p_slug: slug, p_hash: hash, p_type_version: type.version, p_calendar_checked_at: available.checkedAt, p_data: { ...booking, manage_token: randomBytes(32).toString("hex") } });
+    const { data, error } = await crmDb().rpc("crm_session_commit", { p_id: booking.id, p_slug: slug, p_hash: hash, p_type_version: type.version, p_calendar_checked_at: available.checkedAt, p_data: { ...booking, ...(smartFileToken ? { smart_file_token: smartFileToken } : {}), manage_token: randomBytes(32).toString("hex") } });
     sessionRpcError(error);
     return data;
 }

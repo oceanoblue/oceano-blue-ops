@@ -1,8 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { FileDocument, FileContext } from "@/lib/crm/acquisition-types";
+import { FullSmartFileClient } from "./FullSmartFileClient";
 import { SmartFileDocument } from "./SmartFileDocument";
-export function SmartFileClient({
+export function SmartFileClient(props: Parameters<typeof LegacySmartFileClient>[0]) {
+  const config = props.document.blocks.find(b => b.kind === "experience");
+  return config?.kind === "experience" ? <FullSmartFileClient {...props} config={config} /> : <LegacySmartFileClient {...props} />;
+}
+function LegacySmartFileClient({
   token,
   document: doc,
   context,
