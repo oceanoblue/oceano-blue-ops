@@ -1,4 +1,7 @@
 "use client";
+import { SmartFileImageUpload } from "./SmartFileImageUpload";
+import { SmartExperienceEditor } from "./SmartExperienceEditor";
+import { FullSmartFileClient } from "./FullSmartFileClient";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -795,7 +798,8 @@ function FileEditor({ item, save }: { item?: FileTemplate; save: Save }) {
         },
       ],
     ),
-    [preview, setPreview] = useState(false);
+    [preview, setPreview] = useState(false),
+    [ready, setReady] = useState(item?.ready ?? false);
   const { busy, error, submit } = useEditorSave(save);
   const doc = {
     name: name || "Preview",
@@ -817,6 +821,35 @@ function FileEditor({ item, save }: { item?: FileTemplate; save: Save }) {
       [rows[i], rows[i + d]] = [rows[i + d], rows[i]];
       return rows;
     });
+  }
+  if (preview) {
+    const config = blocks.find((b) => b.kind === "experience");
+    return (
+      <div className="space-y-4">
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => setPreview(false)}
+        >
+          Back to editor
+        </button>
+        {config?.kind === "experience" ? (
+          config.packages.every((p) => p.price_cents > 0) ? (
+            <FullSmartFileClient
+              token="preview"
+              document={doc}
+              context={sample}
+              config={config}
+              readOnly
+            />
+          ) : (
+            <p>Add package prices to preview this experience.</p>
+          )
+        ) : (
+          <SmartFileDocument document={doc} context={sample} disabled />
+        )}
+      </div>
+    );
   }
   return (
     <form
@@ -840,7 +873,7 @@ function FileEditor({ item, save }: { item?: FileTemplate; save: Save }) {
     >
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-slate-500">
-          Text, secure document links, and client questions.
+          Photos, pages, questions, and a complete booking experience.
         </p>
         <button
           type="button"
@@ -850,204 +883,245 @@ function FileEditor({ item, save }: { item?: FileTemplate; save: Save }) {
           {preview ? "Back to editor" : "Preview file"}
         </button>
       </div>
-      {preview ? (
-        <div className="rounded-xl border border-ink-100 p-5">
-          <SmartFileDocument document={doc} context={sample} disabled />
-        </div>
-      ) : (
-        <>
-          <Label name="Internal template name">
-            <input
-              className="input"
-              required
-              maxLength={120}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </Label>
-          <Label name="Client-facing title">
-            <input
-              className="input"
-              required
-              maxLength={180}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </Label>
-          <Label name="Introduction">
-            <textarea
-              className="input"
-              maxLength={2000}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </Label>
-          <div className="space-y-4">
-            {blocks.map((b, i) => (
-              <section
-                key={b.id}
-                className="space-y-4 rounded-xl border border-ink-100 bg-ink-50/50 p-4"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    {i + 1} · {b.kind}
-                  </p>
-                  <div className="flex gap-1">
-                    <button
-                      className="btn-ghost"
-                      type="button"
-                      aria-label={`Move block ${i + 1} up`}
-                      disabled={i === 0}
-                      onClick={() => move(i, -1)}
-                    >
-                      <ArrowUp className="h-4 w-4" />
-                    </button>
-                    <button
-                      className="btn-ghost"
-                      type="button"
-                      aria-label={`Move block ${i + 1} down`}
-                      disabled={i === blocks.length - 1}
-                      onClick={() => move(i, 1)}
-                    >
-                      <ArrowDown className="h-4 w-4" />
-                    </button>
-                    <button
-                      className="btn-ghost"
-                      type="button"
-                      aria-label={`Remove block ${i + 1}`}
-                      disabled={blocks.length === 1}
-                      onClick={() =>
-                        setBlocks((old) => old.filter((_, n) => n !== i))
+      <>
+        <Label name="Internal template name">
+          <input
+            className="input"
+            required
+            maxLength={120}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Label>
+        <Label name="Client-facing title">
+          <input
+            className="input"
+            required
+            maxLength={180}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </Label>
+        <Label name="Introduction">
+          <textarea
+            className="input"
+            maxLength={2000}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </Label>
+        <div className="space-y-4">
+          {blocks.map((b, i) => (
+            <section
+              key={b.id}
+              className="space-y-4 rounded-xl border border-ink-100 bg-ink-50/50 p-4"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  {i + 1} · {b.kind}
+                </p>
+                <div className="flex gap-1">
+                  <button
+                    className="btn-ghost"
+                    type="button"
+                    aria-label={`Move block ${i + 1} up`}
+                    disabled={i === 0}
+                    onClick={() => move(i, -1)}
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    type="button"
+                    aria-label={`Move block ${i + 1} down`}
+                    disabled={i === blocks.length - 1}
+                    onClick={() => move(i, 1)}
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    type="button"
+                    aria-label={`Remove block ${i + 1}`}
+                    disabled={blocks.length === 1}
+                    onClick={() =>
+                      setBlocks((old) => old.filter((_, n) => n !== i))
+                    }
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              {b.kind === "experience" ? (
+                <SmartExperienceEditor
+                  value={b}
+                  onChange={(value) =>
+                    setBlocks((old) =>
+                      old.map((block, n) => (n === i ? value : block)),
+                    )
+                  }
+                />
+              ) : b.kind === "question" ? (
+                <>
+                  <Label name="Question label">
+                    <input
+                      className="input"
+                      required
+                      maxLength={150}
+                      value={b.field.label}
+                      onChange={(e) =>
+                        patch(i, {
+                          field: { ...b.field, label: e.target.value },
+                        })
+                      }
+                    />
+                  </Label>
+                  <Label name="Answer type">
+                    <select
+                      className="input"
+                      value={b.field.type}
+                      onChange={(e) =>
+                        patch(i, {
+                          field: {
+                            ...b.field,
+                            type: e.target.value as typeof b.field.type,
+                          },
+                        })
                       }
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                {b.kind === "question" ? (
-                  <>
-                    <Label name="Question label">
-                      <input
+                      {[
+                        "text",
+                        "textarea",
+                        "email",
+                        "tel",
+                        "date",
+                        "number",
+                        "select",
+                      ].map((t) => (
+                        <option key={t}>{t}</option>
+                      ))}
+                    </select>
+                  </Label>
+                  {b.field.type === "select" && (
+                    <Label name="Options (one per line)">
+                      <textarea
                         className="input"
-                        required
-                        maxLength={150}
-                        value={b.field.label}
-                        onChange={(e) =>
-                          patch(i, {
-                            field: { ...b.field, label: e.target.value },
-                          })
-                        }
-                      />
-                    </Label>
-                    <Label name="Answer type">
-                      <select
-                        className="input"
-                        value={b.field.type}
+                        value={b.field.options?.join("\n") ?? ""}
                         onChange={(e) =>
                           patch(i, {
                             field: {
                               ...b.field,
-                              type: e.target.value as typeof b.field.type,
+                              options: e.target.value.split("\n"),
                             },
                           })
                         }
-                      >
-                        {[
-                          "text",
-                          "textarea",
-                          "email",
-                          "tel",
-                          "date",
-                          "number",
-                          "select",
-                        ].map((t) => (
-                          <option key={t}>{t}</option>
-                        ))}
-                      </select>
-                    </Label>
-                    {b.field.type === "select" && (
-                      <Label name="Options (one per line)">
-                        <textarea
-                          className="input"
-                          value={b.field.options?.join("\n") ?? ""}
-                          onChange={(e) =>
-                            patch(i, {
-                              field: {
-                                ...b.field,
-                                options: e.target.value.split("\n"),
-                              },
-                            })
-                          }
-                        />
-                      </Label>
-                    )}
-                    <label className="flex min-h-11 items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={b.field.required}
-                        onChange={(e) =>
-                          patch(i, {
-                            field: { ...b.field, required: e.target.checked },
-                          })
-                        }
                       />
-                      Required question
-                    </label>
-                  </>
-                ) : (
-                  <>
+                    </Label>
+                  )}
+                  <label className="flex min-h-11 items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={b.field.required}
+                      onChange={(e) =>
+                        patch(i, {
+                          field: { ...b.field, required: e.target.checked },
+                        })
+                      }
+                    />
+                    Required question
+                  </label>
+                </>
+              ) : (
+                <>
+                  <Label
+                    name={
+                      b.kind === "text" ? "Section heading" : "Document title"
+                    }
+                  >
+                    <input
+                      className="input"
+                      maxLength={180}
+                      required={b.kind === "link"}
+                      value={b.title}
+                      onChange={(e) => patch(i, { title: e.target.value })}
+                    />
+                  </Label>
+                  {b.kind === "image" && (
+                    <SmartFileImageUpload
+                      onUpload={(url) => patch(i, { url })}
+                    />
+                  )}
+                  {(b.kind === "link" || b.kind === "image") && (
                     <Label
                       name={
-                        b.kind === "text" ? "Section heading" : "Document title"
+                        b.kind === "image"
+                          ? "Photo URL (HTTPS)"
+                          : "Secure document URL"
                       }
                     >
                       <input
                         className="input"
-                        maxLength={180}
-                        required={b.kind === "link"}
-                        value={b.title}
-                        onChange={(e) => patch(i, { title: e.target.value })}
+                        type="url"
+                        required
+                        placeholder="https://…"
+                        value={b.url}
+                        onChange={(e) => patch(i, { url: e.target.value })}
                       />
                     </Label>
-                    {b.kind === "link" && (
-                      <Label name="Secure document URL">
-                        <input
-                          className="input"
-                          type="url"
-                          required
-                          placeholder="https://…"
-                          value={b.url}
-                          onChange={(e) => patch(i, { url: e.target.value })}
-                        />
-                      </Label>
-                    )}
-                    <Label name={b.kind === "text" ? "Content" : "Description"}>
-                      <textarea
-                        className="input"
-                        rows={4}
-                        maxLength={b.kind === "text" ? 10000 : 1000}
-                        value={b.body}
-                        onChange={(e) => patch(i, { body: e.target.value })}
-                      />
-                    </Label>
-                  </>
-                )}
-              </section>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(["text", "link", "question"] as const).map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                className="btn-secondary"
-                disabled={blocks.length >= 40}
-                onClick={() =>
-                  setBlocks((old) => [
-                    ...old,
-                    kind === "text"
+                  )}
+                  <Label name={b.kind === "text" ? "Content" : "Description"}>
+                    <textarea
+                      className="input"
+                      rows={4}
+                      maxLength={b.kind === "text" ? 10000 : 1000}
+                      value={b.body}
+                      onChange={(e) => patch(i, { body: e.target.value })}
+                    />
+                  </Label>
+                </>
+              )}
+            </section>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(
+            ["text", "image", "page", "link", "question", "experience"] as const
+          ).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              className="btn-secondary"
+              disabled={
+                blocks.length >= 40 ||
+                (kind === "experience" &&
+                  blocks.some((b) => b.kind === "experience"))
+              }
+              onClick={() =>
+                setBlocks((old) => [
+                  ...old,
+                  kind === "experience"
+                    ? {
+                        id: crypto.randomUUID(),
+                        kind,
+                        title: "Your booking",
+                        packages: [
+                          {
+                            id: crypto.randomUUID(),
+                            title: "Headshot session",
+                            description: "",
+                            price_cents: 0,
+                          },
+                        ],
+                        addons: [],
+                        terms: "",
+                        session_slug: "",
+                        deposit_percent: 100,
+                        balance_days: 30,
+                        tax_bps: 0,
+                      }
+                    : kind === "text" || kind === "page"
                       ? { id: crypto.randomUUID(), kind, title: "", body: "" }
-                      : kind === "link"
+                      : kind === "link" || kind === "image"
                         ? {
                             id: crypto.randomUUID(),
                             kind,
@@ -1065,18 +1139,22 @@ function FileEditor({ item, save }: { item?: FileTemplate; save: Save }) {
                               required: false,
                             },
                           },
-                  ])
-                }
-              >
-                <Plus className="h-4 w-4" />
-                Add {kind}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+                ])
+              }
+            >
+              <Plus className="h-4 w-4" />
+              Add {kind}
+            </button>
+          ))}
+        </div>
+      </>
       <label className="flex min-h-11 items-center gap-3 text-sm">
-        <input name="ready" type="checkbox" defaultChecked={item?.ready} />
+        <input
+          name="ready"
+          type="checkbox"
+          checked={ready}
+          onChange={(e) => setReady(e.target.checked)}
+        />
         Ready for client use
       </label>
       <p className="text-xs text-slate-500">
@@ -1556,7 +1634,7 @@ function IssueFileEditor({
       )}
       <p className="text-xs leading-relaxed text-slate-500">
         From {data.email.from} · Replies to {data.email.replyTo}. The client
-        file link expires in 30 days and can be revoked from the issued-file
+        file link has an expiration date and can be revoked from the issued-file
         list.
       </p>
       <Feedback error={error || searchError} />
@@ -1582,6 +1660,15 @@ function IssuedFileViewer({ item, save }: { item: IssuedFile; save: Save }) {
       snapshot: FileDocument;
       context: FileContext;
       url: string | null;
+      acceptance?: {
+        signer_name: string;
+        signer_email: string;
+        accepted_at: string;
+        total_cents: number;
+        document_hash: string;
+        agreement: string;
+        answers: Record<string, string>;
+      } | null;
       crm_file_responses: {
         answers: Record<string, string>;
         created_at: string;
@@ -1669,6 +1756,37 @@ function IssuedFileViewer({ item, save }: { item: IssuedFile; save: Save }) {
           disabled
         />
       </div>
+      {details.acceptance && (
+        <section className="space-y-3 rounded-xl bg-emerald-50 p-5 text-sm">
+          <h3 className="font-semibold">Signed booking</h3>
+          <p>
+            {details.acceptance.signer_name} · {details.acceptance.signer_email}
+          </p>
+          <p>
+            {fmtDateTime(details.acceptance.accepted_at)} · $
+            {(details.acceptance.total_cents / 100).toFixed(2)}
+          </p>
+          <p className="break-all text-xs">
+            Document SHA-256: {details.acceptance.document_hash}
+          </p>
+          <details>
+            <summary className="cursor-pointer">
+              Signed agreement and answers
+            </summary>
+            <p className="mt-3 whitespace-pre-wrap">
+              {details.acceptance.agreement}
+            </p>
+            {Object.entries(details.acceptance.answers).map(([key, value]) => (
+              <p key={key} className="mt-2">
+                {key}: {value}
+              </p>
+            ))}
+          </details>
+          <a className="underline" href="/dashboard/crm/billing">
+            View invoice and payments
+          </a>
+        </section>
+      )}
       {details.crm_file_responses[0] && (
         <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
           Response received{" "}

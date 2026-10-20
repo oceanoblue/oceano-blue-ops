@@ -34,6 +34,59 @@ export function SmartFileDocument({
         )}
       </div>
       {doc.blocks.map((block) => {
+        if (block.kind === "experience")
+          return (
+            <section
+              key={block.id}
+              className="space-y-3 rounded-2xl border border-ink-100 p-5"
+            >
+              <h2 className="text-xl">{block.title}</h2>
+              {block.packages.map((p) => (
+                <p key={p.id}>
+                  {p.title} · ${(p.price_cents / 100).toFixed(2)}
+                </p>
+              ))}
+              <p className="text-sm text-slate-500">
+                {block.deposit_percent}% at booking
+                {block.deposit_percent < 100
+                  ? `; balance due ${block.balance_days} days after signing`
+                  : ""}
+                . {block.session_slug ? "Session scheduling included." : ""}
+              </p>
+              <details>
+                <summary>Agreement</summary>
+                <p className="mt-3 whitespace-pre-wrap text-sm">
+                  {mergeText(block.terms, context)}
+                </p>
+              </details>
+            </section>
+          );
+        if (block.kind === "image")
+          return (
+            <figure key={block.id} className="overflow-hidden rounded-2xl">
+              <img
+                src={block.url}
+                alt={block.title}
+                referrerPolicy="no-referrer"
+                className="w-full object-cover"
+                loading="lazy"
+              />
+              {block.body && (
+                <figcaption className="mt-3 text-sm text-slate-500">
+                  {block.body}
+                </figcaption>
+              )}
+            </figure>
+          );
+        if (block.kind === "page")
+          return (
+            <section key={block.id} className="border-t border-ink-100 pt-8">
+              <h2 className="text-2xl">{block.title}</h2>
+              {block.body && (
+                <p className="mt-3 text-slate-600">{block.body}</p>
+              )}
+            </section>
+          );
         if (block.kind === "text")
           return (
             <section key={block.id} className="space-y-3">
