@@ -32,6 +32,10 @@
     {
       "path": "/api/crm/scheduling/notifications",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/gallery-edits",
+      "schedule": "* * * * *"
     }
   ]
 }
