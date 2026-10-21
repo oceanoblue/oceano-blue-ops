@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { stagingRooms, stagingStyles, stagingPalettes, stagingFurnishing, stagingAccents } from './staging';
+
+const keys = <T extends Record<string, unknown>>(choices: T) => Object.keys(choices) as [keyof T & string, ...(keyof T & string)[]];
 
 export const areaSchema = z.object({
   x: z.number().min(0).max(0.95), y: z.number().min(0).max(0.95),
@@ -7,8 +10,11 @@ export const areaSchema = z.object({
 export const editSchema = z.discriminatedUnion('operation', [
   z.object({ id: z.string().uuid(), photo_id: z.string().uuid(), operation: z.literal('declutter'), options: z.object({ area: areaSchema }).strict() }).strict(),
   z.object({ id: z.string().uuid(), photo_id: z.string().uuid(), operation: z.literal('virtual_stage'), options: z.object({
-    room: z.enum(['living_room','bedroom','dining_room','office']),
-    style: z.enum(['coastal','modern','transitional']),
+    room: z.enum(keys(stagingRooms)),
+    style: z.enum(keys(stagingStyles)),
+    palette: z.enum(keys(stagingPalettes)).optional(),
+    furnishing: z.enum(keys(stagingFurnishing)).optional(),
+    accents: z.enum(keys(stagingAccents)).optional(),
   }).strict() }).strict(),
 ]);
 export type EditInput = z.infer<typeof editSchema>;

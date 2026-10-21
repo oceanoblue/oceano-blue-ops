@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sparkles, RefreshCw } from 'lucide-react';
 import { creditCost, editStatusLabel, type ClientEdit, type EditArea, type EditInput } from '@/lib/gallery-edits/schema';
+import { defaultStaging, type StagingChoices } from '@/lib/gallery-edits/staging';
+import { StagingOptions, StagingReference } from './StagingOptions';
 type Photo={id:string;filename:string;url:string|null};
 type State={remaining:number;enabled:boolean;edits:ClientEdit[]};
 const defaultArea:EditArea={x:0.3,y:0.3,width:0.3,height:0.3};
@@ -9,8 +11,7 @@ export function PhotoEdits({token,photos,selectedPhoto,locked,demo=false}:{token
   const [state,setState]=useState<State|null>(demo?{remaining:5,enabled:false,edits:[]}:null);
   const [photoId,setPhotoId]=useState(selectedPhoto || photos[0]?.id || '');
   const [operation,setOperation]=useState<EditInput['operation']>('declutter');
-  const [room,setRoom]=useState('living_room');
-  const [style,setStyle]=useState('coastal');
+  const [staging,setStaging]=useState<StagingChoices>(defaultStaging);
   const [area,setArea]=useState<EditArea>(defaultArea);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
@@ -43,7 +44,7 @@ export function PhotoEdits({token,photos,selectedPhoto,locked,demo=false}:{token
   async function generate(){
     if(submitting.current || disabled || !confirmed || !photo || (state?.remaining??0)<cost) return;
     submitting.current=true;setBusy(true);setError('');setMessage('');
-    const fields={photo_id:photoId,operation,options:operation==='declutter'?{area}:{room,style}};
+    const fields={photo_id:photoId,operation,options:operation==='declutter'?{area}:staging};
     const signature=JSON.stringify(fields);
     if(!pending.current || pending.current.signature!==signature) pending.current={signature,id:crypto.randomUUID()};
     try {
@@ -68,9 +69,10 @@ export function PhotoEdits({token,photos,selectedPhoto,locked,demo=false}:{token
             {operation==='declutter' && <div aria-hidden="true" className="pointer-events-none absolute border-2 border-white bg-ocean-500/25 ring-2 ring-ocean-700" style={{left:`${area.x*100}%`,top:`${area.y*100}%`,width:`${area.width*100}%`,height:`${area.height*100}%`}}/>}
           </div>}
           {operation==='declutter' && <div className="mt-3"><p className="text-xs leading-5 text-slate-500">Position the box over small loose objects. Only this area is edited. Leave permanent features and property defects visible.</p><div className="mt-3 grid grid-cols-2 gap-3">{(['x','y','width','height'] as const).map(key=><label key={key} className="text-xs text-slate-600">{{x:'Left / right',y:'Up / down',width:'Box width',height:'Box height'}[key]}<input aria-label={{x:'Horizontal position',y:'Vertical position',width:'Selection width',height:'Selection height'}[key]} type="range" min={key==='x'||key==='y'?0:0.05} max={key==='x'?1-area.width:key==='y'?1-area.height:0.5} step="0.01" value={area[key]} onChange={e=>moveArea(key,Number(e.target.value))} className="mt-1 block w-full accent-blue-600"/></label>)}</div></div>}
+          {operation==='virtual_stage' && <StagingReference style={staging.style}/>}
         </div>
         <div><p className="text-sm font-medium">2. Choose your edit</p><div className="mt-2 grid gap-2">{([{id:'declutter',title:'Remove small clutter',hint:'Mail, cords and small personal items · 1 credit'},{id:'virtual_stage',title:'Virtual staging',hint:'Add furniture to an empty room · 2 credits'}] as const).map(item=><label key={item.id} className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${operation===item.id?'border-ocean-500 bg-ocean-50':'border-slate-200'}`}><input type="radio" name="edit-operation" value={item.id} checked={operation===item.id} onChange={()=>{setOperation(item.id);setConfirmed(false);}}/><span><span className="block text-sm font-semibold">{item.title}</span><span className="mt-1 block text-xs text-slate-600">{item.hint}</span></span></label>)}</div>
-          {operation==='virtual_stage' && <div className="mt-4 grid grid-cols-2 gap-3"><label className="text-sm">Room<select className="input mt-1 w-full" value={room} onChange={e=>{setRoom(e.target.value);setConfirmed(false);}}><option value="living_room">Living room</option><option value="bedroom">Bedroom</option><option value="dining_room">Dining room</option><option value="office">Office</option></select></label><label className="text-sm">Style<select className="input mt-1 w-full" value={style} onChange={e=>{setStyle(e.target.value);setConfirmed(false);}}><option value="coastal">Coastal</option><option value="modern">Modern</option><option value="transitional">Transitional</option></select></label></div>}
+          {operation==='virtual_stage' && <StagingOptions value={staging} onChange={value=>{setStaging(value);setConfirmed(false);}}/>}
           <p className="mt-4 text-xs leading-5 text-slate-500">Oceano Blue reviews each result. Edits keep a visible disclosure label and are separate files up to 2048 px. Your original high-resolution files stay unchanged. Each new variation uses credits; downloads are free. Failed or rejected edits return credits.</p>
           <label className="mt-4 flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/><span>Use {cost} {cost===1?'credit':'credits'} for this edit. {operation==='virtual_stage'?'This is an empty interior room.':'The selected area contains only removable personal clutter.'}</span></label>
           <button type="button" className="btn-primary mt-4 w-full" disabled={disabled || !confirmed || (state?.remaining??0)<cost} onClick={()=>void generate()}>{busy?'Submitting…':`Request edit · ${cost} ${cost===1?'credit':'credits'}`}</button>
