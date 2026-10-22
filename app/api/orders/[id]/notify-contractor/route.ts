@@ -1,3 +1,4 @@
+import { SERVICE_SCOPE_COLUMNS, serviceScope, scopeText } from '@/lib/field/service-scope';
 import { NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { createPhotoIntakeRequest } from '@/lib/integrations/dropbox';
@@ -31,13 +32,14 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     .maybeSingle();
   if (!teamRow) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
-  const { data: order } = await admin
+  const { data: order, error: orderError } = await admin
     .from('orders')
     .select(
-      'id, order_number, contractor_id, assignment_round, scheduled_at, timezone, pay_amount_cents, dropbox_intake_url, dropbox_intake_path, listings(address_line1, city, state, zip, sqft), internal_notes'
+      `id, order_number, contractor_id, assignment_round, scheduled_at, timezone, pay_amount_cents, dropbox_intake_url, dropbox_intake_path, listings(address_line1, city, state, zip, sqft),${SERVICE_SCOPE_COLUMNS}`
     )
     .eq('id', params.id)
     .maybeSingle();
+  if (orderError) return NextResponse.json({ error: 'Could not load shoot services.' }, { status: 503 });
   if (!order) return NextResponse.json({ error: 'order_not_found' }, { status: 404 });
   if (!order.contractor_id) {
     return NextResponse.json({ error: 'no_contractor_assigned' }, { status: 400 });
@@ -85,13 +87,15 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   const declineUrl = token ? respondPageUrl(base, token, 'declined') : null;
   const respondUrl = token ? respondPageUrl(base, token) : `${base}/field/shoots/${order.id}`;
 
+  const scope = serviceScope(order);
+  const services = scopeText(scope) + (scope.splitCrew ? ' Video is handled by another crew member.' : '');
   const { subject, html } = contractorAssignmentEmail({
     contractorName: contractor.full_name,
     address: addr,
     cityStateZip: [listing.city, listing.state, listing.zip].filter(Boolean).join(', '),
     whenText,
     sqft: listing.sqft,
-    services: order.internal_notes,
+    services,
     payText: pay && pay > 0 ? fmtCents(pay) : null,
     uploadUrl: uploadUrl!,
     portalUrl: `${base}/field/shoots/${order.id}`,
@@ -111,7 +115,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   // went out, so an SMS hiccup never fails the request.
   const sms = await sendSms({
     to: contractor.phone,
-    text: `Oceano Blue: can you shoot ${addr}${whenText ? ` on ${whenText}` : ''}? Accept or decline: ${respondUrl}`,
+    text: `Oceano Blue: can you shoot ${addr}${whenText ? ` on ${whenText}` : ''}? Required shoot services: ${services}. Accept or decline: ${respondUrl}`,
   });
   if (sms.status === 'failed') console.error('[notify-contractor] sms failed:', sms.error);
 

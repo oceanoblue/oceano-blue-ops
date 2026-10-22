@@ -1,9 +1,10 @@
 import {roleWindow} from '@/lib/booking/crew-windows';
-import {photographerScope} from '@/lib/booking/capture-skills';
+import { SERVICE_SCOPE_COLUMNS, serviceScope, type ServiceScope } from '@/lib/field/service-scope';
+import { ServiceChecklist } from '@/components/field/ServiceChecklist';
 import {fmtTimeInTz} from '@/lib/utils/timezone';
 import Link from 'next/link';
 import { ResponseForm } from '@/components/field/ResponseForm';
-import { Check, X, CheckCircle2, XCircle, AlertTriangle, MapPin, CalendarDays, Camera } from 'lucide-react';
+import { Check, X, CheckCircle2, XCircle, AlertTriangle, MapPin, CalendarDays } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/server';
 import { verifyRespondToken } from '@/lib/field/respond-token';
 import { fmtDateTimeTz } from '@/lib/utils/format';
@@ -50,7 +51,7 @@ export default async function RespondPage(
     admin
       .from('orders')
       .select(
-        'photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,duration_minutes,id, status, archived_at, scheduled_at, timezone, contractor_id, assignment_round, assignment_state, assignment_confirmation_mode, contractor_response, contractor_response_note, dropbox_intake_url, photographer_id, videographer_id, listings(address_line1, city, state, zip, sqft), order_items(description, quantity, products(name, kind))'
+        'photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,duration_minutes,id, status, archived_at, scheduled_at, timezone, contractor_id, assignment_round, assignment_state, assignment_confirmation_mode, contractor_response, contractor_response_note, dropbox_intake_url, photographer_id, videographer_id, listings(address_line1, city, state, zip, sqft), ' + SERVICE_SCOPE_COLUMNS
       )
       .eq('id', payload.o)
       .maybeSingle(),
@@ -86,8 +87,7 @@ export default async function RespondPage(
   const cityStateZip = [l.city, l.state, l.zip].filter(Boolean).join(', ');
   const visit=roleWindow(order,'photographer');
   const when = visit.start&&visit.end ? `${fmtDateTimeTz(visit.start,order.timezone)}–${fmtTimeInTz(visit.end,order.timezone)}` : null;
-  const splitCrew = !!order.videographer_id && order.videographer_id !== order.photographer_id;
-  const scope = photographerScope(order.order_items, splitCrew);
+  const scope = serviceScope(order);
   const first = (contractor.full_name || '').split(' ')[0] || 'there';
   const action = `/api/field/respond/${encodeURIComponent(token)}`;
 
@@ -98,7 +98,7 @@ export default async function RespondPage(
   if (current === 'accepted' || automatic) {
     return (
       <Shell title={automatic ? 'Your confirmed shoot' : `Thanks, ${first}!`}>
-        <ShootCard address={address} cityStateZip={cityStateZip} when={when} scope={scope} splitCrew={splitCrew} />
+        <ShootCard address={address} cityStateZip={cityStateZip} when={when} scope={scope} />
         <Card>
           <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-800">
             <CheckCircle2 className="h-5 w-5" /> {automatic ? 'Confirmed automatically. No acceptance is required.' : 'You accepted this shoot.'}
@@ -122,7 +122,7 @@ export default async function RespondPage(
   if (current === 'declined') {
     return (
       <Shell title="Got it">
-        <ShootCard address={address} cityStateZip={cityStateZip} when={when} scope={scope} splitCrew={splitCrew} />
+        <ShootCard address={address} cityStateZip={cityStateZip} when={when} scope={scope} />
         <Card>
           <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-700">
             <XCircle className="h-5 w-5" /> You declined this shoot.
@@ -142,7 +142,7 @@ export default async function RespondPage(
 
   return (
     <Shell title={`Hi ${first}, can you shoot this?`}>
-      <ShootCard address={address} cityStateZip={cityStateZip} when={when} scope={scope} splitCrew={splitCrew} />
+      <ShootCard address={address} cityStateZip={cityStateZip} when={when} scope={scope} />
       <Card>
         {choice === 'accepted' ? (
           <ResponseForm action={action} className="space-y-3">
@@ -197,7 +197,7 @@ function Card({ children }: { children: React.ReactNode }) {
   return <section className="card p-5">{children}</section>;
 }
 
-function ShootCard({ address, cityStateZip, when, scope, splitCrew }: { address: string; cityStateZip: string; when: string | null; scope: string[]; splitCrew: boolean }) {
+function ShootCard({ address, cityStateZip, when, scope }: { address: string; cityStateZip: string; when: string | null; scope: ServiceScope }) {
   return (
     <Card>
       <div className="font-display text-lg font-semibold text-ink-900">{address}</div>
@@ -213,19 +213,7 @@ function ShootCard({ address, cityStateZip, when, scope, splitCrew }: { address:
           </div>
         )}
       </dl>
-      {(scope.length > 0 || splitCrew) && (
-        <div className="mt-4 border-t border-slate-100 pt-3">
-          <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <Camera className="h-3.5 w-3.5" /> What you&rsquo;re shooting
-          </p>
-          {scope.length > 0 && (
-            <ul className="mt-2 space-y-1 text-sm text-ink-900">
-              {scope.map((s) => <li key={s}>• {s}</li>)}
-            </ul>
-          )}
-          {splitCrew && <p className="mt-2 text-xs text-slate-500">Video is handled by another crew member.</p>}
-        </div>
-      )}
+      <div className="mt-4"><ServiceChecklist scope={scope} /></div>
     </Card>
   );
 }

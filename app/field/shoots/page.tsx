@@ -1,3 +1,5 @@
+import { loadFieldServiceScopes } from '@/lib/field/load-service-scopes';
+import { ServiceChecklist } from '@/components/field/ServiceChecklist';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Camera, Plus, MapPin } from 'lucide-react';
@@ -51,6 +53,7 @@ export default async function FieldShootsPage() {
     .select('id, status, source, scheduled_at, created_at, dropbox_intake_url, listing')
     .order('created_at', { ascending: false });
 
+  const scopes = await loadFieldServiceScopes((shoots ?? []).map(s => s.id).filter((id): id is string => !!id));
   const firstName = me.full_name?.split(' ')[0] ?? 'there';
 
   return (
@@ -106,6 +109,7 @@ export default async function FieldShootsPage() {
                         {' · logged '}
                         {fmtRelative(s.created_at)}
                       </div>
+                      <ServiceChecklist scope={scopes.get(s.id ?? '')} compact />
                     </div>
                     <StatusBadge status={s.status} className="shrink-0" />
                   </Link>

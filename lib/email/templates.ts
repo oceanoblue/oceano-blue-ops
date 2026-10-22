@@ -57,7 +57,6 @@ export function contractorAssignmentEmail(p: {
   const meta = [
     p.cityStateZip,
     p.sqft ? `${p.sqft.toLocaleString()} sqft` : null,
-    p.services ? p.services.replace(/^Field services:\s*/, '') : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -83,6 +82,7 @@ export function contractorAssignmentEmail(p: {
       ${meta ? `<div style="font-size:13px;color:#708698;margin-top:3px;">${escapeHtml(meta)}</div>` : ''}
       ${p.payText ? `<div style="font-size:13px;color:#324354;margin-top:10px;padding-top:10px;border-top:1px solid #eef1f4;"><span style="color:#708698;">Your pay:</span> <strong>${escapeHtml(p.payText)}</strong></div>` : ''}
     </div>
+    <div style="background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:16px;margin-bottom:20px;"><strong>Required shoot services</strong><p style="margin:8px 0 0;">${escapeHtml(p.services || 'Services not specified. Confirm with the office before the shoot.')}</p></div>
     ${respond}
     <div style="border-top:1px solid #eef1f4;padding-top:18px;">
       <p style="font-size:14px;line-height:1.5;color:#324354;margin:0 0 12px;">

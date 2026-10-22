@@ -1,3 +1,5 @@
+import { SERVICE_SCOPE_COLUMNS, serviceScope } from '@/lib/field/service-scope';
+import { ServiceChecklist } from '@/components/field/ServiceChecklist';
 import {roleWindow,CREW_WINDOW_COLUMNS} from '@/lib/booking/crew-windows';
 import {fmtTimeInTz} from '@/lib/utils/timezone';
 import { notFound, redirect } from 'next/navigation';
@@ -18,7 +20,7 @@ export default async function TeamAssignmentPage({params}: {params:Promise<{id:s
   const {data:staff} = await admin.from('team_members').select('role,is_active').eq('id',user.id).single();
   if (!staff?.is_active || !['admin','photographer'].includes(staff.role)) notFound();
   // Privileged read is explicitly scoped to the authenticated assignee.
-  const {data:order} = await admin.from('orders').select(CREW_WINDOW_COLUMNS+',duration_minutes,auto_dispatch,id,status,scheduled_at,timezone,photographer_id,contractor_id,assignment_state,assignment_round,assignment_confirmation_mode,assignment_due_at,listings(address_line1,city,state,zip)')
+  const {data:order} = await admin.from('orders').select(CREW_WINDOW_COLUMNS+',duration_minutes,auto_dispatch,id,status,scheduled_at,timezone,photographer_id,contractor_id,assignment_state,assignment_round,assignment_confirmation_mode,assignment_due_at,listings(address_line1,city,state,zip),'+SERVICE_SCOPE_COLUMNS)
     .eq('id',id).eq('photographer_id',user.id).is('contractor_id',null).is('archived_at',null).maybeSingle();
   if (!order) notFound();
   const listing = order.listings || {};
@@ -27,6 +29,7 @@ export default async function TeamAssignmentPage({params}: {params:Promise<{id:s
   return <div className="min-h-screen bg-slate-50">
     <PortalHero eyebrow="Your assignment" title={listing.address_line1 || 'Shoot'} subtitle={[listing.city,listing.state,listing.zip].filter(Boolean).join(', ')} />
     <main className="mx-auto max-w-lg space-y-5 px-4 py-6">
+      <ServiceChecklist scope={serviceScope(order)} />
       <section className="card space-y-4 p-5">
         <p className="font-medium">{fmtDateTimeTz(visit.start,order.timezone)}{visit.end&&`–${fmtTimeInTz(visit.end,order.timezone)}`}</p>
         <p className="text-sm text-slate-600">{assignmentLabel(order)}</p>
