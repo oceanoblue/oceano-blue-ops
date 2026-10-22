@@ -9,9 +9,9 @@ export async function loadFieldServiceScopes(orderIds: string[]): Promise<Map<st
   const client = await createClient();
   const { data: { user }, error: authError } = await client.auth.getUser();
   if (authError || !user) throw new Error('Sign in to view shoot services.');
-  const { data: contractor, error } = await client.from('contractors').select('id').eq('auth_user_id', user.id).maybeSingle();
+  const { data: contractor, error } = await client.from('contractors').select('id,is_active').eq('auth_user_id', user.id).maybeSingle();
   if (error) throw error;
-  if (!contractor) return scopes;
+  if (!contractor?.is_active) return scopes;
   const admin = createAdminClient({ noStore: true });
   // Batches avoid oversized PostgREST URLs for long shoot histories.
   for (let offset = 0; offset < orderIds.length; offset += 100) {

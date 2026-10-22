@@ -10,7 +10,7 @@ vi.mock('@/components/field/RespondControl', () => ({ RespondControl: () => 'Acc
 vi.mock('@/lib/supabase/server', () => {
   const db = () => ({ auth: { getUser: async () => ({ data: { user: { id: 'karen-user' } } }) }, from: (table: string) => {
     const filters: ((row: any) => boolean)[] = [];
-    const rows = () => (table === 'contractors' ? [{ id: 'karen', auth_user_id: 'karen-user', full_name: 'Karen' }] : [state.order]).filter(r => filters.every(f => f(r)));
+    const rows = () => (table === 'contractors' ? [{ id: 'karen', is_active: true, auth_user_id: 'karen-user', full_name: 'Karen' }] : [state.order]).filter(r => filters.every(f => f(r)));
     const q: any = {
       select: (columns: string) => { state.columns.push(columns); return q; },
       eq: (key: string, value: any) => { filters.push(r => r[key] === value); return q; },
