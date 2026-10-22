@@ -47,3 +47,12 @@ it('keeps the client window but invites photography and holds video for their ow
   expect(mocks.insert).toHaveBeenCalledWith('gustavo','info@oceanoblue.net',expect.objectContaining({summary:'Photography · Karen · 48 Rice Mill Road',startIso:'2026-09-30T19:30:00.000Z',endIso:'2026-09-30T20:30:00.000Z',attendees:[{email:'karen@example.test',responseStatus:undefined}]}),'all','order:info@oceanoblue.net:photographer');
   expect(mocks.insert).toHaveBeenCalledWith('gustavo','gustavo@example.test',expect.objectContaining({startIso:'2026-09-30T20:30:00.000Z',endIso:'2026-09-30T21:30:00.000Z',attendees:[]}),'none','order:gustavo@example.test');
 });
+
+it('puts actual ordered 360 and floor plan services in calendar descriptions even with empty notes',async()=>{
+  order.internal_notes=null;
+  order.order_items=[{description:'Interior/Exterior Photography'},{description:'3D Home + Floor Plan',products:{name:'3D Home + Floor Plan',kind:'addon',slug:'three_d_floor_plan'}}];
+  await syncShootCalendar('order',{strict:true});
+  for(const call of mocks.insert.mock.calls) {
+    expect(call[2].description).toContain('Required shoot services: Interior/Exterior Photography, 3D Home + Floor Plan (360 tour)');
+  }
+});

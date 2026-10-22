@@ -115,3 +115,14 @@ it('sends the photographer only their one-hour visit in both email and SMS',asyn
  await deliverFollowup({...event,kind:'assignment_sms'});
  expect(vi.mocked(sendSms).mock.calls[0][0].text).toContain('3:30 PM–4:30 PM');
 });
+
+it('includes bundled 360 and floor plan in both contractor notification channels',async()=>{
+  const event=job();event.kind='assignment_email';event.payload.assignment_round=1;event.payload.contractor_id='contractor';
+  readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'awaiting_response',assignment_round:1,contractor_id:'contractor',assignment_due_at:new Date(Date.now()+3600000).toISOString(),internal_notes:null,order_items:[{quantity:1,description:'Interior/Exterior Photography'},{quantity:1,description:'3D Home + Floor Plan',products:{name:'3D Home + Floor Plan',kind:'addon',slug:'three_d_floor_plan'}}]}});
+  vi.mocked(sendEmail).mockResolvedValue({status:'sent',id:'sent'} as any);
+  vi.mocked(sendSms).mockResolvedValue({status:'sent'} as any);
+  await deliverFollowup(event);
+  expect(vi.mocked(sendEmail).mock.calls[0][0].html).toContain('3D Home + Floor Plan (360 tour)');
+  await deliverFollowup({...event,kind:'assignment_sms'});
+  expect(vi.mocked(sendSms).mock.calls[0][0].text).toContain('3D Home + Floor Plan (360 tour)');
+});

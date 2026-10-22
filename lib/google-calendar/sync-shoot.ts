@@ -1,3 +1,4 @@
+import { SERVICE_SCOPE_COLUMNS, serviceScope, scopeText } from '@/lib/field/service-scope';
 import {roleWindow} from '@/lib/booking/crew-windows';
 import { createAdminClient } from '@/lib/supabase/server';
 import {
@@ -153,7 +154,7 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
   const { data: order, error: orderError } = await admin
     .from('orders')
     .select(
-      'photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, videographer_id, contractor_id, contractor_response, assignment_round, assignment_state, assignment_confirmation_mode, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name)'
+      'photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,id, order_number, status, archived_at, scheduled_at, duration_minutes, timezone, photographer_id, videographer_id, contractor_id, contractor_response, assignment_round, assignment_state, assignment_confirmation_mode, dropbox_intake_url, internal_notes, project_type, listings(address_line1, city, state, zip), clients(full_name),' + SERVICE_SCOPE_COLUMNS
     )
     .eq('id', orderId)
     .maybeSingle();
@@ -260,9 +261,8 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
 
     const client = (order.clients as any)?.full_name;
     const arch = order.project_type === 'architectural' ? ' [Architectural]' : '';
-    const services = order.internal_notes
-      ? String(order.internal_notes).replace(/^Field services:\s*/, '')
-      : '';
+    const services = scopeText(serviceScope(order, true));
+    const photoServices = scopeText(serviceScope(order));
     const shooterLabel = shooterName
       ? `${shooterName}${isContractor ? ' (contractor)' : ''}`
       : '';
@@ -292,7 +292,8 @@ export async function syncShootCalendar(orderId: string, options: { strict?: boo
     const description = [
       client ? `Client: ${client}` : null,
       shooterLabel ? `Shooter: ${shooterLabel}` : 'Unassigned',
-      services ? `Services: ${services}` : null,
+      `Required shoot services: ${services}`,
+      separateVideo ? `Photography crew: ${photoServices}. Video is handled by ${videoName}.` : null,
       (order as any).assignment_state==='confirmed' && (order as any).assignment_confirmation_mode==='automatic' ? 'Confirmed automatically. No acceptance required.' : null,
       respondUrl ? `${(order as any).assignment_confirmation_mode==='automatic' ? 'Review shoot or decline' : 'Accept or decline'}: ${respondUrl}` : null,
       guestEmail && order.dropbox_intake_url ? `Upload RAWs: ${order.dropbox_intake_url}` : null,

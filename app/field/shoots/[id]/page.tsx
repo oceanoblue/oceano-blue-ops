@@ -1,3 +1,5 @@
+import { loadFieldServiceScopes } from '@/lib/field/load-service-scopes';
+import { ServiceChecklist } from '@/components/field/ServiceChecklist';
 import {roleWindow} from '@/lib/booking/crew-windows';
 import {fmtDateTimeTz} from '@/lib/utils/format';
 import {fmtTimeInTz} from '@/lib/utils/timezone';
@@ -31,6 +33,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
 
   const {data:version}=await (createAdminClient() as any).from('orders').select('scheduled_at,duration_minutes,timezone,photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,assignment_round,assignment_state,assignment_confirmation_mode,photographer_id,videographer_id,videographer:team_members!orders_videographer_id_fkey(full_name)').eq('id',shoot.id).single();
   const visit=version?roleWindow(version,'photographer'):null;
+  const scopes = await loadFieldServiceScopes([shoot.id]);
   const l = (shoot.listing ?? {}) as any;
 
   return (
@@ -46,6 +49,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
       </PortalHero>
 
       <main className="mx-auto max-w-lg space-y-5 px-4 py-6 sm:px-6 sm:py-8">
+        <ServiceChecklist scope={scopes.get(shoot.id)} />
         {(['booked', 'scheduled'].includes(shoot.status) || shoot.contractor_response) && (
           <section className="card p-5">
             <h2 className="mb-3 font-semibold">This assignment</h2>
@@ -88,7 +92,7 @@ export default async function FieldShootDetailPage(props: { params: Promise<{ id
               {(l.bedrooms ?? '—') + ' bd · ' + (l.bathrooms ?? '—') + ' ba'}
             </Row>
             <Row label="Logged">{fmtDateTime(shoot.created_at)}</Row>
-            {shoot.internal_notes && <Row label="Services">{shoot.internal_notes.replace(/^Field services:\s*/, '')}</Row>}
+            {shoot.internal_notes && <Row label="Notes">{shoot.internal_notes.replace(/^Field services:\s*/, '')}</Row>}
           </dl>
         </section>
       </main>

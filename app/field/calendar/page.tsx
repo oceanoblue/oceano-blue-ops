@@ -1,3 +1,6 @@
+import { loadFieldServiceScopes } from '@/lib/field/load-service-scopes';
+import type { ServiceScope } from '@/lib/field/service-scope';
+import { ServiceChecklist } from '@/components/field/ServiceChecklist';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { MapPin, CalendarDays } from 'lucide-react';
@@ -24,7 +27,7 @@ type Shoot = {
   scheduled_at: string | null;
   pay_amount_cents: number | null;
   pay_tier: 'small' | 'large' | null;
-  has_360: boolean | null;
+  scope?: ServiceScope;
   contractor_response: string | null;
   listing: {
     address_line1?: string | null;
@@ -56,12 +59,13 @@ export default async function FieldCalendarPage() {
   const { data: rows } = await supabase
     .from('field_orders')
     .select(
-      'id, status, scheduled_at, pay_amount_cents, pay_tier, has_360, contractor_response, listing'
+      'id, status, scheduled_at, pay_amount_cents, pay_tier, contractor_response, listing'
     )
     .not('scheduled_at', 'is', null)
     .order('scheduled_at', { ascending: true });
 
-  const shoots = (rows ?? []) as Shoot[];
+  const scopes = await loadFieldServiceScopes((rows ?? []).map(s => s.id).filter((id): id is string => !!id));
+  const shoots = (rows ?? []).map(s => ({ ...s, scope: scopes.get(s.id ?? '') })) as Shoot[];
   const now = Date.now();
   const upcoming = shoots.filter((s) => s.scheduled_at && new Date(s.scheduled_at).getTime() >= now);
   const past = shoots
@@ -73,7 +77,7 @@ export default async function FieldCalendarPage() {
       <PortalHero
         eyebrow="Photographers"
         title="Calendar"
-        subtitle="Your scheduled shoots. Color = pay tier; the violet 360 badge means it includes a 360 / Matterport tour."
+        subtitle="Your scheduled shoots, with every required service. Color indicates pay tier."
       >
         <FieldNav />
       </PortalHero>
@@ -172,11 +176,7 @@ function ShootRow({ s }: { s: Shoot }) {
               <span className="truncate font-medium text-ink-900">
                 {l.address_line1 ?? 'Address pending'}
               </span>
-              {s.has_360 && (
-                <span className="shrink-0 rounded-full bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700">
-                  360
-                </span>
-              )}
+
             </div>
             <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
               <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -190,6 +190,7 @@ function ShootRow({ s }: { s: Shoot }) {
                 </>
               )}
             </div>
+            <ServiceChecklist scope={s.scope} compact />
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-900">
