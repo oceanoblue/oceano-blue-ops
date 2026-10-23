@@ -9,6 +9,8 @@ import { groupByRoom, roomLabel } from '@/lib/photos/rooms';
 import { MediaRoom, type DeliverableView } from '@/components/portal/MediaRoom';
 import { MarketingLinks } from '@/components/marketing/MarketingLinks';
 import { RevisionRequests } from '@/components/gallery/RevisionRequests';
+import { GalleryGuide } from '@/components/gallery/GalleryGuide';
+import { PhotoEdits } from '@/components/gallery/PhotoEdits';
 import { PhotoDownloadControls } from '@/components/gallery/PhotoDownloadControls';
 
 const money = (cents: number) =>
@@ -50,6 +52,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
   const [unlocking, setUnlocking] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
   const [revisionPhoto, setRevisionPhoto] = useState<string>();
+  const [editPhoto, setEditPhoto] = useState<string>();
 
   const load = useCallback(async (): Promise<GalleryData | null> => {
     if (demo) return initialData ?? null;
@@ -233,6 +236,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
         <div className="mx-auto flex max-w-6xl gap-5 overflow-x-auto px-5 py-4 text-sm font-medium sm:px-8">
           {data.photos.length > 0 && <a href="#gallery-photos" className="shrink-0 text-ocean-800 hover:underline">Photos ({data.photos.length})</a>}
           {!!data.deliverables?.length && <a href="#gallery-media" className="shrink-0 text-ocean-800 hover:underline">Videos, tours & floor plans</a>}
+          {data.listing && data.photos.length > 0 && <a href="#gallery-edits" className="shrink-0 text-ocean-800 hover:underline">Photo edits</a>}
           <a href="#gallery-marketing" className="shrink-0 text-ocean-800 hover:underline">Marketing</a>
           <a href="#gallery-order" className="shrink-0 text-ocean-800 hover:underline">Order & payment</a>
           {data.photos.length > 0 && <a href="#gallery-requests" className="shrink-0 text-ocean-800 hover:underline">Request changes</a>}
@@ -263,6 +267,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
       </div>
 
       <main id="gallery-photos" className="mx-auto max-w-6xl scroll-mt-24 px-5 py-8 sm:px-8">
+        {data.listing && data.photos.length > 0 && <GalleryGuide />}
         {checkoutError && <p role="alert" className="mb-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{checkoutError} <a className="underline" href="mailto:info@oceanoblue.net">Contact us</a></p>}
         {locked && (
           <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -326,6 +331,7 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
           {data.order.scheduled_at && <p className="mt-4 text-sm text-slate-600">Shoot: {new Date(data.order.scheduled_at).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' })} Eastern</p>}
           <div className="mt-5 flex flex-wrap gap-3">{locked && <UnlockButton />}<Link href="/portal" className="btn-secondary">Your client portal</Link><Link href="/book" className="btn-secondary">Book another shoot</Link></div>
         </section>
+        {data.listing && data.photos.length > 0 && <PhotoEdits token={token} photos={data.photos} selectedPhoto={editPhoto} locked={locked} demo={demo} />}
         {data.photos.length > 0 && <RevisionRequests token={token} photos={data.photos} selectedPhoto={revisionPhoto} demo={demo} />}
       </main>
 
@@ -350,7 +356,8 @@ export function ClientGallery({ token, initialData, demo = false }: { token: str
                   <span className="ml-3 text-white/50">{roomLabel(lightbox.room_type)}</span>
                 )}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {data.listing && <a href="#gallery-edits" onClick={() => { setEditPhoto(lightbox.id); setLightbox(null); }} className="rounded-md border border-white/30 px-3 py-2 text-sm text-white hover:bg-white/10">Edit photo</a>}
                 <a href="#gallery-requests" onClick={() => { setRevisionPhoto(lightbox.id); setLightbox(null); }} className="rounded-md border border-white/30 px-3 py-2 text-sm text-white hover:bg-white/10">Request changes</a>
                 {locked ? (
                   <UnlockButton />
