@@ -60,6 +60,9 @@ Neither party may transfer this Agreement or delegate its contractual obligation
 15. ELECTRONIC RECORDS AND SIGNATURES
 The parties may sign in counterparts and by an intentional electronic signature. Each signer must review the exact document presented and expressly consent before signing. The signature record identifies the authenticated account, typed name, date/time, agreed text fingerprint and consent. Contractor signing additionally requires a fresh one-time code sent to the bound email address. The electronic record and signature evidence remain available for download and printing. To use electronic records, a signer needs a current web browser, access to the bound email account, and the ability to save or print HTML/plain-text records; the browser's print function can also save a PDF. A signer may request a paper process or withdraw consent for future electronic transactions by contacting Company at info@oceanoblue.net. Withdrawal does not invalidate an already completed signature or waive payment obligations. Signers should retain their own copy. The system's record is an electronic-signature audit record, not a notarization, an identity-document check or an independently certified digital signature.
 
+SIGNATURE ACKNOWLEDGMENT
+By the explicit signing action recorded with this agreement, each signer confirms review of the parties, terms including Exhibits A and B, and electronic-record disclosure, adopts the typed signature intentionally, and confirms authority to bind the named party. No signature is supplied automatically by an AI assistant or by assignment acceptance alone.
+
 EXHIBIT A
 JOB CONFIRMATION FORMAT
 
@@ -94,6 +97,4 @@ B5. Protect clients and media. Observe the confidentiality, approved-tool and po
 
 B6. Complete the handoff. Deliver the originals and other agreed materials through the assigned intake, identify missing items or technical problems, and retain backups under Sections 4 and 5. Report completion accurately. Upload completion is not office receipt confirmation; keep the agreed backup until the applicable retention period ends.
 
-SIGNATURE ACKNOWLEDGMENT
-By the explicit signing action recorded with this agreement, each signer confirms review of the parties, terms and electronic-record disclosure, adopts the typed signature intentionally, and confirms authority to bind the named party. No signature is supplied automatically by an AI assistant or by assignment acceptance alone.
 `;
