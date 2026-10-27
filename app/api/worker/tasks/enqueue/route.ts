@@ -14,7 +14,7 @@ const Body = z.object({
   job_id: z.string().uuid(),
   task_type: z.enum(WORKER_CAPS),
   worker_id: z.string().uuid().optional(),
-  payload: z.record(z.any()).optional(),
+  payload: z.record(z.string(), z.any()).optional(),
 });
 
 export async function POST(request: Request) {

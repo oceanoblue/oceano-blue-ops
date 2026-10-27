@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 /** Worker heartbeat — marks the worker online and refreshes capabilities/metadata. */
 const Body = z.object({
   capabilities: z.array(z.enum(WORKER_CAPS)).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 export async function POST(request: Request) {

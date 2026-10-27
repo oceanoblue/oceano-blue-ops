@@ -31,7 +31,7 @@ export async function POST(
             campaign: z.string().max(150).default(""),
             referrer: z.string().max(500).default(""),
           })
-          .default({}),
+          .prefault({}),
       })
       .parse(await readJson(req));
     if (body.website) return Response.json({ ok: true });

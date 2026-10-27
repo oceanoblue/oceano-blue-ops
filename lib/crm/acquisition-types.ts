@@ -318,7 +318,7 @@ export function validateFileAnswers(
   doc: FileDocument,
   input: unknown,
 ): Record<string, string> {
-  const values = z.record(z.string().max(10000)).parse(input),
+  const values = z.record(z.string(), z.string().max(10000)).parse(input),
     result: Record<string, string> = {};
   for (const b of doc.blocks) {
     if (b.kind !== "question") continue;

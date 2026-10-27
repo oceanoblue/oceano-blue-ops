@@ -24,7 +24,7 @@ const Body = z.object({
       height: z.number().int().positive().optional(),
       // Bracket-relevant EXIF extracted client-side at upload (ExposureBiasValue,
       // DateTimeOriginal, camera/lens). Used to tell HDR sets from detail singles.
-      exif: z.record(z.any()).optional(),
+      exif: z.record(z.string(), z.any()).optional(),
     })
   ),
 });

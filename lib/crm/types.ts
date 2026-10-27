@@ -208,7 +208,7 @@ export function validateAnswers(
   fields: InquiryField[],
   input: unknown,
 ): Record<string, string> {
-  const record = z.record(z.string().max(10000)).parse(input),
+  const record = z.record(z.string(), z.string().max(10000)).parse(input),
     answers: Record<string, string> = {};
   for (const field of fields) {
     const value = (record[field.key] ?? "").trim();

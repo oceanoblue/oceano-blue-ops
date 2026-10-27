@@ -23,7 +23,7 @@ export const observationSchema = z.object({
   project_date: date.nullable().default(null),
   starts_at: time.nullable().default(null),
   ends_at: time.nullable().default(null),
-  facts: z.record(z.unknown()).refine(v => new TextEncoder().encode(JSON.stringify(v)).length <= 60000, "Source facts are too large."),
+  facts: z.record(z.string(), z.unknown()).refine(v => new TextEncoder().encode(JSON.stringify(v)).length <= 60000, "Source facts are too large."),
   flags: z.array(z.string().trim().min(1).max(100)).max(30).default([]),
   review_state: reviewFields.review_state.default("pending"),
   priority: reviewFields.priority.default("normal"),

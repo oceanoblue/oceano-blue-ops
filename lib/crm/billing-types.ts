@@ -5,7 +5,7 @@ const date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>!Number.isNaN(Date.
 export const billingInvoiceSchema=z.object({
  project_id:id,title:z.string().trim().min(1).max(180),total_cents:cents,source_paid_cents:cents,
  source_system:z.enum(['honeybook','ops']),source_id:z.string().trim().min(1).max(240),source_url:z.union([z.literal(''),z.string().url().max(2000).refine(v=>{const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password;},'Use an HTTPS source link without credentials.')]).default(''),
- evidence:z.record(z.unknown()).refine(v=>JSON.stringify(v).length<=60000,'Evidence is too large.'),evidence_checked_at:z.string().datetime(),
+ evidence:z.record(z.string(), z.unknown()).refine(v=>JSON.stringify(v).length<=60000,'Evidence is too large.'),evidence_checked_at:z.string().datetime(),
  installments:z.array(z.object({title:z.string().trim().min(1).max(180),amount_cents:cents.refine(v=>v>0),due_date:date.nullable(),due_date_verified:z.boolean().default(false)}).refine(v=>!v.due_date_verified||!!v.due_date,'Confirm a due date.')).max(36),
  follow_up_at:z.string().datetime().nullable().default(null),
 }).superRefine((v,c)=>{if(v.source_paid_cents>v.total_cents)c.addIssue({code:'custom',message:'Paid credit exceeds total.',path:['source_paid_cents']});if(v.installments.reduce((n,i)=>n+i.amount_cents,0)!==v.total_cents-v.source_paid_cents)c.addIssue({code:'custom',message:'Remaining installments must match unpaid balance.',path:['installments']});});
