@@ -35,7 +35,11 @@ const CreateBody = z.object({
   transistor_show_id: z.string().max(100).optional().or(z.literal('')),
 });
 
-const UpdateBody = CreateBody.partial().extend({ show_id: z.string().uuid() });
+const UpdateBody = CreateBody.partial().extend({
+  show_id: z.string().uuid(),
+  // PATCH must not reset an existing show's language when it is omitted.
+  default_language: CreateBody.shape.default_language.removeDefault().optional(),
+});
 
 /** Drop undefined keys + normalize empties so PATCH only writes provided fields. */
 function brandingColumns(src: Record<string, any>) {

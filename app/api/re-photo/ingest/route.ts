@@ -26,7 +26,7 @@ const FileInput = z.object({
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
   captured_at: z.string().optional().nullable(),
-  exif: z.record(z.any()).optional().default({}),
+  exif: z.record(z.string(), z.any()).optional().default({}),
 });
 
 const Body = z.object({

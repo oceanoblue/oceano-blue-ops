@@ -41,8 +41,8 @@ const Body = z.object({
   ]),
   make_execution_id: z.string().min(1),
   episode_id: z.string().uuid().nullable().optional(),
-  output: z.record(z.any()).optional().default({}),
-  error: z.record(z.any()).nullable().optional(),
+  output: z.record(z.string(), z.any()).optional().default({}),
+  error: z.record(z.string(), z.any()).nullable().optional(),
 });
 
 export async function POST(request: Request) {

@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FINISH, FinishSchema, FINISH_STYLES, imageEditSize } from './finishing';
+import { DEFAULT_FINISH, FinishSchema, FinishDefaultsSchema, FINISH_STYLES, imageEditSize } from './finishing';
 import { createEnhanceRecipe, recipeFromParams } from './recipe';
 import { withCorrection } from './rerun-resolve';
 import { buildAutoEnhanceJobRow } from './auto-enhance';
 
 describe('shared finishing recipes', () => {
+  it('fills every nested default while preserving scene-specific overrides', () => {
+    expect(FinishDefaultsSchema.parse({})).toEqual({
+      auto: { style: 'bright_listing', scene: 'auto', windows: 'strong', quality: 'high' },
+      interior: { style: 'bright_listing', scene: 'interior', windows: 'strong', quality: 'high' },
+      exterior: { style: 'bright_listing', scene: 'exterior', windows: 'balanced', quality: 'high' },
+    });
+  });
   it('uses Sunburst and bright strong windows by default on manual and automatic paths', () => {
     const manual = createEnhanceRecipe('openai-gpt-image');
     const auto = buildAutoEnhanceJobRow({ orderId: 'order', baseId: 'photo', providerId: 'openai-gpt-image', createdBy: null, sceneFixes: false });

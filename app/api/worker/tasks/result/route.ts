@@ -20,7 +20,7 @@ const Body = z.object({
   task_id: z.string().uuid(),
   status: z.enum(['completed', 'failed']),
   error: z.string().optional(),
-  result: z.record(z.any()).optional(),
+  result: z.record(z.string(), z.any()).optional(),
   storage_location: z
     .object({ name: z.string(), kind: z.string().default('local'), root_path: z.string().optional() })
     .optional(),
@@ -32,7 +32,7 @@ const Body = z.object({
         byte_size: z.number().int().nonnegative().optional(),
         mime_type: z.string().optional(),
         captured_at: z.string().optional().nullable(),
-        exif: z.record(z.any()).optional(),
+        exif: z.record(z.string(), z.any()).optional(),
       })
     )
     .optional(),
@@ -53,11 +53,11 @@ const Body = z.object({
         processing_kind: z.string().optional(),
         provider: z.string().optional(),
         profile: z.string().optional(),
-        metadata: z.record(z.any()).optional(),
+        metadata: z.record(z.string(), z.any()).optional(),
       })
     )
     .optional(),
-  failed: z.array(z.record(z.any())).optional(),
+  failed: z.array(z.record(z.string(), z.any())).optional(),
 });
 
 export async function POST(request: Request) {

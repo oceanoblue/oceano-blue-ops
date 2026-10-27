@@ -33,7 +33,7 @@ export const acceptanceSchema = z.object({
     .max(254)
     .transform((v) => v.toLowerCase()),
   consent: z.literal(true),
-  answers: z.record(z.string().max(10000)).default({}),
+  answers: z.record(z.string(), z.string().max(10000)).default({}),
 });
 export const signingConsent =
   "I have reviewed the selected services, prices, payment schedule and agreement. I consent to electronic records and agree that typing my full name is my electronic signature. I am authorized to accept this agreement.";

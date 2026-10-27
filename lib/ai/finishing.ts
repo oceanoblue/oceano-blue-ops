@@ -28,9 +28,9 @@ export const DEFAULT_FINISH: Finish = FinishSchema.parse({});
 export const IMAGE_MODEL = 'gpt-image-2.5-sunburst';
 export const FINISH_PROMPT_VERSION = 'oceano-studio-v4';
 export const FinishDefaultsSchema = z.object({
-  auto: FinishSchema.default({}),
-  interior: FinishSchema.default({ scene: 'interior' }),
-  exterior: FinishSchema.default({ scene: 'exterior', windows: 'balanced' }),
+  auto: FinishSchema.prefault({}),
+  interior: FinishSchema.prefault({ scene: 'interior' }),
+  exterior: FinishSchema.prefault({ scene: 'exterior', windows: 'balanced' }),
 });
 export type FinishDefaults = z.infer<typeof FinishDefaultsSchema>;
 export const DEFAULT_FINISH_DEFAULTS = FinishDefaultsSchema.parse({});

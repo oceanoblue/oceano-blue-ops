@@ -20,7 +20,7 @@ const Body = z.object({
       byte_size: z.number().int().nonnegative(),
       width: z.number().int().positive().optional(),
       height: z.number().int().positive().optional(),
-      exif: z.record(z.unknown()).optional(),
+      exif: z.record(z.string(), z.unknown()).optional(),
     })
   ),
 });
