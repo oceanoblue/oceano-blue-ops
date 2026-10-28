@@ -185,6 +185,14 @@ export function SmartExperienceEditor({
       {calendarError && (
         <p className="text-sm text-amber-800">{calendarError}</p>
       )}
+      <label className="block text-sm">Balance deadline
+        <select className="input mt-2" value={value.balance_timing ?? "after_signing"} onChange={e => patch({ balance_timing: e.target.value as ExperienceBlock["balance_timing"] })}>
+          <option value="after_signing">Days after signing</option>
+          <option value="month_before_project">One calendar month before the event</option>
+        </select>
+      </label>
+      {value.balance_timing === "month_before_project" && <p className="text-sm text-slate-600">Set the event date on the CRM project before sending. Its date and payment deadline are frozen in the issued file. Events within one calendar month need a separately reviewed payment plan.</p>}
+      <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={value.require_countersign ?? false} onChange={e => patch({ require_countersign: e.target.checked })} />Require an office countersignature after the client signs</label>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm">
           Booking payment (%)
@@ -206,7 +214,7 @@ export function SmartExperienceEditor({
             required
             min={1}
             max={365}
-            disabled={value.deposit_percent === 100}
+            disabled={value.deposit_percent === 100 || value.balance_timing === "month_before_project"}
             value={value.balance_days}
             onChange={(e) => patch({ balance_days: Number(e.target.value) })}
           />

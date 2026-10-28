@@ -18,9 +18,20 @@ export const experienceBlockSchema = z.object({
     .default(""),
   deposit_percent: z.number().int().min(1).max(100).default(100),
   balance_days: z.number().int().min(1).max(365).default(30),
+  balance_timing: z.enum(["after_signing", "month_before_project"]).optional(),
+  require_countersign: z.boolean().optional(),
   tax_bps: z.number().int().min(0).max(2500).default(0),
 });
 export type ExperienceBlock = z.infer<typeof experienceBlockSchema>;
+export function balanceSchedule(config: ExperienceBlock, context?: { balance_due_date?: string }) {
+  if (config.balance_timing === "month_before_project")
+    return context?.balance_due_date
+      ? `${context.balance_due_date} (one month before the event)`
+      : "one month before the event";
+  return `${config.balance_days} days after signing`;
+}
+export const countersignConsent = "I have reviewed the client's signed agreement, selected services, total and payment schedule. I am authorized to sign for Oceano Blue Media and consent to electronic records. Typing my full name is my electronic signature.";
+export type Countersignature = { signer_name: string; signed_at: string; document_hash: string; consent_text: string };
 export const acceptanceSchema = z.object({
   action: z.literal("accept"),
   package_id: z.string().uuid(),
@@ -75,6 +86,7 @@ export const money = (cents: number) =>
     cents / 100,
   );
 export type ExperienceState = {
+  countersignature?: Countersignature | null;
   acceptance: null | {
     package_id: string;
     addon_ids: string[];

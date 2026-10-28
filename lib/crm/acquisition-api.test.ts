@@ -237,3 +237,20 @@ it("blocks preview inquiry submissions and file events before they can create pr
   expect(mock.rpc).not.toHaveBeenCalled();
   expect(mock.file).not.toHaveBeenCalled();
 });
+
+it("requires office authentication, consent and production before countersigning", async () => {
+  const { POST: countersign } = await import('@/app/api/crm/acquisition/files/[id]/route');
+  const body = { signer_name: 'Office Signer', consent: true, document_hash: 'b'.repeat(64), payload_hash: 'c'.repeat(64) };
+  const context = { params: Promise.resolve({ id }) };
+  const path = `/api/crm/acquisition/files/${id}`;
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  expect((await countersign(req(body, path), context)).status).toBe(403);
+  vi.stubEnv('VERCEL_ENV', 'production');
+  expect((await countersign(req(body, path, 'https://elsewhere.test'), context)).status).toBe(403);
+  expect((await countersign(req({...body, consent: false}, path), context)).status).toBe(400);
+  expect(mock.rpc).not.toHaveBeenCalled();
+  expect((await countersign(req({...body, actor_id: 'attacker'}, path), context)).status).toBe(200);
+  expect(mock.rpc).toHaveBeenCalledWith('crm_file_countersign', expect.objectContaining({p_actor: actor, p_file: id, p_data: expect.objectContaining({document_hash: body.document_hash, payload_hash: body.payload_hash})}));
+  mock.actor.mockRejectedValue(new CrmError('Office access required.', 403));
+  expect((await countersign(req(body,path), context)).status).toBe(403);
+});

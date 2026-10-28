@@ -8,6 +8,7 @@ export const variables = [
   "client_name",
   "project_name",
   "project_type",
+  "project_date",
 ] as const;
 export const safeLink = z
   .string()
@@ -242,6 +243,8 @@ export type Sequence = z.infer<typeof sequenceSchema> & {
   version: number;
 };
 export type FileContext = {
+  project_date?: string;
+  balance_due_date?: string;
   first_name: string;
   client_name: string;
   project_name: string;
@@ -310,7 +313,7 @@ export type AcquisitionData = {
 };
 export function mergeText(value: string, context: FileContext): string {
   return value.replace(
-    /\{\{\s*(first_name|client_name|project_name|project_type)\s*\}\}/g,
+    /\{\{\s*(first_name|client_name|project_name|project_type|project_date)\s*\}\}/g,
     (_, key: keyof FileContext) => context[key] ?? "",
   );
 }
