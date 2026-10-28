@@ -1,4 +1,6 @@
 "use client";
+import { SmartFileCountersign } from "./SmartFileCountersign";
+import type { Countersignature } from "@/lib/crm/smart-experience-types";
 import { SmartFileImageUpload } from "./SmartFileImageUpload";
 import { SmartExperienceEditor } from "./SmartExperienceEditor";
 import { FullSmartFileClient } from "./FullSmartFileClient";
@@ -1660,7 +1662,11 @@ function IssuedFileViewer({ item, save }: { item: IssuedFile; save: Save }) {
       snapshot: FileDocument;
       context: FileContext;
       url: string | null;
+      countersignature?: Countersignature | null;
       acceptance?: {
+        payload_hash: string;
+        package_id: string;
+        addon_ids: string[];
         signer_name: string;
         signer_email: string;
         accepted_at: string;
@@ -1759,6 +1765,10 @@ function IssuedFileViewer({ item, save }: { item: IssuedFile; save: Save }) {
       {details.acceptance && (
         <section className="space-y-3 rounded-xl bg-emerald-50 p-5 text-sm">
           <h3 className="font-semibold">Signed booking</h3>
+          {details.snapshot.blocks.filter(b => b.kind === "experience").map(b => <div key={b.id} className="space-y-2">
+            <p>{b.packages.find(p => p.id === details.acceptance!.package_id)?.title}</p><p className="whitespace-pre-wrap">{b.packages.find(p => p.id === details.acceptance!.package_id)?.description}</p>
+            {b.addons.filter(a => details.acceptance!.addon_ids.includes(a.id)).map(a => <p key={a.id}>+ {a.title}</p>)}
+          </div>)}
           <p>
             {details.acceptance.signer_name} · {details.acceptance.signer_email}
           </p>
@@ -1782,6 +1792,10 @@ function IssuedFileViewer({ item, save }: { item: IssuedFile; save: Save }) {
               </p>
             ))}
           </details>
+          {details.snapshot.blocks.some(b => b.kind === "experience" && b.require_countersign) && <SmartFileCountersign fileId={item.id} documentHash={details.acceptance.document_hash} payloadHash={details.acceptance.payload_hash} signature={details.countersignature} onSigned={async () => {
+            const r = await fetch(`/api/crm/acquisition/files/${item.id}`, { cache: "no-store" }); const b = await r.json();
+            if (!r.ok) throw new Error(b.error); setDetails({ ...b, snapshot: fileTemplateSchema.parse(b.snapshot) });
+          }} />}
           <a className="underline" href="/dashboard/crm/billing">
             View invoice and payments
           </a>

@@ -38,7 +38,7 @@ export async function experienceState(token: string): Promise<ExperienceState> {
       installments: [],
       payment_review: false,
     };
-  const [booking, installments, invoice] = await Promise.all([
+  const [booking, installments, invoice, countersignature] = await Promise.all([
     db
       .from("crm_file_bookings")
       .select("appointment_id")
@@ -54,8 +54,9 @@ export async function experienceState(token: string): Promise<ExperienceState> {
       .select("payment_review_required,reconciliation")
       .eq("id", accepted.invoice_id)
       .single(),
+    db.from("crm_file_countersignatures").select("signer_name,signed_at,document_hash,consent_text").eq("file_id", file.id).maybeSingle(),
   ]);
-  if (booking.error || installments.error || invoice.error)
+  if (booking.error || installments.error || invoice.error || countersignature.error)
     throw new CrmError(
       "Your booking progress is temporarily unavailable.",
       503,
@@ -74,6 +75,7 @@ export async function experienceState(token: string): Promise<ExperienceState> {
   const { invoice_id: _invoice, ...acceptance } = accepted;
   return {
     acceptance,
+    countersignature: countersignature.data,
     appointment,
     installments: installments.data ?? [],
     payment_review:

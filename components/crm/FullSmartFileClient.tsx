@@ -17,6 +17,7 @@ import {
 } from "@/lib/crm/acquisition-types";
 import {
   money,
+  balanceSchedule,
   priceSelection,
   signingConsent,
   type ExperienceBlock,
@@ -172,6 +173,7 @@ export function FullSmartFileClient({
     !state.payment_review;
   const bookingComplete =
     paidDeposit &&
+    (!config.require_countersign || !!state.countersignature) &&
     (!config.session_slug || state.appointment?.status === "confirmed");
   const stamp = (s: string) =>
     new Intl.DateTimeFormat("en-US", {
@@ -485,7 +487,7 @@ export function FullSmartFileClient({
                       {pricing.balance > 0 && (
                         <p className="mt-2">
                           Remaining {money(pricing.balance)} due{" "}
-                          {config.balance_days} days after signing.
+                          {balanceSchedule(config, context)}.
                         </p>
                       )}
                       <p className="mt-3">
@@ -715,6 +717,7 @@ export function FullSmartFileClient({
                           : "Pay securely by card. Your progress is saved, and you’ll return here after checkout."}
                       </p>
                     )}
+                    {config.require_countersign && <p className="mb-6 rounded-xl bg-slate-50 p-4 text-sm">{state.countersignature ? `Countersigned by ${state.countersignature.signer_name} on ${stamp(state.countersignature.signed_at)}.` : "Your agreement also requires an Oceano Blue Media signature. The office will countersign after reviewing your selection. You can make your booking payment now."}</p>}
                     {state.appointment && (
                       <p className="mb-6 flex items-center gap-3 text-sm">
                         <CalendarDays size={18} />
@@ -837,8 +840,7 @@ export function FullSmartFileClient({
             </p>
             {pricing.balance > 0 && (
               <p className="mt-2 text-xs text-slate-300">
-                {money(pricing.balance)} remaining, due {config.balance_days}{" "}
-                days after signing.
+                {money(pricing.balance)} remaining, due {balanceSchedule(config, context)}.
               </p>
             )}
             <button
@@ -873,9 +875,11 @@ export function FullSmartFileClient({
         <p>
           {pricing.selected.title}: {money(pricing.selected.price_cents)}
         </p>
+        <p className="whitespace-pre-wrap">{pricing.selected.description}</p>
         {pricing.extras.map((a) => (
           <p key={a.id}>
             {a.title}: {money(a.price_cents)}
+            <span className="block whitespace-pre-wrap">{a.description}</span>
           </p>
         ))}
         <p>
@@ -884,8 +888,7 @@ export function FullSmartFileClient({
         </p>
         {pricing.balance > 0 && (
           <p>
-            Balance: {money(pricing.balance)}, due {config.balance_days} days
-            after signing.
+            Balance: {money(pricing.balance)}, due {balanceSchedule(config, context)}.
           </p>
         )}
         <h2 className="text-xl font-semibold">Agreement</h2>
@@ -922,6 +925,7 @@ export function FullSmartFileClient({
         ) : (
           <p>Unsigned preview</p>
         )}
+        {config.require_countersign && <p>{state.countersignature ? `Countersigned for Oceano Blue Media by ${state.countersignature.signer_name} on ${state.countersignature.signed_at}. ${state.countersignature.consent_text}` : "Oceano Blue Media countersignature pending."}</p>}
         {state.installments.map((i) => (
           <p key={i.id}>
             {i.title}: {money(i.amount_cents)} · Paid: {money(i.paid_cents)} ·

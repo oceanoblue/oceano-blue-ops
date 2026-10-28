@@ -1,3 +1,4 @@
+import { balanceSchedule } from "@/lib/crm/smart-experience-types";
 import {
   mergeText,
   type FileContext,
@@ -49,7 +50,7 @@ export function SmartFileDocument({
               <p className="text-sm text-slate-500">
                 {block.deposit_percent}% at booking
                 {block.deposit_percent < 100
-                  ? `; balance due ${block.balance_days} days after signing`
+                  ? `; balance due ${balanceSchedule(block, context)}`
                   : ""}
                 . {block.session_slug ? "Session scheduling included." : ""}
               </p>

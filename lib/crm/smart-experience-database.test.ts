@@ -116,6 +116,7 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  await db.exec(readFileSync("supabase/migrations/20261028195243_wedding_smart_file_terms.sql", "utf8"));
 }, 60000);
 afterAll(async () => {
   await db?.close();
@@ -129,7 +130,7 @@ afterEach(async () => {
 const token = "a".repeat(64),
   packageId = randomUUID(),
   addonId = randomUUID();
-async function fixture(slug = "") {
+async function fixture(slug = "", wedding = false, eventDate = "2030-03-31") {
   const client = randomUUID(),
     project = randomUUID(),
     template = randomUUID(),
@@ -145,6 +146,7 @@ async function fixture(slug = "") {
     deposit_percent: 50,
     balance_days: 14,
     tax_bps: 700,
+    ...(wedding ? { balance_timing: "month_before_project", require_countersign: true } : {}),
   };
   await db.query("insert into clients(id,full_name,email) values($1,$2,$3)", [
     client,
@@ -160,6 +162,7 @@ async function fixture(slug = "") {
     "insert into crm_opportunities(id,project_id,client_id,title,stage_id) select $1,$1,$2,'Headshots',id from crm_stages where outcome='open' limit 1",
     [project, client],
   );
+  if (wedding) await db.query("update crm_opportunities set project_date=$1 where project_id=$2", [eventDate, project]);
   await db.query(
     "insert into crm_file_templates(id,name,title,blocks,ready) values($1,'Headshots','Headshots',$2,true)",
     [template, JSON.stringify([config])],
@@ -331,4 +334,45 @@ it('advances the original project only when the booking installment is credited,
  expect((await db.query("select s.outcome from crm_opportunities o join crm_stages s on s.id=o.stage_id")).rows).toEqual([{outcome:'open'}]);
  await db.query("update crm_billing_installments set paid_cents=amount_cents where title='Booking deposit'");
  expect((await db.query("select s.outcome from crm_opportunities o join crm_stages s on s.id=o.stage_id")).rows).toEqual([{outcome:'won'}]);
+});
+
+
+it("freezes a calendar-month wedding deadline, including short months, and rejects later project-date changes", async () => {
+ const { project } = await fixture("", true);
+ const issued = (await db.query<any>("select context,expires_at from crm_issued_files")).rows[0];
+ expect(issued.context.project_date).toBe("2030-03-31");
+ expect(issued.context.balance_due_date).toBe("2030-02-28");
+ expect(new Date(issued.expires_at).getTime()).toBeGreaterThan(Date.parse("2030-03-31"));
+ await db.query("update crm_opportunities set project_date='2030-04-01' where project_id=$1", [project]);
+ expect((await accept()).error).toMatch(/event date changed/i);
+ expect((await db.query("select * from crm_billing_invoices")).rows).toHaveLength(0);
+ await db.query("update crm_opportunities set project_date='2030-03-31' where project_id=$1", [project]);
+ expect(await accept()).toEqual({ok:true});
+ expect((await db.query<any>("select due_date::text due from crm_billing_installments where title='Remaining balance'")).rows[0].due).toBe("2030-02-28");
+});
+
+it("refuses to issue wedding terms with a missing or already-past payment deadline", async () => {
+ await expect(fixture("",true,"2020-03-31")).rejects.toThrow(/Review payment terms/);
+});
+
+it("records a separate immutable, authorized office signature against the exact client acceptance", async () => {
+ const {file} = await fixture("",true);
+ const data = { signer_name:"Test Office", consent:true, document_hash:"b".repeat(64),payload_hash:"c".repeat(64),consent_text:"I consent",ip_hash:"e".repeat(64),user_agent:"test" };
+ const sign = async (who=actor,patch={}) => (await db.query<any>("select crm_file_countersign($1,$2,$3) r",[who,file,JSON.stringify({...data,...patch})])).rows[0].r;
+ expect((await sign()).error).toMatch(/client must sign/i);
+ await accept();
+ expect((await sign(photographer)).error).toMatch(/office access/i);
+ expect((await sign(actor,{consent:false})).error).toMatch(/confirm/);
+ expect((await sign(actor,{payload_hash:"f".repeat(64)})).error).toMatch(/changed/);
+ expect(await sign()).toEqual({ok:true});
+ expect(await sign()).toEqual({ok:true});
+ expect((await sign(actor,{signer_name:"Different"})).error).toMatch(/already/);
+ expect((await db.query("select * from crm_file_countersignatures")).rows).toHaveLength(1);
+ expect((await db.query("select * from crm_file_acceptances")).rows).toHaveLength(1);
+ await expect(db.query("update crm_file_countersignatures set signer_name='Altered' ")).rejects.toThrow(/immutable/);
+});
+
+it("does not grant clients or anonymous callers office signing privileges", async () => {
+ const row=(await db.query<any>("select has_table_privilege('anon','crm_file_countersignatures','select') a,has_table_privilege('authenticated','crm_file_countersignatures','insert') b,has_function_privilege('anon','crm_file_countersign(uuid,uuid,jsonb)','execute') c,has_function_privilege('authenticated','crm_file_countersign(uuid,uuid,jsonb)','execute') d")).rows[0];
+ expect(row).toEqual({a:false,b:false,c:false,d:false});
 });
