@@ -75,7 +75,9 @@ export function AssignShooterControl({
   const [photo, setPhoto] = useState(current);
   const [video, setVideo] = useState(currentVideographerId || '');
   const videoCrew = shooters.filter(s => s.captureSkills.includes('videography') && (s.kind === 'team' || s.teamMemberId));
-  const videoName = shooters.find(s => (s.kind === 'team' ? s.id : s.teamMemberId) === currentVideographerId)?.name;
+  const videoName = currentVideographerId
+    ? shooters.find(s => (s.kind === 'team' ? s.id : s.teamMemberId) === currentVideographerId)?.name
+    : undefined;
   const assigned = shooters.find((s) => s.key === current);
   const contractorAssigned = assigned?.kind === 'contractor';
 
@@ -131,7 +133,7 @@ export function AssignShooterControl({
   return (
     <div>
       {!editing ? <div className="rounded-xl border border-slate-200 p-4">
-        <dl className="space-y-3 text-sm"><div className="flex justify-between gap-3"><dt className="text-slate-500">Photographer / 360</dt><dd className="font-medium">{assigned?.name || 'Unassigned'}<span className="block text-xs text-slate-500">{roleText('photographer')}</span></dd></div><div className="flex justify-between gap-3"><dt className="text-slate-500">Videographer</dt><dd className="font-medium">{videoName || 'Unassigned'}<span className="block text-xs text-slate-500">{roleText('videographer')}</span></dd></div></dl>
+        <dl className="space-y-3 text-sm"><div className="flex justify-between gap-3"><dt className="text-slate-500">Photographer / 360</dt><dd className="font-medium">{assigned?.name || 'Unassigned'}<span className="block text-xs text-slate-500">{roleText('photographer')}</span></dd></div><div className="flex justify-between gap-3"><dt className="text-slate-500">Videographer</dt><dd className="font-medium">{videoName || 'Unassigned'}{currentVideographerId && <span className="block text-xs text-slate-500">{roleText('videographer')}</span>}</dd></div></dl>
         {needsVideo && !currentVideographerId && <p className="mt-3 text-xs text-amber-800">Video is booked. Assign a videographer before the shoot.</p>}
         <button type="button" className="mt-4 text-sm font-medium text-ocean-700 underline" onClick={()=>{setPhoto(current);setVideo(currentVideographerId||'');setTimes(initialTimes());setWarnings([]);setError(null);setNeedsOverride(false);setEditing(true);}}>Edit crew</button>
       </div> : <div className="space-y-3 rounded-xl border border-ocean-200 bg-ocean-50/30 p-4">
