@@ -1,5 +1,5 @@
 -- 10 Derby Ct (Bethel Properties / Linda & David Aspden) property website seed.
--- Idempotent: re-running updates the same records. Run AFTER migration 20261104200000_property_site_showcase.
+-- Idempotent: re-running updates the same records. Run AFTER migration 20261104195720_property_site_showcase.
 begin;
 insert into public.clients (id, email, full_name, brokerage, phone)
  values ('5d2c7b3e-1d0a-4c3a-9b6f-10de4b7c0001', 'rewinddesigns31@gmail.com', 'Linda Aspden', 'Bethel Properties LLC', null)
