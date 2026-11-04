@@ -19,5 +19,9 @@ export const loadProperty=cache(async(slug:string,preview:boolean)=>{
   const ranks=new Map((site.photo_order||[]).map((id:string,i:number)=>[id,i]));
   const finals=(photos||[]).filter(isDeliverable).sort((a:any,b:any)=>a.id===site.hero_photo_id?-1:b.id===site.hero_photo_id?1:Number(ranks.get(a.id)??1000)-Number(ranks.get(b.id)??1000));
   const images=await Promise.all(finals.map(async(p:any)=>{const {data,error}=await admin.storage.from(p.bucket).createSignedUrl(p.storage_path,900);if(error)throw new Error('Property photos unavailable.');return {id:p.id,url:data?.signedUrl,alt:p.filename.replace(/\.[^.]+$/,'')};}));
-  return {site,listing,photos:images.filter(p=>p.url)};
+  const own=images.filter(p=>p.url);
+  // Client-supplied listing photos (public HTTPS links) extend the gallery when the
+  // order has no finished photos of its own, or follow them when it does.
+  const external=(site.gallery_urls||[]).map((url:string,i:number)=>({id:`ext-${i}`,url,alt:`${site.headline} photo ${i+1}`}));
+  return {site,listing,photos:[...own,...external]};
 });

@@ -43,3 +43,25 @@ Existing booking, gallery, payments, dispatch and delivery behavior is unchanged
 Verification: marketing route and database permission tests, full existing unit
 suite, TypeScript, production build, lint, production dependency audit, with browser verification unavailable in this environment. Existing development dependency audit findings in braces
 and Vitest remain, without a compatible released fix for the braces advisory.
+
+## Showcase template (Nov 2026)
+
+The public page at `/property/[slug]` is a full listing microsite: full-bleed hero
+(hero image URL or first photo) with the address, community, tagline and key
+facts; the film; description and a facts list ("Label: value" lines); highlights;
+a chaptered photo gallery with a lightbox; a full-bleed interlude; social videos;
+location with an embedded map and area description; the inquiry form with agent
+names. Tracking, inquiries, unbranded view, preview and the privacy behavior are
+unchanged.
+
+New editor fields (migration `property_site_showcase`): community, tagline, facts,
+area description, agent names, hero image URL, and gallery photo URLs. Gallery
+URLs are public HTTPS links shown after any finished photos from the order, for
+listings whose photos came from the client. When the file names follow
+`NN-group.jpg` (exterior, living, kitchen, porch, pool, barn, bedroom, bath,
+aerial) or `hero-name.jpg`, the gallery gets chapters automatically. Client photo
+sets for a listing live under `public/properties/<slug>/` with a `manifest.json`.
+
+First listing on this template: 10 Derby Ct (`scripts/seed-10-derby-ct.sql`,
+run once after the migration; it creates the client, listing, order and draft
+property site, which is then published from the order's Property marketing page).

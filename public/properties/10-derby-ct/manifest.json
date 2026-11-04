@@ -1,0 +1,530 @@
+[
+ {
+  "file": "01-exterior.jpg",
+  "group": "exterior",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "02-exterior.jpg",
+  "group": "exterior",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "03-exterior.jpg",
+  "group": "exterior",
+  "w": 1024,
+  "h": 681
+ },
+ {
+  "file": "04-exterior.jpg",
+  "group": "exterior",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "05-exterior.jpg",
+  "group": "exterior",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "06-exterior.jpg",
+  "group": "exterior",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "07-exterior.jpg",
+  "group": "exterior",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "08-exterior.jpg",
+  "group": "exterior",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "09-exterior.jpg",
+  "group": "exterior",
+  "w": 360,
+  "h": 480
+ },
+ {
+  "file": "10-exterior.jpg",
+  "group": "exterior",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "11-exterior.jpg",
+  "group": "exterior",
+  "w": 360,
+  "h": 480
+ },
+ {
+  "file": "12-exterior.jpg",
+  "group": "exterior",
+  "w": 360,
+  "h": 480
+ },
+ {
+  "file": "13-exterior.jpg",
+  "group": "exterior",
+  "w": 640,
+  "h": 359
+ },
+ {
+  "file": "14-exterior.jpg",
+  "group": "exterior",
+  "w": 547,
+  "h": 310
+ },
+ {
+  "file": "15-exterior.jpg",
+  "group": "exterior",
+  "w": 547,
+  "h": 310
+ },
+ {
+  "file": "16-living.jpg",
+  "group": "living",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "17-living.jpg",
+  "group": "living",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "18-living.jpg",
+  "group": "living",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "19-living.jpg",
+  "group": "living",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "20-living.jpg",
+  "group": "living",
+  "w": 640,
+  "h": 427
+ },
+ {
+  "file": "21-living.jpg",
+  "group": "living",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "22-living.jpg",
+  "group": "living",
+  "w": 1023,
+  "h": 682
+ },
+ {
+  "file": "23-living.jpg",
+  "group": "living",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "24-living.jpg",
+  "group": "living",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "25-living.jpg",
+  "group": "living",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "26-living.jpg",
+  "group": "living",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "27-living.jpg",
+  "group": "living",
+  "w": 1024,
+  "h": 683
+ },
+ {
+  "file": "28-kitchen.jpg",
+  "group": "kitchen",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "29-kitchen.jpg",
+  "group": "kitchen",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "30-kitchen.jpg",
+  "group": "kitchen",
+  "w": 640,
+  "h": 427
+ },
+ {
+  "file": "31-kitchen.jpg",
+  "group": "kitchen",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "32-kitchen.jpg",
+  "group": "kitchen",
+  "w": 640,
+  "h": 427
+ },
+ {
+  "file": "33-kitchen.jpg",
+  "group": "kitchen",
+  "w": 640,
+  "h": 427
+ },
+ {
+  "file": "34-kitchen.jpg",
+  "group": "kitchen",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "35-porch.jpg",
+  "group": "porch",
+  "w": 1024,
+  "h": 681
+ },
+ {
+  "file": "36-porch.jpg",
+  "group": "porch",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "37-porch.jpg",
+  "group": "porch",
+  "w": 360,
+  "h": 480
+ },
+ {
+  "file": "38-porch.jpg",
+  "group": "porch",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "39-porch.jpg",
+  "group": "porch",
+  "w": 640,
+  "h": 427
+ },
+ {
+  "file": "40-porch.jpg",
+  "group": "porch",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "41-porch.jpg",
+  "group": "porch",
+  "w": 640,
+  "h": 427
+ },
+ {
+  "file": "42-porch.jpg",
+  "group": "porch",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "43-pool.jpg",
+  "group": "pool",
+  "w": 1023,
+  "h": 682
+ },
+ {
+  "file": "44-pool.jpg",
+  "group": "pool",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "45-pool.jpg",
+  "group": "pool",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "46-pool.jpg",
+  "group": "pool",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "47-pool.jpg",
+  "group": "pool",
+  "w": 640,
+  "h": 427
+ },
+ {
+  "file": "48-pool.jpg",
+  "group": "pool",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "49-pool.jpg",
+  "group": "pool",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "50-pool.jpg",
+  "group": "pool",
+  "w": 640,
+  "h": 480
+ },
+ {
+  "file": "51-pool.jpg",
+  "group": "pool",
+  "w": 640,
+  "h": 480
+ },
+ {
+  "file": "52-pool.jpg",
+  "group": "pool",
+  "w": 800,
+  "h": 768
+ },
+ {
+  "file": "53-pool.jpg",
+  "group": "pool",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "54-pool.jpg",
+  "group": "pool",
+  "w": 576,
+  "h": 768
+ },
+ {
+  "file": "55-pool.jpg",
+  "group": "pool",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "56-pool.jpg",
+  "group": "pool",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "57-pool.jpg",
+  "group": "pool",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "58-barn.jpg",
+  "group": "barn",
+  "w": 1023,
+  "h": 682
+ },
+ {
+  "file": "59-barn.jpg",
+  "group": "barn",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "60-barn.jpg",
+  "group": "barn",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "61-barn.jpg",
+  "group": "barn",
+  "w": 640,
+  "h": 480
+ },
+ {
+  "file": "62-barn.jpg",
+  "group": "barn",
+  "w": 640,
+  "h": 480
+ },
+ {
+  "file": "63-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "64-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 427
+ },
+ {
+  "file": "65-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "66-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "67-bedroom.jpg",
+  "group": "bedroom",
+  "w": 1024,
+  "h": 683
+ },
+ {
+  "file": "68-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "69-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "70-bedroom.jpg",
+  "group": "bedroom",
+  "w": 1024,
+  "h": 680
+ },
+ {
+  "file": "71-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 427
+ },
+ {
+  "file": "72-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "73-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "74-bedroom.jpg",
+  "group": "bedroom",
+  "w": 1024,
+  "h": 681
+ },
+ {
+  "file": "75-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "76-bedroom.jpg",
+  "group": "bedroom",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "77-bedroom.jpg",
+  "group": "bedroom",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "78-bedroom.jpg",
+  "group": "bedroom",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "79-bath.jpg",
+  "group": "bath",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "80-bath.jpg",
+  "group": "bath",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "81-bath.jpg",
+  "group": "bath",
+  "w": 1024,
+  "h": 683
+ },
+ {
+  "file": "82-bath.jpg",
+  "group": "bath",
+  "w": 640,
+  "h": 427
+ },
+ {
+  "file": "83-bath.jpg",
+  "group": "bath",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "84-bath.jpg",
+  "group": "bath",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "85-bath.jpg",
+  "group": "bath",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "86-bath.jpg",
+  "group": "bath",
+  "w": 1024,
+  "h": 682
+ },
+ {
+  "file": "87-bath.jpg",
+  "group": "bath",
+  "w": 640,
+  "h": 426
+ },
+ {
+  "file": "88-bedroom.jpg",
+  "group": "bedroom",
+  "w": 1024,
+  "h": 682
+ }
+]
