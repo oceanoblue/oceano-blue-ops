@@ -1,31 +1,99 @@
 import { notFound } from 'next/navigation';
-import Image from 'next/image';
+import type { Metadata } from 'next';
 import { demoGallery } from '@/lib/deliveries/demo';
 import { PropertyExperience } from '@/components/marketing/PropertyExperience';
+import { PropertyGallery } from '@/components/marketing/PropertyGallery';
 import { toEmbedUrl } from '@/lib/deliverables/embed';
-import type { Metadata } from 'next';
 import { loadProperty } from '@/lib/marketing/load-property';
+import './property.css';
 export const dynamic='force-dynamic';
-export async function generateMetadata({params,searchParams}:{params:Promise<{slug:string}>;searchParams:Promise<{preview?:string;unbranded?:string}>}):Promise<Metadata>{
+
+type Search={preview?:string;unbranded?:string};
+const money=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(cents/100);
+/** "NN-group.jpg" file names (how Oceano Blue Media publishes client photo sets) give the gallery its chapters. */
+const groupOf=(url:string)=>{const m=url.match(/\/(?:(\d+)-([a-z]+)|(hero)-[a-z]+)\.(?:jpe?g|png|webp)(?:\?.*)?$/i);return m?(m[3]?'still':m[2]):undefined;};
+const lines=(text:string)=>text.split('\n').map(l=>l.trim()).filter(Boolean);
+/** Split the address into a display pair: "10 Derby Court" -> ["10 Derby", "Court"]. */
+function splitAddress(address:string){const parts=address.trim().split(/\s+/);return parts.length>1?[parts.slice(0,-1).join(' '),parts[parts.length-1]]:[address,''];}
+
+export async function generateMetadata({params,searchParams}:{params:Promise<{slug:string}>;searchParams:Promise<Search>}):Promise<Metadata>{
  const {slug}=await params;const search=await searchParams;const data=slug==='demo'?null:await loadProperty(slug,search.preview==='1');
  if(!data)return {title:'Property showcase',robots:{index:false,follow:false}};
- const title=data.site.headline;const description=(data.site.description||'Explore this property, photography and film.').slice(0,200);
- return {title,description,robots:{index:data.site.is_published&&search.preview!=='1',follow:data.site.is_published},openGraph:{title,description,type:'website',...(data.photos.length?{images:[`https://app.oceanoblue.net/api/property-public/${slug}/hero`]}:{})},twitter:{card:data.photos.length?'summary_large_image':'summary',title,description,...(data.photos.length?{images:[`https://app.oceanoblue.net/api/property-public/${slug}/hero`]}:{})}};
+ const site:any=data.site;const title=`${site.headline}${site.community?` — ${site.community}`:''}`;const description=(site.tagline||site.description||'Explore this property, photography and film.').slice(0,200);
+ const image=site.hero_image_url||(data.photos.length?`https://app.oceanoblue.net/api/property-public/${slug}/hero`:'');
+ return {title,description,robots:{index:site.is_published&&search.preview!=='1',follow:site.is_published},openGraph:{title,description,type:'website',...(image?{images:[image]}:{})},twitter:{card:image?'summary_large_image':'summary',title,description,...(image?{images:[image]}:{})}};
 }
-export default async function Page({params,searchParams}:{params:Promise<{slug:string}>;searchParams:Promise<{preview?:string;unbranded?:string}>}) {
- const {slug}=await params;const search=await searchParams;const data=slug==='demo'?{site:{is_published:true,headline:'The Coastal Collection',description:'A sample property website showcasing finished photography, property details, and a clear way to contact the listing agent.',agent_name:'Sample Coastal Realty',agent_phone:'',agent_email:'',asking_price_cents:null},listing:{...demoGallery.listing,bedrooms:null,bathrooms:null,sqft:null},photos:demoGallery.photos.map(p=>({id:p.id,url:p.url!,alt:p.filename}))}:await loadProperty(slug,search.preview==='1');if(!data)notFound();const {listing,photos}=data;const site:any=data.site;const unbranded=search.unbranded==='1';
- const facts=[listing?.bedrooms!=null?`${listing.bedrooms} bedrooms`:null,listing?.bathrooms!=null?`${listing.bathrooms} bathrooms`:null,listing?.sqft?`${listing.sqft.toLocaleString()} sq ft`:null,site.acreage!=null?`${site.acreage} acres`:null].filter(Boolean);
- return <main className="min-h-screen bg-[#f7f6f2] text-[#16313d]">{slug==='demo'&&<div className="bg-slate-100 px-6 py-3 text-center text-sm">Sample property website · Public sample photography</div>}{!site.is_published&&<div className="bg-amber-100 px-6 py-3 text-center text-sm">Draft preview — only your team can see this page.</div>}
-   <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-6"><span className="text-sm font-semibold tracking-widest">{unbranded?'PROPERTY SHOWCASE':site.agent_name||'OCEANO BLUE MEDIA'}</span><nav className="flex gap-4 text-sm">{site.video_url&&<a href="#film" className="underline">Watch film</a>}<a href="#photos" className="underline">Photos</a>{!unbranded&&site.is_published&&slug!=='demo'&&<a href="#inquire" className="underline">Request showing</a>}</nav></header>
-   {photos[0]&&<div className="relative h-[55vh] min-h-72 max-h-[720px]"><Image src={photos[0].url} alt={photos[0].alt} fill unoptimized priority className="object-cover"/></div>}
-   <section className="mx-auto grid max-w-6xl gap-8 px-6 py-14 md:grid-cols-[2fr_1fr]"><div><p className="text-xs uppercase tracking-[0.2em]">{[listing?.city,listing?.state].filter(Boolean).join(', ')}</p><h1 className="mt-4 font-serif text-4xl leading-tight sm:text-6xl">{site.headline}</h1><p className="mt-5 text-lg">{listing?.address_line1}</p><p className="mt-4 text-sm text-slate-600">{facts.join(' · ')}</p>{site.highlights&&<ul className="mt-6 grid gap-3 sm:grid-cols-2">{site.highlights.split('\n').filter(Boolean).map((item:string,i:number)=><li key={i} className="rounded-lg border border-slate-200 p-4 text-sm">{item}</li>)}</ul>}{site.description&&<p className="mt-8 whitespace-pre-wrap leading-8 text-slate-700">{site.description}</p>}</div>
-   <div className="space-y-6">{site.asking_price_cents!==null&&<p className="font-serif text-4xl">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(site.asking_price_cents/100)}</p>}{!unbranded&&(site.agent_name||site.agent_phone||site.agent_email)&&<div className="rounded-xl border border-slate-200 bg-white p-6"><p className="text-xs uppercase tracking-widest">For more information</p>{site.agent_image_url&&<Image src={site.agent_image_url} alt="Listing agent" width={96} height={96} unoptimized className="mt-4 rounded-lg object-cover"/>}<p className="mt-3 text-xl">{site.agent_name}</p>{site.brokerage&&<p className="mt-2 text-sm">{site.brokerage}</p>}{site.agent_phone&&<a className="mt-4 block underline" href={`tel:${site.agent_phone.replace(/[^0-9+]/g,'')}`}>{site.agent_phone}</a>}{site.agent_email&&<a className="mt-3 block break-all underline" href={`mailto:${site.agent_email}`}>{site.agent_email}</a>}</div>}</div></section>
-   <PropertyExperience slug={slug} enabled={site.is_published&&slug!=='demo'&&search.preview!=='1'} videoUrl={site.video_url||''} unbranded={unbranded}/>
-   {site.social_video_urls?.length>0&&<section className="mx-auto max-w-6xl px-6 pb-14"><h2 className="mb-6 font-serif text-3xl">Property highlights on film</h2><div className="grid gap-5 sm:grid-cols-3">{site.social_video_urls.map((url:string,i:number)=>{const embed=toEmbedUrl(url);return embed?<iframe key={url} src={embed} title={`Property highlight ${i+1}`} className="aspect-9/16 w-full rounded-xl bg-black" allowFullScreen/>:<a key={url} href={url} target="_blank" rel="noreferrer" className="underline">Watch highlight {i+1}</a>;})}</div></section>}
-   <section className="mx-auto max-w-6xl px-6 pb-10"><h2 className="mb-4 font-serif text-3xl">Location</h2><p>{[listing?.address_line1,listing?.city,listing?.state,listing?.zip].filter(Boolean).join(', ')}</p><a className="mt-3 inline-block text-sm underline" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([listing?.address_line1,listing?.city,listing?.state,listing?.zip].filter(Boolean).join(', '))}`}>View on map</a></section>
-   {(site.tour_url||site.floor_plan_url)&&<section className="mx-auto flex max-w-6xl flex-wrap gap-4 px-6 pb-10">{site.tour_url&&<a className="btn-secondary" href={site.tour_url} target="_blank" rel="noreferrer">Explore 3D / 360 tour</a>}{site.floor_plan_url&&<a className="btn-secondary" href={site.floor_plan_url} target="_blank" rel="noreferrer">View floor plan</a>}</section>}
-   {site.mls_number&&<p className="mx-auto max-w-6xl px-6 pb-6 text-xs">MLS #{site.mls_number}</p>}
-   <section id="photos" className="mx-auto max-w-6xl px-6 pb-14"><h2 className="mb-6 font-serif text-3xl">Explore the property</h2><div className="grid gap-4 sm:grid-cols-2">{photos.map((photo:any,i:number)=><a key={photo.id} data-property-photo={photo.id} className={`relative block aspect-3/2 overflow-hidden rounded-lg ${i%5===0?'sm:col-span-2 sm:aspect-2/1':''}`} href={photo.url} target="_blank" rel="noreferrer"><Image src={photo.url} alt={photo.alt} fill unoptimized className="object-cover"/></a>)}</div></section>
-   {!unbranded&&<footer className="border-t border-slate-200 px-6 py-8 text-center text-xs uppercase tracking-widest">Photography by Oceano Blue Media</footer>}
+
+export default async function Page({params,searchParams}:{params:Promise<{slug:string}>;searchParams:Promise<Search>}) {
+ const {slug}=await params;const search=await searchParams;
+ const data=slug==='demo'?{site:{is_published:true,headline:'The Coastal Collection',tagline:'A sample property website showcasing finished photography, property details, and a clear way to contact the listing agent.',description:'',agent_name:'Sample Coastal Realty',agent_phone:'',agent_email:'',asking_price_cents:null},listing:{...demoGallery.listing,bedrooms:null,bathrooms:null,sqft:null},photos:demoGallery.photos.map(p=>({id:p.id,url:p.url!,alt:p.filename}))}:await loadProperty(slug,search.preview==='1');
+ if(!data)notFound();
+ const {listing}=data;const site:any=data.site;const unbranded=search.unbranded==='1';const live=site.is_published&&slug!=='demo'&&search.preview!=='1';
+ const photos=data.photos.map(p=>({...p,group:groupOf(p.url)}));
+ const hero=site.hero_image_url||photos[0]?.url||'';
+ const [addrA,addrB]=splitAddress(site.headline);
+ const place=[site.community,listing?.city,listing?.state==='SC'?'South Carolina':listing?.state].filter(Boolean).join(', ');
+ const stats=[listing?.bedrooms!=null?[String(listing.bedrooms),listing.bedrooms===1?'bedroom':'bedrooms']:null,listing?.bathrooms!=null?[String(Number(listing.bathrooms)),'baths']:null,listing?.sqft?[listing.sqft.toLocaleString(),'square feet']:null,site.acreage!=null?[String(site.acreage),'acres']:null].filter(Boolean) as [string,string][];
+ const facts=lines(site.facts||'').map(l=>{const i=l.indexOf(':');return i>0?[l.slice(0,i).trim(),l.slice(i+1).trim()]:[l,''];});
+ const highlights=lines(site.highlights||'');
+ const paragraphs=(site.description||'').split(/\n\s*\n/).map((p:string)=>p.trim()).filter(Boolean);
+ const address=[listing?.address_line1,listing?.city,listing?.state,listing?.zip].filter(Boolean).join(', ');
+ const mapSrc=`https://www.google.com/maps?q=${encodeURIComponent(address)}&z=13&output=embed`;
+ const stills=photos.filter(p=>p.group==='still');
+ const feature=stills.find(p=>/porch/i.test(p.url))||photos.find(p=>p.group==='porch')||stills[0]||photos[1]||null;
+ const interlude=stills.find(p=>/pool|aerial/i.test(p.url)&&p!==feature)||photos.find(p=>p.group==='pool')||null;
+ const agent=!unbranded&&(site.agent_name||site.agent_names||site.agent_phone||site.agent_email)?{name:site.agent_name,names:site.agent_names,brokerage:site.brokerage,phone:site.agent_phone,email:site.agent_email,image:site.agent_image_url}:null;
+ const brand=unbranded?'Property showcase':(site.brokerage||site.agent_name||'Oceano Blue Media');
+
+ return <main className="ps-root">
+  {slug==='demo'&&<div className="ps-notice">Sample property website · public sample photography</div>}
+  {!site.is_published&&<div className="ps-notice">Draft preview — only your team can see this page.</div>}
+  <header className="ps-hero">
+   <div className="ps-hero-media">{hero&&<img src={hero} alt="" fetchPriority="high"/>}<div className="ps-hero-shade"/></div>
+   <div className="ps-wrap-wide ps-topbar"><span className="ps-brand">{brand}</span><nav className="ps-nav" aria-label="Page sections">{site.video_url&&<a href="#film">Film</a>}<a href="#photos">Photos</a><a href="#location">Location</a>{!unbranded&&live&&<a href="#inquire">Showings</a>}</nav></div>
+   <div/>
+   <div className="ps-wrap-wide ps-hero-body">
+    <div className="ps-reveal">
+     <p className="ps-hero-place">{place}</p>
+     <h1>{addrA}{addrB&&<> <em>{addrB}</em></>}</h1>
+     {site.tagline&&<p className="ps-hero-tag">{site.tagline}</p>}
+     <div className="ps-hero-cta">{site.video_url&&<a className="ps-btn ps-btn-light" href="#film">Watch the film</a>}{!unbranded&&live?<a className="ps-btn ps-btn-ghost" href="#inquire">Request a showing</a>:<a className="ps-btn ps-btn-ghost" href="#photos">See the photos</a>}</div>
+    </div>
+    {stats.length>0&&<div className="ps-hero-facts">{stats.map(([n,l])=><div key={l}><strong>{n}</strong><span>{l}</span></div>)}{site.asking_price_cents!==null&&site.asking_price_cents!==undefined&&<div><strong>{money(site.asking_price_cents)}</strong><span>offered at</span></div>}</div>}
+   </div>
+  </header>
+
+  <section className="ps-section"><div className="ps-wrap ps-intro">
+   <div>{site.tagline&&paragraphs.length>0?<p className="ps-lede">{paragraphs[0]}</p>:<p className="ps-lede">{site.tagline||paragraphs[0]||site.headline}</p>}</div>
+   <div><div className="ps-prose">{(site.tagline?paragraphs.slice(1):paragraphs.slice(1)).map((p:string,i:number)=><p key={i}>{p}</p>)}</div>
+    {(facts.length>0||stats.length>0)&&<dl className="ps-facts" style={{marginTop:paragraphs.length>1?'2rem':0}}>{stats.map(([n,l])=><div key={l}><dt style={{textTransform:'capitalize'}}>{l}</dt><dd>{n}</dd></div>)}{facts.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}{site.mls_number&&<div><dt>MLS</dt><dd>{site.mls_number}</dd></div>}</dl>}
+   </div>
+  </div></section>
+
+  <PropertyExperience slug={slug} enabled={live} videoUrl={site.video_url||''} unbranded={unbranded} filmTitle={`Three minutes at ${site.headline}`} filmNote={site.video_url?'A short film of the home and grounds, shot on the property. Sound on.':''} agent={agent}>
+
+  {highlights.length>0&&<section className="ps-section"><div className="ps-wrap ps-split">
+   {feature&&<div className="ps-photo"><img src={feature.url} alt={feature.alt} loading="lazy"/></div>}
+   <div><h2 className="ps-h2">What sets it apart</h2><ul className="ps-list">{highlights.map((h,i)=><li key={i}>{h}</li>)}</ul></div>
+  </div></section>}
+
+  <section id="photos" className="ps-section-tight"><div className="ps-wrap-wide"><PropertyGallery photos={photos} headline={site.headline}/></div></section>
+
+  {interlude&&<section className="ps-bleed" aria-hidden="true"><img src={interlude.url} alt="" loading="lazy"/></section>}
+
+  {site.social_video_urls?.length>0&&<section className="ps-section"><div className="ps-wrap"><h2 className="ps-h2">Short takes</h2><div className="ps-reels">{site.social_video_urls.map((url:string,i:number)=>{const embed=toEmbedUrl(url);return embed?<iframe key={url} src={embed} title={`Property highlight ${i+1}`} allowFullScreen/>:<a key={url} href={url} target="_blank" rel="noreferrer" className="ps-btn ps-btn-oxblood">Watch highlight {i+1}</a>;})}</div></div></section>}
+
+  <section id="location" className="ps-section"><div className="ps-wrap ps-split">
+   <div><h2 className="ps-h2">Where it sits</h2><div className="ps-prose">{lines(site.area_description||'').map((p:string,i:number)=><p key={i}>{p}</p>)}<p>{address}</p><p><a className="ps-btn ps-btn-oxblood" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`} target="_blank" rel="noreferrer">Open in Google Maps</a></p></div>
+    {(site.tour_url||site.floor_plan_url)&&<p style={{display:'flex',gap:'.75rem',flexWrap:'wrap'}}>{site.tour_url&&<a className="ps-btn ps-btn-ghost" style={{color:'var(--ink)',borderColor:'var(--ink)'}} href={site.tour_url} target="_blank" rel="noreferrer">3D / 360 tour</a>}{site.floor_plan_url&&<a className="ps-btn ps-btn-ghost" style={{color:'var(--ink)',borderColor:'var(--ink)'}} href={site.floor_plan_url} target="_blank" rel="noreferrer">Floor plan</a>}</p>}</div>
+   <iframe className="ps-map" src={mapSrc} title={`Map of ${address}`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen/>
+  </div></section>
+  </PropertyExperience>
+
+  <div className="ps-wrap"><footer className="ps-footer">
+   <span>{site.headline}{site.community?`, ${site.community}`:''}{site.mls_number?` · MLS ${site.mls_number}`:''}</span>
+   {!unbranded&&<span>{site.brokerage||site.agent_name}{site.brokerage||site.agent_name?' · ':''}Film and website by <a href="https://oceanoblue.net" target="_blank" rel="noreferrer">Oceano Blue Media</a></span>}
+   <span>Information is deemed reliable but not guaranteed. Buyers should verify all details.</span>
+  </footer></div>
  </main>;
 }
