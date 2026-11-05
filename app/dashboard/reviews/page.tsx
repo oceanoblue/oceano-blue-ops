@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { GalleryEditQueue } from '@/components/reviews/GalleryEditQueue';
 import { GalleryRevisionQueue } from '@/components/reviews/GalleryRevisionQueue';
 
 export const dynamic = 'force-dynamic';
@@ -44,6 +45,7 @@ export default async function ReviewsPage() {
         title="Reviews"
         subtitle="Review sessions across Frame.io, Vimeo, Pixieset, and internal review."
       />
+      <GalleryEditQueue />
       <GalleryRevisionQueue rows={revisions.data ?? []} error={!!revisions.error} />
       <DataTable
         columns={COLUMNS}
