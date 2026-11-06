@@ -36,9 +36,11 @@
 .ps-hero-body, .ps-topbar { text-shadow: 0 1px 2px rgba(0,0,0,.35); }
 .ps-topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 0; font-size: .8125rem; }
 .ps-brand { font-family: var(--display); font-size: 1.125rem; letter-spacing: .01em; }
-.ps-nav { display: flex; gap: 1.5rem; }
-.ps-nav a { color: inherit; text-decoration: none; opacity: .92; border-bottom: 1px solid transparent; padding-bottom: 2px; }
-.ps-nav a:hover, .ps-nav a:focus-visible { border-bottom-color: currentColor; opacity: 1; }
+/* An opaque backing keeps section links readable over bright hero photography. */
+.ps-nav { display: flex; gap: .25rem; padding: .25rem; border-radius: 999px; background: var(--moss-deep); text-shadow: none; }
+.ps-nav a { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0 .875rem; border-radius: 999px; color: var(--clapboard); text-decoration: none; }
+.ps-nav a:hover, .ps-nav a:focus-visible { background: var(--clapboard); color: var(--moss-deep); }
+.ps-root .ps-nav a:focus-visible { outline: 2px solid var(--clapboard); outline-offset: 2px; }
 .ps-hero-body { align-self: end; display: grid; gap: 2rem; padding: 3rem 0 2.5rem; grid-template-columns: 1fr; }
 @media (min-width: 900px) { .ps-hero-body { grid-template-columns: 1.4fr 1fr; align-items: end; } }
 .ps-hero-place { font-size: .9375rem; letter-spacing: .02em; opacity: .9; margin: 0 0 .75rem; }
