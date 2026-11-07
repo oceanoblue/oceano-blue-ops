@@ -12,8 +12,9 @@ import { PropertyStep } from '@/components/booking/PropertyStep';
 import { ProductsStep } from '@/components/booking/ProductsStep';
 import { ScheduleStep } from '@/components/booking/ScheduleStep';
 import { ContactStep } from '@/components/booking/ContactStep';
-import type { BookingState, Product } from '@/lib/booking/types';
-import { fmtDateTime, fmtAddress } from '@/lib/utils/format';
+import type { BookingState, Product, SelectedItem } from '@/lib/booking/types';
+import { selectionProblem } from '@/lib/booking/service-selection';
+import { fmtCents, fmtDateTimeTz, fmtAddress } from '@/lib/utils/format';
 
 const EMPTY: BookingState = {
   step: 1,
@@ -64,6 +65,15 @@ export function BookingWizard({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ orderId: string; pending?: boolean } | null>(null);
+  const main = useRef<HTMLElement>(null);
+  const previousStep = useRef(state.step);
+
+  useEffect(() => {
+    if (previousStep.current === state.step) return;
+    previousStep.current = state.step;
+    main.current?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [state.step]);
 
   useEffect(() => {
     try {
@@ -71,7 +81,7 @@ export function BookingWizard({
       if (raw) {
         const draft = SavedDraft.parse(JSON.parse(raw));
         if (draft.version === 1 && Date.now() - draft.savedAt < 4 * 3600000 && draft.state?.address && Array.isArray(draft.state?.items)) {
-          setState({ ...EMPTY, ...draft.state, step: 3, schedule: { ...EMPTY.schedule, ...draft.state.schedule, scheduled_at: null, photographer_id: null, access_method: '' } });
+          setState({ ...EMPTY, ...draft.state, step: draft.state.property.sqft >= 100 ? 3 : 2, schedule: { ...EMPTY.schedule, ...draft.state.schedule, scheduled_at: null, photographer_id: null, access_method: '' } });
         }
       }
     } catch { /* Storage unavailable or an obsolete draft. */ }
@@ -97,7 +107,21 @@ export function BookingWizard({
 
   const goto = (step: BookingState['step']) => setState((s) => ({ ...s, step }));
 
+  function changeItems(items: SelectedItem[]) {
+    setState((s) => ({ ...s, items, step: 3, schedule: { ...s.schedule, scheduled_at: null, photographer_id: null } }));
+    setError(null);
+  }
+
+  const selectedProducts = products.filter((product) => state.items.some((item) => item.product_id === product.id));
+  const total = state.items.reduce((sum, item) => sum + (products.find((product) => product.id === item.product_id)?.price_cents ?? 0) * item.quantity, 0);
+  const validSelection = state.items.length > 0 && selectedProducts.length === state.items.length && !selectionProblem(selectedProducts);
+
   async function submitBooking(contact: typeof state.contact) {
+    if (!validSelection) {
+      setError(selectionProblem(selectedProducts) || 'Please choose your services before submitting your booking.');
+      setState((s) => ({ ...s, contact, step: 3 }));
+      return;
+    }
     if (!state.address || !state.schedule.scheduled_at) return;
     setState(s => ({ ...s, contact }));
     setSubmitting(true);
@@ -138,7 +162,7 @@ export function BookingWizard({
         setError(data.message || 'We could not confirm your booking. Please try again.');
         if (data.error === 'slot_unavailable' || data.error === 'availability_unavailable') {
           setState(s => ({ ...s, contact, step: 4, schedule: { ...s.schedule, scheduled_at: null, photographer_id: null } }));
-        } else if (data.error === 'invalid_product') {
+        } else if (data.error === 'invalid_product' || data.error === 'invalid_selection') {
           setState(s => ({ ...s, contact, step: 3 }));
         }
       } else {
@@ -147,7 +171,7 @@ export function BookingWizard({
         setState((s) => ({ ...s, step: 5, contact }));
       }
     } catch {
-      setError("We could not confirm the response. Please try again with the same details; duplicate requests are protected.");
+      setError('We could not confirm whether your booking went through. Please try again with the same details. This will not create a duplicate booking.');
     } finally {
       setSubmitting(false);
     }
@@ -160,7 +184,7 @@ export function BookingWizard({
           <h1 className="text-2xl font-semibold text-ocean-900">{done.pending ? 'Time reserved' : 'Booking confirmed'}</h1>
           <p className="mt-2 text-sm text-slate-600">
             {done.pending ? 'We’ve reserved your requested time for ' : 'Thanks! Your shoot is booked for '}
-            <strong>{fmtDateTime(state.schedule.scheduled_at!)}</strong> at{' '}
+            <strong>{fmtDateTimeTz(state.schedule.scheduled_at!, state.schedule.timezone)} {new Intl.DateTimeFormat('en-US', { timeZone: state.schedule.timezone, timeZoneName: 'short' }).formatToParts(new Date(state.schedule.scheduled_at!)).find((part) => part.type === 'timeZoneName')?.value}</strong> at{' '}
             <strong>{state.address ? fmtAddress(state.address) : ''}</strong>.
           </p>
           <p className="mt-2 text-sm text-slate-600">
@@ -209,7 +233,7 @@ export function BookingWizard({
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
+      <main ref={main} tabIndex={-1} className={`mx-auto max-w-6xl px-4 sm:px-6 py-8 outline-none ${state.step === 3 ? 'pb-28 lg:pb-8' : ''}`}>
         {error && state.step !== 5 && <p role="alert" className="mb-4 rounded-lg bg-amber-50 p-4 text-amber-900">{error}</p>}
         {state.step === 1 && (
           <AddressStep
@@ -224,70 +248,80 @@ export function BookingWizard({
             property={state.property}
             onBack={() => goto(1)}
             onEditAddress={() => goto(1)}
-            onComplete={(a, p) => setState((s) => ({ ...s, address: a, property: p, step: 3 }))}
+            onComplete={(a, p) => setState((s) => ({ ...s, address: a, property: p, step: 3, schedule: { ...s.schedule, scheduled_at: null, photographer_id: null } }))}
           />
         )}
 
         {state.step === 3 && (
-          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <ProductsStep
               sqft={state.property.sqft}
               audience={audience}
               items={state.items}
               onBack={() => goto(2)}
-              onChange={(items) => setState((s) => ({ ...s, items }))}
-              onComplete={() => goto(4)}
+              onChange={changeItems}
+              onComplete={() => { if (validSelection) goto(4); }}
               onLoaded={setProducts}
             />
             <OrderSummary
               state={state}
               products={products}
-              onRemoveItem={(id) =>
-                setState((s) => ({ ...s, items: s.items.filter((i) => i.product_id !== id) }))
-              }
+              onEditAddress={() => goto(2)}
+              onRemoveItem={(id) => changeItems(state.items.filter((i) => i.product_id !== id))}
             />
           </div>
         )}
 
         {state.step === 4 && (
-          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <ScheduleStep
               schedule={state.schedule}
               totalDuration={totalDuration}
               productIds={state.items.map(i=>i.product_id).join(',')}
               zip={state.address?.zip || ''}
               onBack={() => goto(3)}
-              onComplete={(schedule) => setState((s) => ({ ...s, schedule, step: 5 }))}
+              onComplete={(schedule) => setState((s) => ({ ...s, schedule, step: validSelection ? 5 : 3 }))}
             />
             <OrderSummary
               state={state}
               products={products}
-              onEditAddress={() => goto(1)}
-              onRemoveItem={(id) =>
-                setState((s) => ({ ...s, items: s.items.filter((i) => i.product_id !== id) }))
-              }
+              onEditAddress={() => goto(2)}
+              onEditServices={() => goto(3)}
+              onRemoveItem={(id) => changeItems(state.items.filter((i) => i.product_id !== id))}
             />
           </div>
         )}
 
         {state.step === 5 && (
-          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-            <ContactStep
-              contact={state.contact}
-              onBack={() => goto(4)}
-              onSubmit={submitBooking}
-              submitting={submitting}
-              error={error}
-            />
-            <OrderSummary
-              state={state}
-              products={products}
-              onEditAddress={() => goto(1)}
-              onEditSchedule={() => goto(4)}
-            />
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="min-w-0 lg:col-start-2 lg:row-start-1">
+              <OrderSummary
+                state={state}
+                products={products}
+                onEditAddress={submitting ? undefined : () => goto(2)}
+                onEditSchedule={submitting ? undefined : () => goto(4)}
+                onEditServices={submitting ? undefined : () => goto(3)}
+              />
+            </div>
+            <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+              <ContactStep
+                contact={state.contact}
+                onChange={(contact) => setState((s) => ({ ...s, contact }))}
+                onBack={() => goto(4)}
+                onSubmit={submitBooking}
+                submitting={submitting}
+                error={error}
+              />
+            </div>
           </div>
         )}
       </main>
+      {state.step === 3 && state.items.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-4 border-t border-slate-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-soft lg:hidden">
+          <div aria-live="polite" aria-atomic="true" className="text-sm text-slate-600">Your total <strong className="block text-lg text-ocean-950">{selectedProducts.length === state.items.length ? fmtCents(total) : 'Loading…'}</strong></div>
+          <a className="btn-secondary" href="#booking-summary">Review services</a>
+        </div>
+      )}
     </div>
   );
 }

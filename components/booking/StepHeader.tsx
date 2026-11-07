@@ -2,11 +2,11 @@
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
-const STEPS = ['Address', 'Property', 'Products', 'Scheduling', 'Contact'];
+const STEPS = ['Address', 'Property', 'Services', 'Date & time', 'Review & book'];
 
 export function StepHeader({ current }: { current: number }) {
   return (
-    <nav className="min-w-0 w-full xl:w-auto" aria-label="Progress">
+    <nav className="min-w-0 w-full xl:w-auto" aria-label="Booking progress">
       <ol className="grid grid-cols-5 gap-1 xl:flex xl:items-center xl:gap-2">
       {STEPS.map((label, i) => {
         const idx = i + 1;
@@ -15,6 +15,7 @@ export function StepHeader({ current }: { current: number }) {
         return (
           <li key={label} aria-current={active ? 'step' : undefined} className="flex min-w-0 flex-col items-center gap-1.5 xl:flex-row xl:gap-2">
             <div
+              aria-hidden="true"
               className={cn(
                 'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-medium',
                 done && 'bg-ocean-700 text-white',
@@ -26,10 +27,11 @@ export function StepHeader({ current }: { current: number }) {
             </div>
             <span
               className={cn(
-                'whitespace-nowrap text-[10px] sm:text-xs xl:text-sm',
+                'text-center text-[11px] leading-tight sm:text-xs xl:whitespace-nowrap xl:text-sm',
                 active ? 'font-medium text-ocean-900' : 'text-slate-600'
               )}
             >
+              <span className="sr-only">Step {idx} of {STEPS.length}{done ? ', completed' : ''}: </span>
               {label}
             </span>
             {idx < STEPS.length && <div aria-hidden="true" className="hidden h-px w-4 shrink-0 bg-slate-300 xl:block" />}

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
 import { enforceRateLimit } from '@/lib/security/rate-limit';
 import { BookingBody, productDuration } from '@/lib/booking/validation';
+import { selectionProblem } from '@/lib/booking/service-selection';
 import { getAvailability } from '@/lib/booking/availability';
 import { fmtDateInTz } from '@/lib/utils/timezone';
 import { captureError } from '@/lib/observability/report';
@@ -30,12 +31,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ order_id: existing.order_id, assignment_state:replay?.assignment_state });
     }
     const audience = ['architectural', 'interior_design'].includes(b.project_type) ? 'architectural' : 'real_estate';
-    const { data: products, error: productError } = await admin.from('products').select('id, duration_minutes')
+    const { data: products, error: productError } = await admin.from('products').select('id, slug, name, is_addon, duration_minutes')
       .in('id', b.items.map(item => item.product_id)).eq('is_active', true).contains('audiences', [audience]);
     if (productError) throw productError;
     let duration: number;
     try { duration = productDuration(b.items, products || []); }
     catch { return NextResponse.json({ error: 'invalid_product', message: 'Your selected services changed. Please choose your services again.' }, { status: 400 }); }
+    const problem = selectionProblem(products || []);
+    if (problem) return NextResponse.json({ error: 'invalid_selection', message: problem }, { status: 400 });
     const { data: settings, error: settingsError } = await admin.from('business_settings').select('default_timezone').eq('id', true).maybeSingle();
     if (settingsError) throw settingsError;
     const date = fmtDateInTz(b.scheduled_at, settings?.default_timezone || 'America/New_York', 'iso');

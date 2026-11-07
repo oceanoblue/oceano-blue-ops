@@ -35,11 +35,14 @@ export const BookingBody = z.object({
 export type BookingInput = z.infer<typeof BookingBody>;
 
 export function productDuration(items: BookingInput['items'], products: Array<{ id: string; duration_minutes: number }>): number {
+  if (items.length === 0) throw new Error('invalid_duration');
   const duration = items.reduce((sum, item) => {
     const product = products.find(product => product.id === item.product_id);
     if (!product) throw new Error('invalid_product');
     return sum + product.duration_minutes * item.quantity;
   }, 0);
+  // Match the wizard's existing estimate for valid services without a duration.
+  if (duration === 0) return 60;
   if (!Number.isInteger(duration) || duration < 15 || duration > 720) throw new Error('invalid_duration');
   return duration;
 }

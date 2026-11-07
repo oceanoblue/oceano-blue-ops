@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { productCaptureSkills } from './capture-skills';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 
@@ -57,6 +57,9 @@ beforeAll(async () => {
   await db.exec(readFileSync('supabase/migrations/20260917111545_client_gallery_delivery.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20261008112200_allow_delivery_status_without_rescheduling.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20261018185935_crm_order_schedule_hold_guard.sql','utf8'));
+  const durationMigration = readdirSync('supabase/migrations').find(name => name.endsWith('_booking_zero_duration_fallback.sql'));
+  if (!durationMigration) throw new Error('Missing booking duration migration');
+  await db.exec(readFileSync(`supabase/migrations/${durationMigration}`, 'utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -109,6 +112,42 @@ describe('delivery completion with an existing travel-buffer conflict', () => {
   it('still checks a crew change combined with delivery',async()=>{
     await db.query('update orders set photographer_id=null where id=$1',[second]);
     await expect(db.query(`update orders set photographer_id=$1,status='delivered' where id=$2`,[photographer,second])).rejects.toThrow('slot_unavailable');
+  });
+});
+
+describe('public booking duration fallback', () => {
+  it.each([
+    { name: 'Aerial Photos + Drone Video Only', kind: 'photo', dispatch: false },
+    { name: 'Aerial Photos + Drone Video Only', kind: 'photo', dispatch: true },
+    { name: 'Social Reel', kind: 'video', dispatch: false },
+    { name: 'Social Reel', kind: 'video', dispatch: true },
+  ])('books $name for 60 minutes when its catalog duration is zero (dispatch: $dispatch)', async ({ name, kind, dispatch }) => {
+    if (dispatch) await enableDispatch();
+    await db.query('update products set name=$1,kind=$2,duration_minutes=0', [name, kind]);
+    await db.exec("update photographer_routing set capture_skills=array['photography','videography','drone']");
+    await book({ ...payload, duration_minutes: 15 });
+    expect((await db.query('select duration_minutes from orders')).rows).toEqual([{ duration_minutes: 60 }]);
+    expect((await db.query('select duration_minutes from products')).rows).toEqual([{ duration_minutes: 0 }]);
+  });
+
+  it.each([false, true])('preserves a nonzero combined service duration (dispatch: %s)', async dispatch => {
+    const extra = '77777777-7777-4777-8777-777777777777';
+    if (dispatch) await enableDispatch();
+    await db.exec('update products set duration_minutes=90');
+    await db.query("insert into products(id,name,duration_minutes,is_active,audiences,kind) values($1,'Social Reel',0,true,array['real_estate'],'video')", [extra]);
+    await db.query("update photographer_routing set capture_skills=array['photography','videography'],product_ids=array[$1::uuid,$2::uuid]", [product, extra]);
+    await book({ ...payload, duration_minutes: 15, items: [{ product_id: product, quantity: 1 }, { product_id: extra, quantity: 1 }] });
+    expect((await db.query('select duration_minutes from orders')).rows).toEqual([{ duration_minutes: 90 }]);
+  });
+
+  it.each([false, true])('rejects a missing product even when the remaining duration is zero (dispatch: %s)', async dispatch => {
+    if (dispatch) await enableDispatch();
+    await db.exec('update products set duration_minutes=0');
+    await expect(book({ ...payload, items: [
+      { product_id: product, quantity: 1 },
+      { product_id: '77777777-7777-4777-8777-777777777777', quantity: 1 },
+    ] })).rejects.toThrow('invalid_product');
+    expect((await db.query('select count(*)::int as count from orders')).rows).toEqual([{ count: 0 }]);
   });
 });
 
