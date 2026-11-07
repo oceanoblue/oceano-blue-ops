@@ -5,97 +5,87 @@ import type { ContactData } from '@/lib/booking/types';
 
 export function ContactStep({
   contact,
+  onChange,
   onBack,
   onSubmit,
   submitting,
   error,
 }: {
   contact: ContactData;
+  onChange?: (c: ContactData) => void;
   onBack: () => void;
   onSubmit: (c: ContactData) => void;
   submitting: boolean;
   error: string | null;
 }) {
   const [c, setC] = useState(contact);
-  const [mode, setMode] = useState<'guest' | 'signin'>('guest');
+
+  function updateContact(next: ContactData) {
+    setC(next);
+    onChange?.(next);
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (mode === 'signin') {
-      // For sign-in flow we just collect email and let portal handle it after order.
-      onSubmit({ ...c, name: c.name || c.email.split('@')[0] });
-    } else {
-      onSubmit(c);
-    }
+    if (!submitting) onSubmit(c);
   }
 
   return (
-    <form onSubmit={submit} className="card p-6 sm:p-8 max-w-2xl mx-auto">
-      <h1 className="text-xl sm:text-2xl font-semibold text-ocean-950 text-center">Share your contact details</h1>
+    <form onSubmit={submit} aria-busy={submitting} className="card w-full p-6 sm:p-8 max-w-2xl mx-auto">
+      <h1 className="text-xl sm:text-2xl font-semibold text-ocean-950 text-center">Your contact details</h1>
       <p className="mt-2 text-center text-sm text-slate-600">
-        Continue as guest or sign in to confirm your booking
+        No account is needed to book. If you&apos;ve booked with us before, use the same email address.
       </p>
-
-      <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
-        <button
-          type="button"
-          className={`rounded-md py-1.5 text-sm font-medium transition ${mode === 'guest' ? 'bg-white shadow-xs text-ocean-900' : 'text-slate-600'}`}
-          onClick={() => setMode('guest')}
-        >
-          Continue as guest
-        </button>
-        <button
-          type="button"
-          className={`rounded-md py-1.5 text-sm font-medium transition ${mode === 'signin' ? 'bg-white shadow-xs text-ocean-900' : 'text-slate-600'}`}
-          onClick={() => setMode('signin')}
-        >
-          Sign in
-        </button>
-      </div>
 
       <div className="mt-6 space-y-3">
         <div>
-          <label className="label" htmlFor="contact-email">Email <span className="text-rose-600">*</span></label>
+          <label className="label" htmlFor="contact-name">Full name <span className="text-rose-600" aria-hidden="true">*</span></label>
           <input
-            className="input"
+            id="contact-name" autoComplete="name" className="input text-base sm:text-sm"
+            required maxLength={200} disabled={submitting}
+            value={c.name} onChange={(e) => updateContact({ ...c, name: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="contact-email">Email address <span className="text-rose-600" aria-hidden="true">*</span></label>
+          <input
+            className="input text-base sm:text-sm"
             id="contact-email" autoComplete="email" type="email"
-            required
+            required maxLength={254} disabled={submitting}
             value={c.email}
-            onChange={(e) => setC({ ...c, email: e.target.value })}
+            onChange={(e) => updateContact({ ...c, email: e.target.value })}
             placeholder="you@brokerage.com"
           />
         </div>
-        {mode === 'guest' && (
-          <>
-            <div>
-              <label className="label" htmlFor="contact-name">Full name <span className="text-rose-600">*</span></label>
-              <input id="contact-name" autoComplete="name" className="input" required value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label" htmlFor="contact-phone">Phone</label>
-                <input id="contact-phone" autoComplete="tel" className="input" value={c.phone} onChange={(e) => setC({ ...c, phone: e.target.value })} />
-              </div>
-              <div>
-                <label className="label" htmlFor="contact-brokerage">Brokerage</label>
-                <input id="contact-brokerage" autoComplete="organization" className="input" value={c.brokerage} onChange={(e) => setC({ ...c, brokerage: e.target.value })} />
-              </div>
-            </div>
-          </>
-        )}
-        {mode === 'signin' && (
-          <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-md">
-            After we confirm your booking we&apos;ll email you a sign-in link to view your listings and download photos.
-          </p>
-        )}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="contact-phone">Phone (optional)</label>
+            <input
+              id="contact-phone" autoComplete="tel" type="tel" className="input text-base sm:text-sm"
+              maxLength={40} disabled={submitting}
+              value={c.phone} onChange={(e) => updateContact({ ...c, phone: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="contact-brokerage">Brokerage (optional)</label>
+            <input
+              id="contact-brokerage" autoComplete="organization" className="input text-base sm:text-sm"
+              maxLength={200} disabled={submitting}
+              value={c.brokerage} onChange={(e) => updateContact({ ...c, brokerage: e.target.value })}
+            />
+          </div>
+        </div>
       </div>
 
       {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
 
-      <div className="mt-6 flex gap-2 justify-between">
-        <button type="button" className="btn-ghost" onClick={onBack}>← Back</button>
-        <button type="submit" className="btn-primary" disabled={submitting || !c.email}>
-          {submitting ? 'Confirming…' : 'Confirm booking'}
+      <p id="booking-submit-help" className="mt-6 text-sm text-slate-600">
+        Your booking is sent when you select Submit booking. We&apos;ll email your booking details and confirmation.
+      </p>
+      <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+        <button type="button" className="btn-ghost" disabled={submitting} onClick={onBack}>← Back to date &amp; time</button>
+        <button type="submit" className="btn-primary" aria-describedby="booking-submit-help" disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Submit booking'}
         </button>
       </div>
     </form>

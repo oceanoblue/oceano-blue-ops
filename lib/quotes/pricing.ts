@@ -70,7 +70,10 @@ export async function computeQuoteItems(
   if (has('social_reel')) add('social_reel', 'Social Reel', base('social_reel', 12500));
 
   // Drone: stills and/or video → one charge (one trip).
-  if (has('drone_photography') || has('drone_video')) {
+  if (has('drone_photos_video')) {
+    // The explicit aerial package already covers both individual drone services.
+    add('drone_photos_video', bySlug.get('drone_photos_video')?.name ?? 'Aerial Photos + Drone Video Only', base('drone_photos_video', 30000));
+  } else if (has('drone_photography') || has('drone_video')) {
     const both = has('drone_photography') && has('drone_video');
     if (both) {
       add('drone', bySlug.get('drone_photos_video')?.name ?? 'Aerial Photos + Drone Video Only', base('drone_photos_video', 30000));

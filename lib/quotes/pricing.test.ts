@@ -48,6 +48,23 @@ it('falls back to $100 for a floor plan while retaining an included floor plan a
   expect(bundled.subtotal_cents).toBe(20000);
 });
 
+it.each([
+  { name: 'the explicit aerial package', slugs: ['drone_photos_video'], total: 30000, lines: 1 },
+  { name: 'the aerial package with a floor plan', slugs: ['drone_photos_video', 'floor_plan'], total: 40000, lines: 2 },
+  { name: 'the aerial package with duplicate drone selections', slugs: ['drone_photos_video', 'drone_photography', 'drone_video'], total: 30000, lines: 1 },
+])('prices $name once at its catalog price', async ({ slugs, total, lines }) => {
+  const { admin } = client([
+    { id: 'aerial', slug: 'drone_photos_video', name: 'Aerial Photos + Drone Video Only', base_price_cents: 30000 },
+    { id: 'floor', slug: 'floor_plan', name: 'Floor Plan', base_price_cents: 10000 },
+    { id: 'drone-photo', slug: 'drone_photography', name: 'Drone Photography', base_price_cents: 10000 },
+    { id: 'drone-video', slug: 'drone_video', name: 'Drone Video', base_price_cents: 10000 },
+  ]);
+  const quote = await computeQuoteItems(admin, 4200, slugs);
+  expect(quote.items).toHaveLength(lines);
+  expect(quote.items[0]).toMatchObject({ slug: 'drone_photos_video', name: 'Aerial Photos + Drone Video Only', price_cents: 30000 });
+  expect(quote.subtotal_cents).toBe(total);
+});
+
 it('quotes the drone-video add-on at $100 from the catalog and fallback', async () => {
   const { admin } = client([
     { id: 'video', slug: 'cinematic_video', name: 'Listing Walkthrough Video', base_price_cents: 65000 },

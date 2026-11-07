@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MapPin, Search, Loader2 } from 'lucide-react';
 import type { AddressData } from '@/lib/booking/types';
+import { fmtAddress } from '@/lib/utils/format';
 
 interface Suggestion {
   placeId: string;
@@ -113,9 +114,20 @@ export function AddressStep({
       <h1 className="text-2xl sm:text-3xl font-semibold text-ocean-950 text-center">
         Where&apos;s your property?
       </h1>
+      <p className="mt-2 text-center text-sm text-slate-600">
+        Start with the property address. You can review everything before you submit.
+      </p>
+      <ol aria-label="How booking works" className="mt-5 grid gap-2 rounded-lg bg-slate-50 p-4 text-sm text-slate-600 sm:grid-cols-3">
+        {['Add property details', 'Choose services and a time', 'Review and submit'].map((step, index) => (
+          <li key={step} className="flex items-start gap-2">
+            <span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-ocean-800">{index + 1}</span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
 
       {!manual ? (
-        <div className="mt-8">
+        <div className="mt-6">
           <label htmlFor="property-search" className="label">Property address</label>
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
@@ -125,6 +137,7 @@ export function AddressStep({
               aria-autocomplete="list"
               aria-expanded={open && suggestions.length > 0}
               aria-controls="property-suggestions"
+              aria-describedby="property-search-help"
               aria-activedescendant={open && activeSuggestion >= 0 && activeSuggestion < suggestions.length ? `property-option-${activeSuggestion}` : undefined}
               onKeyDown={e => {
                 if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActiveSuggestion(i => Math.min(i + 1, suggestions.length - 1)); }
@@ -161,10 +174,16 @@ export function AddressStep({
               </ul>
             )}
           </div>
+          <p id="property-search-help" role="status" className="mt-2 text-sm text-slate-500">
+            {resolving ? 'Checking the selected address…'
+              : loading ? 'Finding matching addresses…'
+                : open && query.trim().length >= 3 && suggestions.length === 0 ? 'No matching addresses found. You can enter it manually below.'
+                  : 'Start typing, then choose your address from the list.'}
+          </p>
           <button
             type="button"
             onClick={() => setManual(true)}
-            className="mt-3 text-sm text-slate-500 underline hover:text-slate-700"
+            className="mt-2 inline-flex min-h-11 items-center text-sm text-slate-600 underline hover:text-slate-800"
           >
             Can&apos;t find it? Enter address manually
           </button>
@@ -173,13 +192,13 @@ export function AddressStep({
         <ManualAddressForm
           value={manualAddr}
           onChange={setManualAddr}
-          onSubmit={() => onComplete(manualAddr)}
+          onSubmit={() => onComplete({ ...manualAddr, formatted: fmtAddress(manualAddr), lat: null, lng: null })}
           onBackToSearch={() => setManual(false)}
         />
       )}
 
       <p className="mt-4 text-center text-xs text-slate-500">
-        We service the Lowcountry &amp; Coastal Empire — Hilton Head, Bluffton, Beaufort, Savannah &amp; surrounding areas.
+        Serving Hilton Head, Bluffton, Beaufort, Savannah, and the surrounding Lowcountry and Coastal Empire.
       </p>
     </div>
   );
@@ -202,24 +221,24 @@ function ManualAddressForm({
         e.preventDefault();
         onSubmit();
       }}
-      className="mt-8 space-y-3"
+      className="mt-6 space-y-3"
     >
       <label className="label" htmlFor="street-address">Street address</label>
       <input
         id="street-address" autoComplete="address-line1"
-        className="input"
+        className="input text-base sm:text-sm"
         placeholder="Street address"
-        required
+        required maxLength={300}
         value={value.address_line1}
         onChange={(e) => onChange({ ...value, address_line1: e.target.value })}
       />
-      <div className="grid grid-cols-3 gap-2">
-        <label className="label">City<input autoComplete="address-level2" className="input" placeholder="City" required value={value.city} onChange={(e) => onChange({ ...value, city: e.target.value })} /></label>
-        <label className="label">State<input autoComplete="address-level1" className="input" placeholder="State" required maxLength={2} value={value.state} onChange={(e) => onChange({ ...value, state: e.target.value.toUpperCase() })} /></label>
-        <label className="label">ZIP<input autoComplete="postal-code" className="input" placeholder="ZIP" pattern="[0-9]{5}(-[0-9]{4})?" title="Enter a five-digit ZIP code" required value={value.zip} onChange={(e) => onChange({ ...value, zip: e.target.value })} /></label>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <label className="label col-span-2 sm:col-span-1">City<input autoComplete="address-level2" className="input text-base sm:text-sm" placeholder="City" required maxLength={100} value={value.city} onChange={(e) => onChange({ ...value, city: e.target.value })} /></label>
+        <label className="label">State<input autoComplete="address-level1" className="input text-base sm:text-sm" placeholder="State" required minLength={2} maxLength={2} value={value.state} onChange={(e) => onChange({ ...value, state: e.target.value.toUpperCase() })} /></label>
+        <label className="label">ZIP code<input autoComplete="postal-code" inputMode="numeric" className="input text-base sm:text-sm" placeholder="ZIP code" pattern="[0-9]{5}(-[0-9]{4})?" title="Enter a five-digit ZIP code" required maxLength={10} value={value.zip} onChange={(e) => onChange({ ...value, zip: e.target.value })} /></label>
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <button type="button" onClick={onBackToSearch} className="text-sm text-slate-500 underline hover:text-slate-700">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <button type="button" onClick={onBackToSearch} className="inline-flex min-h-11 items-center justify-center text-sm text-slate-600 underline hover:text-slate-800">
           ← Back to search
         </button>
         <button className="btn-primary" type="submit"><MapPin className="h-4 w-4" /> Use this address</button>
