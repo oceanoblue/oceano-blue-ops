@@ -78,7 +78,7 @@ export async function computeQuoteItems(
       const slug = has('drone_photography') ? 'drone_photography' : 'drone_video';
       const p = bySlug.get(slug);
       const withShoot = hasPhotos || hasVideo;
-      const price = withShoot ? base(slug, slug === 'drone_video' ? 20000 : 10000)
+      const price = withShoot ? base(slug, 10000)
         : p?.standalone_price_cents ?? (slug === 'drone_video' ? 25000 : 15000);
       add('drone', slug === 'drone_video' ? 'Drone Video' : 'Drone Photography', price);
     }
