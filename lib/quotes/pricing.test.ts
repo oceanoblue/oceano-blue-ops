@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { computeQuoteItems } from './pricing';
 
-type Product = { id: string; slug: string; name: string; base_price_cents: number };
+type Product = { id: string; slug: string; name: string; base_price_cents: number; standalone_price_cents?: number | null };
 function client(products: Product[] = []) {
   const rpc = vi.fn().mockResolvedValue({ data: 60000 });
   return {
@@ -47,6 +47,58 @@ it('falls back to $100 for a floor plan while retaining an included floor plan a
   expect(bundled.items).toContainEqual({ slug: 'floor_plan', name: 'Floor Plan', price_cents: 0, complimentary: true });
   expect(bundled.subtotal_cents).toBe(20000);
 });
+
+it('quotes the drone-video add-on at $100 from the catalog and fallback', async () => {
+  const { admin } = client([
+    { id: 'video', slug: 'cinematic_video', name: 'Listing Walkthrough Video', base_price_cents: 65000 },
+    { id: 'drone', slug: 'drone_video', name: 'Drone Video', base_price_cents: 10000, standalone_price_cents: 25000 },
+  ]);
+  const quote = await computeQuoteItems(admin, 4200, ['cinematic_video', 'drone_video']);
+  expect(quote.items).toContainEqual({ slug: 'drone', name: 'Drone Video', price_cents: 10000, complimentary: false });
+  expect(quote.subtotal_cents).toBe(70000);
+
+  const fallback = await computeQuoteItems(client().admin, 4200, ['cinematic_video', 'drone_video']);
+  expect(fallback.items).toContainEqual({ slug: 'drone', name: 'Drone Video', price_cents: 10000, complimentary: false });
+  expect(fallback.subtotal_cents).toBe(65000);
+  expect((await computeQuoteItems(admin, 4200, ['drone_video'])).subtotal_cents).toBe(25000);
+});
+
+it('restores the $100 drone-video add-on without repricing saved orders or standalone services', async () => {
+  const migrationName = readdirSync('supabase/migrations').find(name => name.endsWith('_correct_drone_video_addon_price.sql'));
+  if (!migrationName) throw new Error('Missing drone-video add-on migration');
+  const migration = readFileSync(`supabase/migrations/${migrationName}`, 'utf8');
+  const db = new PGlite();
+  try {
+    await db.exec(`
+      create table products (
+        id uuid primary key default gen_random_uuid(), slug text unique,
+        base_price_cents int, standalone_price_cents int, is_active boolean,
+        updated_at timestamptz default now()
+      );
+      create table order_items (product_id uuid references products(id), unit_price_cents int);
+      insert into products (slug, base_price_cents, standalone_price_cents, is_active) values
+        ('drone_video', 20000, 25000, false),
+        ('drone_photography', 10000, 15000, true),
+        ('drone_photos_video', 30000, 30000, true),
+        ('cinematic_video', 65000, null, true),
+        ('floor_plan', 10000, null, true);
+      insert into order_items select id, base_price_cents from products;
+    `);
+    const identitiesBefore = (await db.query('select id, slug from products order by slug')).rows;
+    const itemsBefore = (await db.query('select * from order_items order by product_id')).rows;
+    const othersBefore = (await db.query("select * from products where slug <> 'drone_video' order by slug")).rows;
+    await db.exec(migration);
+    const corrected = (await db.query("select base_price_cents, standalone_price_cents, is_active from products where slug = 'drone_video'")).rows;
+    expect(corrected).toEqual([{ base_price_cents: 10000, standalone_price_cents: 25000, is_active: true }]);
+    expect((await db.query('select id, slug from products order by slug')).rows).toEqual(identitiesBefore);
+    expect((await db.query('select * from order_items order by product_id')).rows).toEqual(itemsBefore);
+    expect((await db.query("select * from products where slug <> 'drone_video' order by slug")).rows).toEqual(othersBefore);
+    await db.exec(migration);
+    expect((await db.query("select base_price_cents, standalone_price_cents, is_active from products where slug = 'drone_video'")).rows).toEqual(corrected);
+  } finally {
+    await db.close();
+  }
+}, 30000);
 
 it('updates only the intended catalog fields and preserves video tiers and booked order snapshots', async () => {
   const migrationName = readdirSync('supabase/migrations').find(name => name.endsWith('_clarify_listing_video_catalog.sql'));
