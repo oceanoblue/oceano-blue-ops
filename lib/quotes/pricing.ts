@@ -13,8 +13,7 @@ export type QuoteLineItem = {
  *  - Photography and cinematic video are sqft-tiered (price_for_sqft).
  *  - Drone is ONE charge (one trip), priced from the catalog: stills or video
  *    alone use the add-on price when booked with photos or video, otherwise the
- *    standalone price; stills + video together use the Drone Photos + Video
- *    bundle.
+ *    standalone price; stills + video together use the aerial photos/video bundle.
  *  - 3D Home + Floor Plan INCLUDES the floor plan; a separate floor plan then
  *    shows Included. 3D is $100 with photos, $200 standalone.
  *  - Matterport is a separate product, never bundled.
@@ -65,14 +64,16 @@ export async function computeQuoteItems(
     add('interior_exterior_photo', bySlug.get('interior_exterior_photo')?.name ?? 'Interior/Exterior Photography', price);
   }
 
-  if (hasVideo) add('cinematic_video', 'Cinematic Videography', await tieredPrice('cinematic_video', 55000));
+  if (hasVideo) {
+    add('cinematic_video', bySlug.get('cinematic_video')?.name ?? 'Listing Walkthrough Video', await tieredPrice('cinematic_video', 55000));
+  }
   if (has('social_reel')) add('social_reel', 'Social Reel', base('social_reel', 12500));
 
   // Drone: stills and/or video → one charge (one trip).
   if (has('drone_photography') || has('drone_video')) {
     const both = has('drone_photography') && has('drone_video');
     if (both) {
-      add('drone', 'Drone Photos + Video', base('drone_photos_video', 30000));
+      add('drone', bySlug.get('drone_photos_video')?.name ?? 'Aerial Photos + Drone Video Only', base('drone_photos_video', 30000));
     } else {
       const slug = has('drone_photography') ? 'drone_photography' : 'drone_video';
       const p = bySlug.get(slug);
@@ -88,7 +89,7 @@ export async function computeQuoteItems(
     add('three_d_floor_plan', '3D Home + Floor Plan', hasPhotos ? 10000 : 20000);
     if (has('floor_plan')) add('floor_plan', 'Floor Plan', 0, true); // included in 3D
   } else if (has('floor_plan')) {
-    add('floor_plan', 'Floor Plan', base('floor_plan', 9500));
+    add('floor_plan', 'Floor Plan', base('floor_plan', 10000));
   }
 
   if (has('matterport_3d')) add('matterport_3d', 'Matterport 3D Tour', bySlug.get('matterport_3d')?.standalone_price_cents ?? 29500);
