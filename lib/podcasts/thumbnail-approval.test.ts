@@ -12,7 +12,7 @@ vi.mock('@/lib/podcasts/youtube',()=>({publishYoutubeDraft:m.publish}));
 vi.mock('@/lib/integrations/transistor',()=>({publishTransistorEpisode:vi.fn()}));
 import {POST} from '@/app/api/automations/podcast/approve/route';
 beforeEach(()=>{vi.clearAllMocks();m.thumbnail=null;});
-it.each([null,{status:'generating'},{status:'ready',storage_path:'path',youtube_id:'wrong-video'}])('blocks approval and publishing when thumbnail is incomplete or for another video: %j',async(thumbnail)=>{
+it.each([null,{status:'generating'},{status:'review',storage_path:'draft',youtube_id:'abcdefghijk'},{status:'ready',storage_path:'path',youtube_id:'wrong-video'}])('blocks approval and publishing when thumbnail is incomplete or for another video: %j',async(thumbnail)=>{
  m.thumbnail=thumbnail;
  const response=await POST(new Request('https://example.test/api/automations/podcast/approve',{method:'POST',body:JSON.stringify({episode_id:'11111111-1111-4111-8111-111111111111',decision:'approve'})}));
  expect(response.status).toBe(409);expect((await response.json()).error).toContain('thumbnail');expect(m.update).not.toHaveBeenCalled();expect(m.publish).not.toHaveBeenCalled();

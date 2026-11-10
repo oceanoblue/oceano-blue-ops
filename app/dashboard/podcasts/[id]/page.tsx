@@ -80,7 +80,7 @@ export default async function PodcastEpisodePage(props: { params: Promise<{ id: 
       </div>
 
       {!youtube?.url && !['archived','cancelled','needs_revision','published'].includes(e.status) && <UploadPanel episodeId={e.id} copyReady={Boolean(copy.title)} />}
-      {youtube?.url && requiresThumbnail && (e.status !== 'published' || thumbnail) && <ThumbnailPanel episodeId={e.id} ready={hasThumbnail} published={e.status==='published'} />}
+      {youtube?.url && requiresThumbnail && <ThumbnailPanel episodeId={e.id} ready={hasThumbnail} published={e.status==='published'} />}
       {pendingApproval && youtube?.url && !thumbnailPending && <ApprovalPanel episodeId={e.id} privateVideo={youtube.label === 'YouTube (private)'} />}
       {retryPublish && !thumbnailPending && <ApprovalPanel episodeId={e.id} retry />}
 
