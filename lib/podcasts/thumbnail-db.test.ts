@@ -21,6 +21,7 @@ it('claims only once, rejects stale completions, gates readiness, and preserves 
   `);
   await db.exec(readFileSync('supabase/migrations/20261110194000_podcast_thumbnails.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20261110194500_podcast_thumbnail_backfill_scope.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261110230000_podcast_thumbnail_design_review.sql','utf8'));
   await db.exec('set role authenticated');
   await expect(db.query("select claim_podcast_thumbnail('mind-your-health')")).rejects.toThrow('permission denied');
   await db.exec('reset role');
@@ -29,6 +30,13 @@ it('claims only once, rejects stale completions, gates readiness, and preserves 
   const claim=async()=> (await db.query<{task:any}>("select claim_podcast_thumbnail('mind-your-health') as task")).rows[0].task;
   const t=await claim();expect(t.id).toBe(ep);expect(await claim()).toEqual({});
   await expect(db.query(`select complete_podcast_thumbnail('${ep}','44444444-4444-4444-8444-444444444444','path')`)).rejects.toThrow('lease expired');
+  await db.exec("update podcast_thumbnails set status='review',storage_path='draft',lease_expires_at=null");
+  expect(await claim()).toEqual({});
+  await expect(db.query(`select complete_podcast_thumbnail('${ep}','${t.lease_token}','path')`)).rejects.toThrow('lease expired');
+  await db.exec("update podcast_episodes set status='ready_to_publish'");
+  expect((await db.query('select status from podcast_episodes')).rows).toEqual([{status:'needs_review'}]);
+  await db.exec("update podcast_thumbnails set status='applying',lease_expires_at=now()+interval '5 minutes'");
+  expect(await claim()).toEqual({});
   await db.query(`select complete_podcast_thumbnail('${ep}','${t.lease_token}','path')`);
   expect((await db.query('select status from podcast_episodes')).rows).toEqual([{status:'ready_to_publish'}]);
   expect(await claim()).toEqual({});
