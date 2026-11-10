@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { exchangeCodeForTokens, emailFromIdToken } from '@/lib/google-calendar/oauth';
+import { handleYoutubeCallback } from '@/lib/podcasts/youtube-oauth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
+  if (state?.startsWith('youtube.')) return handleYoutubeCallback(request);
   const err = url.searchParams.get('error');
 
   const base = process.env.NEXT_PUBLIC_APP_URL || url.origin;

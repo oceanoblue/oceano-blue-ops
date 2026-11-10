@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, Youtube } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { ApprovalPanel } from '@/components/podcasts/ApprovalPanel';
+import { UploadPanel } from '@/components/podcasts/UploadPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,11 +49,12 @@ export default async function PodcastEpisodePage(props: { params: Promise<{ id: 
   const copy = (e.metadata?.copy ?? {}) as any;
   const youtube = (links ?? []).find((l: any) => l.link_type === 'youtube_video');
   const latestApproval = (approvals ?? [])[0] as any;
-  const pendingApproval = latestApproval?.status === 'pending';
+  const canReview = !['archived','cancelled','needs_revision','published'].includes(e.status);
+  const pendingApproval = latestApproval?.status === 'pending' && canReview;
   // Approved, video exists, but the publish confirmation never relabeled the
   // link public — the flip didn't happen (webhook unconfigured/failed). Offer a retry.
   const retryPublish =
-    latestApproval?.status === 'approved' && Boolean(youtube?.url) && youtube?.label !== 'YouTube (public)';
+    canReview && latestApproval?.status === 'approved' && Boolean(youtube?.url) && youtube?.label !== 'YouTube (public)';
   const transcriptText: string = (transcript as any)?.text ?? '';
 
   return (
@@ -62,8 +64,8 @@ export default async function PodcastEpisodePage(props: { params: Promise<{ id: 
           <ArrowLeft className="h-4 w-4" /> Back to podcasts
         </Link>
         <div className="mt-1 flex items-center gap-3">
-          <h1 className="text-2xl font-semibold text-ocean-950">{e.title ?? 'Untitled episode'}</h1>
-          <span className="pill bg-ocean-50 text-ocean-800 capitalize">{e.status?.replace(/_/g, ' ')}</span>
+          <h1 className="text-2xl font-semibold text-ocean-950">{copy.title || e.title || 'Untitled episode'}</h1>
+          <span className="pill bg-ocean-50 text-ocean-800 capitalize">{e.status === 'needs_review' && !youtube?.url ? 'Awaiting YouTube upload' : e.status?.replace(/_/g, ' ')}</span>
         </div>
         <p className="text-sm text-slate-600">
           {e.podcast_shows?.name ?? '—'}
@@ -71,7 +73,8 @@ export default async function PodcastEpisodePage(props: { params: Promise<{ id: 
         </p>
       </div>
 
-      {pendingApproval && <ApprovalPanel episodeId={e.id} />}
+      {!youtube?.url && !['archived','cancelled','needs_revision','published'].includes(e.status) && <UploadPanel episodeId={e.id} copyReady={Boolean(copy.title)} />}
+      {pendingApproval && youtube?.url && <ApprovalPanel episodeId={e.id} privateVideo={youtube.label === 'YouTube (private)'} />}
       {retryPublish && <ApprovalPanel episodeId={e.id} retry />}
 
       <div className="grid gap-4 lg:grid-cols-3">
