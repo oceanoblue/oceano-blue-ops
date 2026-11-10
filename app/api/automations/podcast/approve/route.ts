@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { publishTransistorEpisode } from '@/lib/integrations/transistor';
+import { publishYoutubeDraft } from '@/lib/podcasts/youtube';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
  *
  * The unlisted YouTube upload is an allowed draft; going public / finalizing
  * delivery requires this human approval. Approving marks the pending `approvals`
- * row + the `delivery_versions` row approved and the episode published.
+ * row + the `delivery_versions` row approved. Only YouTube confirmation marks the episode published.
  *
  * Phase 2: approval also fires the Make publish webhook (MAKE_PUBLISH_WEBHOOK_URL)
  * which flips the YouTube video from unlisted to public, then confirms back via
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
 
   const { data: ep } = await admin
     .from('podcast_episodes')
-    .select('id, job_id, metadata, podcast_shows(slug)')
+    .select('id, show_id, status, job_id, metadata, podcast_shows(slug)')
     .eq('id', episode_id)
     .maybeSingle();
   if (!ep) return NextResponse.json({ error: 'episode_not_found' }, { status: 404 });
@@ -54,16 +55,29 @@ export async function POST(request: Request) {
 
   const { data: appr } = await admin
     .from('approvals')
-    .select('id')
+    .select('id, status')
     .eq('job_id', ep.job_id)
-    .eq('status', 'pending')
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
+  const { data: yt, error: ytError } = await admin.from('external_links')
+    .select('url, external_id, label').eq('job_id', ep.job_id).eq('link_type', 'youtube_video').maybeSingle();
+  if (ytError || !yt?.url || !/^[A-Za-z0-9_-]{11}$/.test(yt.external_id || '')) {
+    return NextResponse.json({ error: 'Upload the video to YouTube before approving publication.' }, { status: 409 });
+  }
+  if (!appr || !['pending', 'approved'].includes(appr.status) ||
+      (decision === 'reject' && appr.status !== 'pending') || ['archived','cancelled','needs_revision'].includes(ep.status)) {
+    return NextResponse.json({ error: 'This episode has no pending publish approval.' }, { status: 409 });
+  }
+  if (decision === 'approve' && yt.label === 'YouTube (public)' && appr.status === 'approved') {
+    return NextResponse.json({ ok: true, publish: 'published' });
+  }
+
   if (decision === 'approve') {
-    if (appr) {
-      await admin.from('approvals').update({ status: 'approved', decided_by: user.id, decided_at: now, notes: notes ?? null }).eq('id', appr.id);
+    if (appr.status === 'pending') {
+      const decisionResult = await admin.from('approvals').update({ status: 'approved', decided_by: user.id, decided_at: now, notes: notes ?? null }).eq('id', appr.id).eq('status','pending').select('id');
+      if (decisionResult.error || !decisionResult.data?.length) return NextResponse.json({error:'Approval changed. Refresh and try again.'},{status:409});
     }
     await admin
       .from('delivery_versions')
@@ -73,9 +87,9 @@ export async function POST(request: Request) {
     await admin.from('podcast_deliverables').update({ status: 'approved' }).eq('episode_id', ep.id);
     // NOTE: next_action lives on jobs, not podcast_episodes — including it here
     // made this update fail silently and the episode pill never left needs_review.
-    const { error: epErr } = await admin.from('podcast_episodes').update({ status: 'published' }).eq('id', ep.id);
+    const { error: epErr } = await admin.from('podcast_episodes').update({ status: 'ready_to_publish' }).eq('id', ep.id);
     if (epErr) return NextResponse.json({ error: `episode_update_failed: ${epErr.message}` }, { status: 500 });
-    if (ep.job_id) await admin.from('jobs').update({ next_action: null }).eq('id', ep.job_id);
+    if (ep.job_id) await admin.from('jobs').update({ next_action: 'Publishing approved; awaiting YouTube confirmation' }).eq('id', ep.job_id);
     await admin.from('production_events').insert({
       job_id: ep.job_id,
       actor_type: 'user',
@@ -86,15 +100,18 @@ export async function POST(request: Request) {
 
     // Phase 2: flip the YouTube video public via the Make publish scenario.
     const webhook = process.env.MAKE_PUBLISH_WEBHOOK_URL;
-    const { data: yt } = await admin
-      .from('external_links')
-      .select('url, external_id')
-      .eq('job_id', ep.job_id)
-      .eq('link_type', 'youtube_video')
-      .maybeSingle();
-
-    let publish: 'triggered' | 'not_configured' | 'no_youtube' | 'failed' = 'not_configured';
-    if (webhook && yt?.url) {
+    let publish: 'published' | 'triggered' | 'not_configured' | 'no_youtube' | 'failed' = 'not_configured';
+    const { data: directUpload } = await admin.from('podcast_youtube_uploads').select('youtube_id').eq('episode_id', ep.id).maybeSingle();
+    if (directUpload?.youtube_id === yt.external_id) {
+      try {
+        await publishYoutubeDraft(admin, ep.show_id, yt.external_id);
+        const {error} = await admin.rpc('confirm_podcast_youtube_publication', {p_episode:ep.id,p_video:yt.external_id});
+        if(error)throw error;
+        publish='published';
+      } catch {
+        publish='failed';
+      }
+    } else if (webhook && yt?.url) {
       const tr = (await admin
         .from('tool_runs')
         .insert({
@@ -164,7 +181,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, publish, audio });
   } else {
     if (appr) {
-      await admin.from('approvals').update({ status: 'rejected', decided_by: user.id, decided_at: now, notes: notes ?? null }).eq('id', appr.id);
+      const decisionResult = await admin.from('approvals').update({ status: 'rejected', decided_by: user.id, decided_at: now, notes: notes ?? null }).eq('id', appr.id).eq('status','pending').select('id');
+      if(decisionResult.error || !decisionResult.data?.length) return NextResponse.json({error:'Approval changed. Refresh and try again.'},{status:409});
     }
     const { error: epErr } = await admin.from('podcast_episodes').update({ status: 'needs_revision' }).eq('id', ep.id);
     if (epErr) return NextResponse.json({ error: `episode_update_failed: ${epErr.message}` }, { status: 500 });

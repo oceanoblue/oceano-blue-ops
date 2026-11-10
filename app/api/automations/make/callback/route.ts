@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
 import { parseJsonLenient } from '@/lib/automations/lenient-json';
 import { advancesEpisodeStatus } from '@/lib/podcasts/constants';
+import { queueYoutubeUpload } from '@/lib/podcasts/youtube-upload';
 
 export const dynamic = 'force-dynamic';
 
@@ -331,6 +332,9 @@ export async function POST(request: Request) {
         const meta = { ...(ep.metadata ?? {}), copy };
         await advanceEpisode(ep.id, 'needs_review', { metadata: meta });
         await logEvent(ep.job_id, 'agent', 'copy_generated', `AI copy ready: ${copy.title ?? '(untitled)'}`);
+        // The durable queue owns the large-file transfer; Make still generates
+        // copy and thumbnails. A missing connection leaves an actionable UI.
+        await queueYoutubeUpload(admin, ep.id);
         return NextResponse.json({ ok: true, episode_id: ep.id });
       }
 
@@ -338,49 +342,11 @@ export async function POST(request: Request) {
         const ep = await resolveEpisode(parsed.data.episode_id);
         if (!ep) return NextResponse.json({ error: 'episode_not_found' }, { status: 404 });
 
-        const youtube_url = output.youtube_url ?? (output.youtube_id ? `https://youtu.be/${output.youtube_id}` : null);
-
-        const { data: existingDelivery } = await admin
-          .from('delivery_versions')
-          .select('id')
-          .eq('job_id', ep.job_id)
-          .eq('delivery_type', 'podcast_episode')
-          .maybeSingle();
-        if (!existingDelivery) {
-          await admin.from('delivery_versions').insert({
-            job_id: ep.job_id,
-            delivery_type: 'podcast_episode',
-            status: 'internal_review', // unlisted draft (#2)
-            title: (ep.metadata?.copy?.title as string) ?? ep.metadata?.filename ?? null,
-            external_url: youtube_url,
-          });
-          await admin.from('podcast_deliverables').insert({
-            episode_id: ep.id,
-            deliverable_type: 'full_episode_video',
-            status: 'internal_review',
-            external_url: youtube_url,
-          });
-          await admin.from('external_links').insert({
-            job_id: ep.job_id,
-            link_type: 'youtube_video',
-            url: youtube_url,
-            external_id: output.youtube_id ?? null,
-            label: 'YouTube (unlisted)',
-          });
-
-          // Publish gate (#2): open a pending approval for going public/final.
-          const policy = (await admin.from('approval_policies').select('id').eq('key', 'publish_content').maybeSingle()).data;
-          await admin.from('approvals').insert({
-            job_id: ep.job_id,
-            policy_id: policy?.id ?? null,
-            status: 'pending',
-            notes: 'Review the unlisted upload + copy, then approve to publish publicly / finalize delivery.',
-          });
-        }
-
-        await advanceEpisode(ep.id, 'ready_to_publish');
-        await admin.from('jobs').update({ next_action: 'Human review + approve to publish' }).eq('id', ep.job_id);
-        await logEvent(ep.job_id, 'make', 'youtube_uploaded', 'Uploaded to YouTube (unlisted) — awaiting approval', { youtube_url });
+        const videoId = String(output.youtube_id ?? '');
+        if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return NextResponse.json({ error: 'youtube_id_required' }, { status: 400 });
+        const { error } = await admin.rpc('record_podcast_youtube_upload', { p_episode: ep.id, p_video: videoId, p_privacy: 'unlisted' });
+        if (error) return NextResponse.json({ error: 'youtube_review_save_failed' }, { status: 500 });
+        await logEvent(ep.job_id, 'make', 'youtube_uploaded', 'YouTube draft ready for approval');
         return NextResponse.json({ ok: true, episode_id: ep.id });
       }
 
@@ -389,23 +355,10 @@ export async function POST(request: Request) {
         const ep = await resolveEpisode(parsed.data.episode_id);
         if (!ep) return NextResponse.json({ error: 'episode_not_found' }, { status: 404 });
 
-        await advanceEpisode(ep.id, 'published');
-        await admin.from('jobs').update({ next_action: null }).eq('id', ep.job_id);
-        await admin
-          .from('delivery_versions')
-          .update({ status: 'published' })
-          .eq('job_id', ep.job_id)
-          .eq('delivery_type', 'podcast_episode');
-        await admin
-          .from('podcast_deliverables')
-          .update({ status: 'published' })
-          .eq('episode_id', ep.id)
-          .eq('deliverable_type', 'full_episode_video');
-        await admin
-          .from('external_links')
-          .update({ label: 'YouTube (public)' })
-          .eq('job_id', ep.job_id)
-          .eq('link_type', 'youtube_video');
+        const { data: link } = await admin.from('external_links').select('external_id').eq('job_id', ep.job_id).eq('link_type', 'youtube_video').maybeSingle();
+        if (!link?.external_id) return NextResponse.json({ error: 'youtube_link_missing' }, { status: 409 });
+        const { error: confirmError } = await admin.rpc('confirm_podcast_youtube_publication', { p_episode: ep.id, p_video: String(output.youtube_id || link.external_id) });
+        if (confirmError) return NextResponse.json({ error: 'publication_not_approved' }, { status: 409 });
         await admin
           .from('tool_runs')
           .update({ status: 'completed', completed_at: new Date().toISOString() })

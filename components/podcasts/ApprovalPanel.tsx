@@ -6,10 +6,11 @@ import { Check, X, Loader2 } from 'lucide-react';
 
 const PUBLISH_MESSAGE: Record<string, string> = {
   triggered: 'Approved — the publish scenario is flipping the video to public.',
+  published: 'YouTube confirmed that this episode is public.',
   not_configured:
     'Approved and recorded. Auto-publish is not configured (MAKE_PUBLISH_WEBHOOK_URL) — flip the video to public in YouTube Studio.',
   no_youtube: 'Approved and recorded — no YouTube link on this episode to publish.',
-  failed: 'Approved, but the publish webhook failed. Click Approve again to retry, or flip the video manually.',
+  failed: 'Your approval is saved, but YouTube has not confirmed publication. Check the channel connection or API upload restrictions, then retry publishing.',
 };
 
 /**
@@ -17,7 +18,7 @@ const PUBLISH_MESSAGE: Record<string, string> = {
  * sign-off after the unlisted YouTube upload. Approving fires the Make publish
  * scenario (Phase 2) — the click here is the owner approval.
  */
-export function ApprovalPanel({ episodeId, retry = false }: { episodeId: string; retry?: boolean }) {
+export function ApprovalPanel({ episodeId, retry = false, privateVideo = false }: { episodeId: string; retry?: boolean; privateVideo?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,12 +57,12 @@ export function ApprovalPanel({ episodeId, retry = false }: { episodeId: string;
       <p className="mt-1 text-sm text-amber-800">
         {retry ? (
           <>
-            This episode is <strong>approved</strong> but the video is still <strong>unlisted</strong> —
-            the publish step hasn’t completed (webhook unconfigured or failed). Publishing now retries the flip.
+            This episode is <strong>approved</strong> but YouTube has not confirmed it is public.
+            Publishing now retries the request.
           </>
         ) : (
           <>
-            The episode is uploaded to YouTube as <strong>unlisted</strong>. Review the video and the
+            The episode is uploaded to YouTube as <strong>{privateVideo ? 'private' : 'unlisted'}</strong>. Review the video and the
             generated copy below, then approve to publish publicly / finalize delivery, or send it back.
           </>
         )}
