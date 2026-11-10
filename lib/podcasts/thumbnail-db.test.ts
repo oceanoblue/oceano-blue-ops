@@ -20,6 +20,7 @@ it('claims only once, rejects stale completions, gates readiness, and preserves 
    insert into external_links values('22222222-2222-4222-8222-222222222222','youtube_video','abcdefghijk');
   `);
   await db.exec(readFileSync('supabase/migrations/20261110194000_podcast_thumbnails.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261110194500_podcast_thumbnail_backfill_scope.sql','utf8'));
   await db.exec('set role authenticated');
   await expect(db.query("select claim_podcast_thumbnail('mind-your-health')")).rejects.toThrow('permission denied');
   await db.exec('reset role');
