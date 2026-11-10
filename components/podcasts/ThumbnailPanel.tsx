@@ -43,7 +43,7 @@ export function ThumbnailPanel({episodeId, ready, published}:{episodeId:string;r
       </a> : <p className="mt-2 text-sm text-slate-600">Loading thumbnail preview…</p>}
       <p className="mt-2 text-sm text-emerald-700">Custom thumbnail applied to YouTube.{!published && ' Review it with the video and copy before approving publication.'}</p>
     </> : <p className="mt-2 text-sm text-slate-600">
-      {status==='generating'?'Creating the custom thumbnail…':status==='failed'?'Thumbnail needs attention.':'Thumbnail queued. Make checks for new uploads every 15 minutes.'}
+      {status==='generating'?'Creating the custom thumbnail…':status==='failed'?'Thumbnail needs attention.':'Thumbnail queued. Make checks for new uploads every two hours.'}
       {!published && ' Publishing approval unlocks when the thumbnail is ready.'}
     </p>}
     {error && <p className="mt-2 text-sm text-rose-700" role="alert">{error}</p>}
