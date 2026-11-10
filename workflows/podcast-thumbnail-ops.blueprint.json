@@ -1,0 +1,751 @@
+{
+  "name": "Production - Podcast Pipeline - Mind Your Health - v1 (Thumbnail Generator)",
+  "flow": [
+    {
+      "id": 15,
+      "module": "datastore:GetRecord",
+      "version": 1,
+      "parameters": {
+        "datastore": 146980,
+        "returnWrapped": false
+      },
+      "mapper": {
+        "key": "POS_AUTOMATION_SECRET",
+        "returnWrapped": false
+      },
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": 1,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": true,
+        "useNewZLibDeCompress": true
+      },
+      "mapper": {
+        "ca": "",
+        "qs": [],
+        "url": "https://app.oceanoblue.net/api/automations/podcast/thumbnails",
+        "data": "{\"action\":\"claim\",\"show_slug\":\"mind-your-health\"}",
+        "gzip": true,
+        "method": "post",
+        "headers": [
+          {
+            "name": "x-pos-automation-secret",
+            "value": "{{15.filename}}"
+          }
+        ],
+        "timeout": "300",
+        "useMtls": false,
+        "authPass": "",
+        "authUser": "",
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "serializeUrl": false,
+        "shareCookies": false,
+        "parseResponse": true,
+        "followRedirect": false,
+        "useQuerystring": false,
+        "followAllRedirects": false,
+        "rejectUnauthorized": true
+      },
+      "metadata": {
+        "designer": {
+          "x": 300,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "util:SetVariables",
+      "version": 1,
+      "parameters": {},
+      "filter": {
+        "name": "Episode needs thumbnail",
+        "conditions": [
+          [
+            {
+              "a": "{{1.data.id}}",
+              "o": "exist"
+            }
+          ]
+        ]
+      },
+      "mapper": {
+        "scope": "roundtrip",
+        "variables": [
+          {
+            "name": "video_id",
+            "value": "{{1.data.youtube_id}}"
+          },
+          {
+            "name": "episode_id",
+            "value": "{{1.data.id}}"
+          },
+          {
+            "name": "ref_base",
+            "value": "{{lower(replace(replace(1.data.filename; \".mp4\"; \"\"); \".mov\"; \"\"))}}"
+          }
+        ]
+      },
+      "metadata": {
+        "designer": {
+          "x": 600,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": 13,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": true,
+        "useNewZLibDeCompress": true
+      },
+      "mapper": {
+        "ca": "",
+        "qs": [],
+        "url": "https://app.oceanoblue.net/api/automations/podcast/pick-frames",
+        "data": "{\"show_slug\":\"mind-your-health\",\"youtube_id\":\"{{2.video_id}}\",\"hosts_reference_url\":\"https://www.dropbox.com/scl/fi/9l5qr8owqwom2zygcymyk/hosts.jpg?rlkey=olgt8jlx6kxvz89bn6pjld546&st=slrwztb0&dl=1\"}",
+        "gzip": true,
+        "method": "post",
+        "headers": [
+          {
+            "name": "x-pos-automation-secret",
+            "value": "{{15.filename}}"
+          }
+        ],
+        "timeout": "300",
+        "useMtls": false,
+        "authPass": "",
+        "authUser": "",
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "serializeUrl": false,
+        "shareCookies": false,
+        "parseResponse": true,
+        "followRedirect": true,
+        "useQuerystring": false,
+        "followAllRedirects": false,
+        "rejectUnauthorized": true
+      },
+      "metadata": {
+        "designer": {
+          "x": 900,
+          "y": 0
+        }
+      },
+      "onerror": [
+        {
+          "id": 131,
+          "module": "builtin:Resume",
+          "version": 1,
+          "parameters": {},
+          "mapper": {
+            "data": ""
+          },
+          "metadata": {
+            "designer": {
+              "x": 600,
+              "y": -450
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "module": "anthropic-claude:createAMessage",
+      "version": 1,
+      "parameters": {
+        "__IMTCONN__": 9135572
+      },
+      "mapper": {
+        "model": "claude-sonnet-5",
+        "system": "You are the thumbnail art director for Mind Your Health Podcast, hosted by Dr. Debi Lynes and Dr. David Burke (always spell the hosts' names exactly this way). For each episode you write one complete instruction prompt for an AI image editor that receives one or two real photos from the episode and must return a FINISHED 16:9 YouTube thumbnail with all text and graphics rendered into the image. Output ONLY raw JSON, no markdown fences, starting with { and ending with }. Keys: headline (the big headline you chose, for records) and prompt (the full instruction text). Every prompt you write must include these fixed brand rules: keep every real person's face and body exactly as in the source photos, never repaint, beautify or alter anyone; bright white and light-blue studio look with high-key lighting; the Mind Your Health Podcast logo (the brain-apple mark with MIND YOUR HEALTH PODCAST text) in the top-left corner; a hot-pink NEW EPISODE! sticker with a brush-stroke or ink-splash accent near the top; a big mixed-typography headline of 4 to 8 words drawn from the episode topic, combining navy #15204a and pink #ff2e88 in bold condensed capitals with slight rotations, white plates or brush-stroke accents behind some words; a navy banner or card in a lower corner reading WITH SPECIAL GUEST plus the guest's name in yellow or bright pink and a short credential line beneath it; three or four small round icon badges with short benefit labels (like SAFETY FIRST or REAL CONVERSATIONS) along the bottom or a side; subtle topic motifs in the background such as faint hexagons, a caduceus, an ECG line, hearts or a profile silhouette; and keep every text element inside the central safe area, well away from the top and bottom 8 percent of the frame. Then VARY everything else per episode so no two thumbnails look templated: overall layout, headline placement and stacking, which words get plates versus brush strokes, bullet badge style and position, motif choice, an optional handwritten script tagline in the pattern Real Talk. Real Solutions. Real Impact. matched to the topic. The first photo always shows the two hosts and the second photo always shows the guest, even when both were taken on the same studio set. Design it like a guest feature: the hosts from the first photo on one side, the guest from the second photo featured prominently in a bold framed panel on the other side, with the guest card next to them. Feature the guest only from the second photo; take the hosts only from the first. Never invent, substitute or borrow a guest from anywhere else. Refer to people only by their position in the photo (the man on the left, the woman in pink), never describe or invent their appearance. Do not use double quotation marks inside any JSON value; use apostrophes if needed. The two hosts may appear only if one of the provided photos actually shows them. If no provided photo shows the hosts, do not depict them at all - never invent, approximate or substitute them - and design the thumbnail around the guest alone: guest large and central, guest card, headline and badges. Only people visible in the provided photos may appear in the image. The output image is a full-bleed 16:9 widescreen frame: compose edge to edge for that shape, with no letterboxing, borders or empty bands.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Episode title: {{1.data.title}}\nYouTube description:\n{{1.data.description}}\nGuest is remote (on a screen): {{13.data.guest_remote}}",
+            "inputType": "single"
+          }
+        ],
+        "max_tokens": 2048
+      },
+      "metadata": {
+        "designer": {
+          "x": 1200,
+          "y": 0
+        }
+      },
+      "onerror": [
+        {
+          "id": 301,
+          "module": "http:ActionSendData",
+          "version": 3,
+          "parameters": {
+            "handleErrors": true,
+            "useNewZLibDeCompress": true
+          },
+          "mapper": {
+            "ca": "",
+            "qs": [],
+            "url": "https://app.oceanoblue.net/api/automations/podcast/thumbnails",
+            "data": "{\"action\":\"failed\",\"episode_id\":\"{{1.data.id}}\",\"lease_token\":\"{{1.data.lease_token}}\"}",
+            "gzip": true,
+            "method": "post",
+            "headers": [
+              {
+                "name": "x-pos-automation-secret",
+                "value": "{{15.filename}}"
+              }
+            ],
+            "timeout": "300",
+            "useMtls": false,
+            "authPass": "",
+            "authUser": "",
+            "bodyType": "raw",
+            "contentType": "application/json",
+            "serializeUrl": false,
+            "shareCookies": false,
+            "parseResponse": true,
+            "followRedirect": false,
+            "useQuerystring": false,
+            "followAllRedirects": false,
+            "rejectUnauthorized": true
+          },
+          "metadata": {
+            "designer": {
+              "x": 1050,
+              "y": 400
+            }
+          }
+        },
+        {
+          "id": 302,
+          "module": "builtin:Ignore",
+          "version": 1,
+          "parameters": {},
+          "mapper": {},
+          "metadata": {
+            "designer": {
+              "x": 1350,
+              "y": 400
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "module": "json:ParseJSON",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "json": "{{trim(replace(ifempty(3.content[1].text; 3.content[2].text); \"/```[a-z]*/g\"; \"\"))}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1500,
+          "y": 0
+        }
+      },
+      "onerror": [
+        {
+          "id": 401,
+          "module": "http:ActionSendData",
+          "version": 3,
+          "parameters": {
+            "handleErrors": true,
+            "useNewZLibDeCompress": true
+          },
+          "mapper": {
+            "ca": "",
+            "qs": [],
+            "url": "https://app.oceanoblue.net/api/automations/podcast/thumbnails",
+            "data": "{\"action\":\"failed\",\"episode_id\":\"{{1.data.id}}\",\"lease_token\":\"{{1.data.lease_token}}\"}",
+            "gzip": true,
+            "method": "post",
+            "headers": [
+              {
+                "name": "x-pos-automation-secret",
+                "value": "{{15.filename}}"
+              }
+            ],
+            "timeout": "300",
+            "useMtls": false,
+            "authPass": "",
+            "authUser": "",
+            "bodyType": "raw",
+            "contentType": "application/json",
+            "serializeUrl": false,
+            "shareCookies": false,
+            "parseResponse": true,
+            "followRedirect": false,
+            "useQuerystring": false,
+            "followAllRedirects": false,
+            "rejectUnauthorized": true
+          },
+          "metadata": {
+            "designer": {
+              "x": 1200,
+              "y": 400
+            }
+          }
+        },
+        {
+          "id": 402,
+          "module": "builtin:Ignore",
+          "version": 1,
+          "parameters": {},
+          "mapper": {},
+          "metadata": {
+            "designer": {
+              "x": 1500,
+              "y": 400
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": true,
+        "useNewZLibDeCompress": true
+      },
+      "mapper": {
+        "ca": "",
+        "qs": [],
+        "url": "https://i.ytimg.com/vi/{{2.video_id}}/maxres2.jpg",
+        "data": "",
+        "gzip": true,
+        "method": "get",
+        "headers": [],
+        "timeout": "60",
+        "useMtls": false,
+        "authPass": "",
+        "authUser": "",
+        "bodyType": "",
+        "serializeUrl": false,
+        "shareCookies": false,
+        "parseResponse": false,
+        "followRedirect": true,
+        "useQuerystring": false,
+        "followAllRedirects": true,
+        "rejectUnauthorized": true
+      },
+      "metadata": {
+        "designer": {
+          "x": 1800,
+          "y": 0
+        }
+      },
+      "onerror": [
+        {
+          "id": 53,
+          "module": "http:ActionSendData",
+          "version": 3,
+          "parameters": {
+            "handleErrors": true,
+            "useNewZLibDeCompress": true
+          },
+          "mapper": {
+            "ca": "",
+            "qs": [],
+            "url": "https://i.ytimg.com/vi/{{2.video_id}}/hq2.jpg",
+            "data": "",
+            "gzip": true,
+            "method": "get",
+            "headers": [],
+            "timeout": "60",
+            "useMtls": false,
+            "authPass": "",
+            "authUser": "",
+            "bodyType": "",
+            "serializeUrl": false,
+            "shareCookies": false,
+            "parseResponse": false,
+            "followRedirect": true,
+            "useQuerystring": false,
+            "followAllRedirects": true,
+            "rejectUnauthorized": true
+          },
+          "metadata": {
+            "designer": {
+              "x": 1200,
+              "y": 450
+            }
+          }
+        },
+        {
+          "id": 51,
+          "module": "builtin:Resume",
+          "version": 1,
+          "parameters": {},
+          "mapper": {
+            "data": "{{53.data}}"
+          },
+          "metadata": {
+            "designer": {
+              "x": 1500,
+              "y": 450
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": true,
+        "useNewZLibDeCompress": true
+      },
+      "mapper": {
+        "ca": "",
+        "qs": [],
+        "url": "{{13.data.hosts_frame_url}}",
+        "data": "",
+        "gzip": true,
+        "method": "get",
+        "headers": [],
+        "timeout": "60",
+        "useMtls": false,
+        "authPass": "",
+        "authUser": "",
+        "bodyType": "",
+        "serializeUrl": false,
+        "shareCookies": false,
+        "parseResponse": false,
+        "followRedirect": true,
+        "useQuerystring": false,
+        "followAllRedirects": true,
+        "rejectUnauthorized": true
+      },
+      "metadata": {
+        "designer": {
+          "x": 2100,
+          "y": 0
+        }
+      },
+      "onerror": [
+        {
+          "id": 62,
+          "module": "dropbox:getFile",
+          "version": 5,
+          "parameters": {
+            "__IMTCONN__": 9113721
+          },
+          "mapper": {
+            "path": "/Podcasts/mind-your-health/Thumbnails/refs/hosts.jpg",
+            "select": "map"
+          },
+          "metadata": {
+            "designer": {
+              "x": 1500,
+              "y": 300
+            }
+          }
+        },
+        {
+          "id": 61,
+          "module": "builtin:Resume",
+          "version": 1,
+          "parameters": {},
+          "mapper": {
+            "data": "{{62.data}}"
+          },
+          "metadata": {
+            "designer": {
+              "x": 1800,
+              "y": 300
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": true,
+        "useNewZLibDeCompress": true
+      },
+      "mapper": {
+        "ca": "",
+        "qs": [],
+        "url": "{{13.data.guest_frame_url}}",
+        "data": "",
+        "gzip": true,
+        "method": "get",
+        "headers": [],
+        "timeout": "60",
+        "useMtls": false,
+        "authPass": "",
+        "authUser": "",
+        "bodyType": "",
+        "serializeUrl": false,
+        "shareCookies": false,
+        "parseResponse": false,
+        "followRedirect": true,
+        "useQuerystring": false,
+        "followAllRedirects": true,
+        "rejectUnauthorized": true
+      },
+      "metadata": {
+        "designer": {
+          "x": 2400,
+          "y": 0
+        }
+      },
+      "onerror": [
+        {
+          "id": 71,
+          "module": "builtin:Resume",
+          "version": 1,
+          "parameters": {},
+          "mapper": {
+            "data": "{{5.data}}"
+          },
+          "metadata": {
+            "designer": {
+              "x": 1800,
+              "y": 600
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "module": "datastore:GetRecord",
+      "version": 1,
+      "parameters": {
+        "datastore": 146980,
+        "returnWrapped": false
+      },
+      "mapper": {
+        "key": "OPENAI_MYH_KEY",
+        "returnWrapped": false
+      },
+      "metadata": {
+        "designer": {
+          "x": 2700,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": 8,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": true,
+        "useNewZLibDeCompress": true
+      },
+      "mapper": {
+        "ca": "",
+        "qs": [],
+        "url": "https://api.openai.com/v1/images/edits",
+        "gzip": true,
+        "method": "post",
+        "headers": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{12.filename}}"
+          }
+        ],
+        "timeout": "300",
+        "useMtls": false,
+        "authPass": "",
+        "authUser": "",
+        "bodyType": "multipart_form_data",
+        "serializeUrl": false,
+        "shareCookies": false,
+        "parseResponse": true,
+        "followRedirect": true,
+        "formDataFields": [
+          {
+            "key": "model",
+            "value": "gpt-image-2",
+            "fieldType": "text"
+          },
+          {
+            "key": "prompt",
+            "value": "{{4.prompt}}",
+            "fieldType": "text"
+          },
+          {
+            "key": "size",
+            "value": "2048x1152",
+            "fieldType": "text"
+          },
+          {
+            "key": "quality",
+            "value": "high",
+            "fieldType": "text"
+          },
+          {
+            "key": "output_format",
+            "value": "jpeg",
+            "fieldType": "text"
+          },
+          {
+            "key": "image[]",
+            "data": "{{6.data}}",
+            "fileName": "hosts_frame.jpg",
+            "fieldType": "file"
+          },
+          {
+            "key": "image[]",
+            "data": "{{7.data}}",
+            "fileName": "guest_frame.jpg",
+            "fieldType": "file"
+          }
+        ],
+        "useQuerystring": false,
+        "followAllRedirects": true,
+        "rejectUnauthorized": true
+      },
+      "metadata": {
+        "designer": {
+          "x": 3000,
+          "y": 0
+        }
+      },
+      "onerror": [
+        {
+          "id": 801,
+          "module": "http:ActionSendData",
+          "version": 3,
+          "parameters": {
+            "handleErrors": true,
+            "useNewZLibDeCompress": true
+          },
+          "mapper": {
+            "ca": "",
+            "qs": [],
+            "url": "https://app.oceanoblue.net/api/automations/podcast/thumbnails",
+            "data": "{\"action\":\"failed\",\"episode_id\":\"{{1.data.id}}\",\"lease_token\":\"{{1.data.lease_token}}\"}",
+            "gzip": true,
+            "method": "post",
+            "headers": [
+              {
+                "name": "x-pos-automation-secret",
+                "value": "{{15.filename}}"
+              }
+            ],
+            "timeout": "300",
+            "useMtls": false,
+            "authPass": "",
+            "authUser": "",
+            "bodyType": "raw",
+            "contentType": "application/json",
+            "serializeUrl": false,
+            "shareCookies": false,
+            "parseResponse": true,
+            "followRedirect": false,
+            "useQuerystring": false,
+            "followAllRedirects": false,
+            "rejectUnauthorized": true
+          },
+          "metadata": {
+            "designer": {
+              "x": 1800,
+              "y": 400
+            }
+          }
+        },
+        {
+          "id": 802,
+          "module": "builtin:Ignore",
+          "version": 1,
+          "parameters": {},
+          "mapper": {},
+          "metadata": {
+            "designer": {
+              "x": 2100,
+              "y": 400
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": true,
+        "useNewZLibDeCompress": true
+      },
+      "mapper": {
+        "ca": "",
+        "qs": [],
+        "url": "https://app.oceanoblue.net/api/automations/podcast/thumbnails",
+        "data": "{\"action\":\"complete\",\"episode_id\":\"{{1.data.id}}\",\"lease_token\":\"{{1.data.lease_token}}\",\"image_base64\":\"{{8.data.data[1].b64_json}}\"}",
+        "gzip": true,
+        "method": "post",
+        "headers": [
+          {
+            "name": "x-pos-automation-secret",
+            "value": "{{15.filename}}"
+          }
+        ],
+        "timeout": "300",
+        "useMtls": false,
+        "authPass": "",
+        "authUser": "",
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "serializeUrl": false,
+        "shareCookies": false,
+        "parseResponse": true,
+        "followRedirect": false,
+        "useQuerystring": false,
+        "followAllRedirects": false,
+        "rejectUnauthorized": true
+      },
+      "metadata": {
+        "designer": {
+          "x": 3300,
+          "y": 0
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": false,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": true,
+      "slots": null,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": {
+      "orphans": []
+    },
+    "zone": "us2.make.com",
+    "notes": []
+  }
+}

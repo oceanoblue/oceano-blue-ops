@@ -14,13 +14,13 @@ describe('episodeBasename', () => {
 describe('directDownloadUrl', () => {
   it('normalises dl=0 to dl=1 on www.dropbox.com', () => {
     expect(directDownloadUrl('https://www.dropbox.com/scl/fi/abc/x.mp4?rlkey=k&dl=0')).toBe(
-      'https://www.dropbox.com/scl/fi/abc/x.mp4?rlkey=k&dl=1'
+      'https://dl.dropboxusercontent.com/scl/fi/abc/x.mp4?rlkey=k&dl=1'
     );
   });
 
   it('adds dl=1 when the param is absent, preserving other params', () => {
     expect(directDownloadUrl('https://dropbox.com/scl/fi/abc/x.mp4?rlkey=k')).toBe(
-      'https://dropbox.com/scl/fi/abc/x.mp4?rlkey=k&dl=1'
+      'https://dl.dropboxusercontent.com/scl/fi/abc/x.mp4?rlkey=k&dl=1'
     );
   });
 
