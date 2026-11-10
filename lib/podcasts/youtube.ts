@@ -42,8 +42,11 @@ export async function youtubeToken(admin: any, showId: string) {
 }
 
 export async function youtubeRequest(url: string, token: string, init: RequestInit = {}) {
+  // YouTube uses HTTP 308 for resumable-upload progress. `error` rejects
+  // that response before the uploader can read it. `manual` exposes it
+  // without following redirects or forwarding credentials to another URL.
   return fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` },
-    redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(60000) });
+    redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(60000) });
 }
 
 export async function publishYoutubeDraft(admin: any, showId: string, videoId: string) {
