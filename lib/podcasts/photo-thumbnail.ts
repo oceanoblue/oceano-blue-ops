@@ -1,4 +1,6 @@
 import sharp from 'sharp';
+import { ImageResponse } from 'next/og';
+import { createElement as h, type CSSProperties } from 'react';
 import { directDownloadUrl } from './episode-source';
 
 // No generative image model is involved. Only original photographs enter these panels.
@@ -30,7 +32,6 @@ export async function loadThumbnailPhoto(value:string):Promise<Buffer>{
   }
   throw new Error('Too many photo redirects.');
 }
-const escape=(v:string)=>v.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]!));
 export function photoThumbnailText(title:string){
   const split=title.indexOf(' on ');
   const guest=split>0?title.slice(0,split):'';
@@ -41,17 +42,21 @@ export function photoThumbnailText(title:string){
 }
 export async function composePhotoThumbnail(hosts:Buffer,guest:Buffer,title:string):Promise<Buffer>{
   const text=photoThumbnailText(title);
-  const heading=text.lines.map((line,i)=>`<text x="32" y="${110+i*49}" font-size="44" font-weight="700" fill="#15204a">${escape(line)}</text>`).join('');
-  const svg=Buffer.from(`<svg width="1280" height="720" xmlns="http://www.w3.org/2000/svg">
-    <rect width="1280" height="720" fill="#edf6fb"/><rect width="1280" height="56" fill="#15204a"/>
-    <g font-family="Arial,DejaVu Sans,sans-serif"><text x="32" y="38" font-size="27" font-weight="700" fill="white">MIND YOUR HEALTH PODCAST</text>
-    <rect x="1024" width="256" height="56" fill="#e52e83"/><text x="1054" y="37" font-size="24" font-weight="700" fill="white">NEW EPISODE</text>
-    ${heading}<rect x="24" y="230" width="608" height="342" fill="#15204a"/><rect x="648" y="230" width="608" height="342" fill="#15204a"/>
-    <text x="32" y="608" font-size="23" fill="#475569">HOSTS · DR. DEBI LYNES &amp; DR. DAVID BURKE</text>
-    <text x="656" y="608" font-size="23" fill="#475569">FROM THIS EPISODE</text>
-    <rect y="638" width="1280" height="82" fill="#15204a"/>
-    <text x="32" y="691" font-size="${text.guest.length>45?28:38}" font-weight="700" fill="white">${escape(text.guest?'WITH '+text.guest.toUpperCase():'MIND YOUR HEALTH')}</text></g></svg>`);
+  // ImageResponse embeds its bundled font as outlines, so Lambda needs no system fonts.
+  const box=(style:CSSProperties, value?:string)=>h('div',{style:{display:'flex',position:'absolute',...style}},value);
+  const base=new ImageResponse(h('div',{style:{display:'flex',width:1280,height:720,background:'#edf6fb',color:'#15204a'}},
+    box({left:0,top:0,width:1280,height:56,background:'#15204a'}),
+    box({left:32,top:14,fontSize:27,color:'white'},'MIND YOUR HEALTH PODCAST'),
+    box({left:1024,top:0,width:256,height:56,background:'#e52e83'}),
+    box({left:1054,top:15,fontSize:24,color:'white'},'NEW EPISODE'),
+    ...text.lines.map((line,i)=>box({left:32,top:72+i*49,fontSize:44},line)),
+    box({left:32,top:585,fontSize:23,color:'#475569'},'HOSTS · DR. DEBI LYNES & DR. DAVID BURKE'),
+    box({left:656,top:585,fontSize:23,color:'#475569'},'FROM THIS EPISODE'),
+    box({left:0,top:638,width:1280,height:82,background:'#15204a'}),
+    box({left:32,top:656,fontSize:text.guest.length>45?28:38,color:'white'},text.guest?'WITH '+text.guest.toUpperCase():'MIND YOUR HEALTH')
+  ),{width:1280,height:720});
+  const background=Buffer.from(await base.arrayBuffer());
   const panel=async(bytes:Buffer)=>sharp(bytes,{limitInputPixels:20_000_000}).rotate().resize(608,342,{fit:'contain',background:'#15204a'}).png().toBuffer();
-  const [h,g]=await Promise.all([panel(hosts),panel(guest)]);
-  return sharp(svg).composite([{input:h,left:24,top:230},{input:g,left:648,top:230}]).jpeg({quality:95}).toBuffer();
+  const [hostPhoto,guestPhoto]=await Promise.all([panel(hosts),panel(guest)]);
+  return sharp(background).composite([{input:hostPhoto,left:24,top:230},{input:guestPhoto,left:648,top:230}]).jpeg({quality:95}).toBuffer();
 }
