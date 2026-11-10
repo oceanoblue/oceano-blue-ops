@@ -2,13 +2,14 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/server';
-import { applyYoutubeThumbnail, thumbnailJpeg } from '@/lib/podcasts/thumbnail';
+import { applyYoutubeThumbnail } from '@/lib/podcasts/thumbnail';
+import { composePhotoThumbnail, loadThumbnailPhoto } from '@/lib/podcasts/photo-thumbnail';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 180;
 
 const Body = z.discriminatedUnion('action', [
   z.object({ action: z.literal('claim'), show_slug: z.literal('mind-your-health') }),
-  z.object({ action: z.literal('complete'), episode_id: z.string().uuid(), lease_token: z.string().uuid(), image_base64: z.string().min(100).max(4_000_000).regex(/^[A-Za-z0-9+/]+={0,2}$/) }),
+  z.object({ action: z.literal('complete'), episode_id: z.string().uuid(), lease_token: z.string().uuid(), source_mode: z.literal('original_photos'), hosts_url: z.string().max(4000), guest_url: z.string().max(4000) }),
   z.object({ action: z.literal('failed'), episode_id: z.string().uuid(), lease_token: z.string().uuid() }),
 ]);
 
@@ -40,14 +41,16 @@ export async function POST(request: Request) {
     await fail('Make could not finish the thumbnail. Check the scenario and retry here.');
     return NextResponse.json({ok:true});
   }
-  const {data:ep} = await admin.from('podcast_episodes').select('show_id,job_id,status').eq('id',body.episode_id).maybeSingle();
+  const {data:ep} = await admin.from('podcast_episodes').select('show_id,job_id,status,title,metadata').eq('id',body.episode_id).maybeSingle();
   const {data:link} = ep ? await admin.from('external_links').select('external_id').eq('job_id',ep.job_id).eq('link_type','youtube_video').maybeSingle() : {data:null};
   if (!ep || ['cancelled','archived','needs_revision'].includes(ep.status) || link?.external_id !== task.youtube_id) {
     await fail('The episode or linked video changed. Review it before retrying.');
     return NextResponse.json({error:'Episode changed.'},{status:409});
   }
   try {
-    const bytes = await thumbnailJpeg(body.image_base64);
+    if (!body.hosts_url || !body.guest_url) throw new Error('Original hosts and guest photos are required. No generated faces will be substituted.');
+    const [hosts, guest] = await Promise.all([loadThumbnailPhoto(body.hosts_url),loadThumbnailPhoto(body.guest_url)]);
+    const bytes = await composePhotoThumbnail(hosts, guest, ep.metadata?.copy?.title || ep.title || 'Mind Your Health');
     const path = `podcasts/${body.episode_id}/${body.lease_token}.jpg`;
     const saved = await admin.storage.from('thumbnails').upload(path,bytes,{contentType:'image/jpeg',upsert:true});
     if (saved.error) throw new Error('Could not save the thumbnail preview.');
