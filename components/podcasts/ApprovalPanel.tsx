@@ -63,7 +63,7 @@ export function ApprovalPanel({ episodeId, retry = false, privateVideo = false }
         ) : (
           <>
             The episode is uploaded to YouTube as <strong>{privateVideo ? 'private' : 'unlisted'}</strong>. Review the video and the
-            generated copy below, then approve to publish publicly / finalize delivery, or send it back.
+            thumbnail and generated copy below, then approve to publish publicly / finalize delivery, or send it back.
           </>
         )}
       </p>

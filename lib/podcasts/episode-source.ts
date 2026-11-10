@@ -52,6 +52,7 @@ export function directDownloadUrl(shareUrl: string): string | null {
   const host = u.hostname.toLowerCase();
   const isDropboxHost = host === 'www.dropbox.com' || host === 'dropbox.com' || host.endsWith('.dropboxusercontent.com');
   if (!isDropboxHost) return null;
+  if ((host === 'www.dropbox.com' || host === 'dropbox.com') && u.pathname.startsWith('/scl/fi/')) u.hostname = 'dl.dropboxusercontent.com';
   u.searchParams.set('dl', '1');
   return u.toString();
 }

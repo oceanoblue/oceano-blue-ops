@@ -5,6 +5,8 @@ import { ArrowLeft, Youtube } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { ApprovalPanel } from '@/components/podcasts/ApprovalPanel';
 import { UploadPanel } from '@/components/podcasts/UploadPanel';
+import { ThumbnailPanel } from '@/components/podcasts/ThumbnailPanel';
+import { thumbnailReady } from '@/lib/podcasts/thumbnail-state';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +16,7 @@ export default async function PodcastEpisodePage(props: { params: Promise<{ id: 
 
   const { data: ep } = await supabase
     .from('podcast_episodes')
-    .select('id, title, status, metadata, job_id, recorded_at, podcast_shows(name, slug)')
+    .select('id, title, status, metadata, job_id, recorded_at, podcast_shows(name, slug, metadata)')
     .eq('id', params.id)
     .maybeSingle();
   if (!ep) notFound();
@@ -26,7 +28,7 @@ export default async function PodcastEpisodePage(props: { params: Promise<{ id: 
       supabase.from('transcripts').select('id, language, text, metadata').eq('episode_id', e.id).maybeSingle(),
       supabase.from('podcast_deliverables').select('id, deliverable_type, status, external_url, notes').eq('episode_id', e.id),
       jobId
-        ? supabase.from('external_links').select('link_type, url, label').eq('job_id', jobId)
+        ? supabase.from('external_links').select('link_type, url, label, external_id').eq('job_id', jobId)
         : Promise.resolve({ data: [] as any[] }),
       jobId
         ? supabase
@@ -48,6 +50,10 @@ export default async function PodcastEpisodePage(props: { params: Promise<{ id: 
 
   const copy = (e.metadata?.copy ?? {}) as any;
   const youtube = (links ?? []).find((l: any) => l.link_type === 'youtube_video');
+  const requiresThumbnail = e.podcast_shows?.metadata?.thumbnail_required === true;
+  const {data: thumbnail} = await (supabase as any).from('podcast_thumbnails').select('status,storage_path,youtube_id').eq('episode_id',e.id).maybeSingle();
+  const hasThumbnail = thumbnailReady(thumbnail,youtube?.external_id ?? '');
+  const thumbnailPending = requiresThumbnail && Boolean(youtube?.url) && !hasThumbnail;
   const latestApproval = (approvals ?? [])[0] as any;
   const canReview = !['archived','cancelled','needs_revision','published'].includes(e.status);
   const pendingApproval = latestApproval?.status === 'pending' && canReview;
@@ -65,7 +71,7 @@ export default async function PodcastEpisodePage(props: { params: Promise<{ id: 
         </Link>
         <div className="mt-1 flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-ocean-950">{copy.title || e.title || 'Untitled episode'}</h1>
-          <span className="pill bg-ocean-50 text-ocean-800 capitalize">{e.status === 'needs_review' && !youtube?.url ? 'Awaiting YouTube upload' : e.status?.replace(/_/g, ' ')}</span>
+          <span className="pill bg-ocean-50 text-ocean-800 capitalize">{thumbnailPending && e.status !== 'published' ? 'Awaiting thumbnail' : e.status === 'needs_review' && !youtube?.url ? 'Awaiting YouTube upload' : e.status?.replace(/_/g, ' ')}</span>
         </div>
         <p className="text-sm text-slate-600">
           {e.podcast_shows?.name ?? '—'}
@@ -74,8 +80,9 @@ export default async function PodcastEpisodePage(props: { params: Promise<{ id: 
       </div>
 
       {!youtube?.url && !['archived','cancelled','needs_revision','published'].includes(e.status) && <UploadPanel episodeId={e.id} copyReady={Boolean(copy.title)} />}
-      {pendingApproval && youtube?.url && <ApprovalPanel episodeId={e.id} privateVideo={youtube.label === 'YouTube (private)'} />}
-      {retryPublish && <ApprovalPanel episodeId={e.id} retry />}
+      {youtube?.url && requiresThumbnail && <ThumbnailPanel episodeId={e.id} ready={hasThumbnail} published={e.status==='published'} />}
+      {pendingApproval && youtube?.url && !thumbnailPending && <ApprovalPanel episodeId={e.id} privateVideo={youtube.label === 'YouTube (private)'} />}
+      {retryPublish && !thumbnailPending && <ApprovalPanel episodeId={e.id} retry />}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { publishTransistorEpisode } from '@/lib/integrations/transistor';
+import { thumbnailReady } from '@/lib/podcasts/thumbnail-state';
 import { publishYoutubeDraft } from '@/lib/podcasts/youtube';
 
 export const dynamic = 'force-dynamic';
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
 
   const { data: ep } = await admin
     .from('podcast_episodes')
-    .select('id, show_id, status, job_id, metadata, podcast_shows(slug)')
+    .select('id, show_id, status, job_id, metadata, podcast_shows(slug, metadata)')
     .eq('id', episode_id)
     .maybeSingle();
   if (!ep) return NextResponse.json({ error: 'episode_not_found' }, { status: 404 });
@@ -72,6 +73,13 @@ export async function POST(request: Request) {
   }
   if (decision === 'approve' && yt.label === 'YouTube (public)' && appr.status === 'approved') {
     return NextResponse.json({ ok: true, publish: 'published' });
+  }
+
+  if (decision === 'approve' && ep.podcast_shows?.metadata?.thumbnail_required === true) {
+    const {data: thumbnail,error: thumbnailError} = await admin.from('podcast_thumbnails').select('status,storage_path,youtube_id').eq('episode_id',ep.id).maybeSingle();
+    if (thumbnailError || !thumbnailReady(thumbnail,yt.external_id)) {
+      return NextResponse.json({error:'Wait for the custom thumbnail, then review it before approving publication.'},{status:409});
+    }
   }
 
   if (decision === 'approve') {
