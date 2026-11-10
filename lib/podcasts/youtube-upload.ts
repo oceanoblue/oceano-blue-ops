@@ -22,7 +22,13 @@ export async function queueYoutubeUpload(admin: any, episodeId: string) {
 
 /** Dropbox redirects stay on Dropbox-owned HTTPS hosts, with no auth forwarding. */
 export async function sourceRange(source: string, start: number, end: number) {
-  let url = source;
+  // The sharing-page endpoint can fail on repeated range requests. Use
+  // Dropbox's file endpoint for modern share links, retaining the same key.
+  const sourceUrl = new URL(source);
+  if (['dropbox.com','www.dropbox.com'].includes(sourceUrl.hostname) && sourceUrl.pathname.startsWith('/scl/fi/')) {
+    sourceUrl.hostname = 'dl.dropboxusercontent.com';
+  }
+  let url = sourceUrl.toString();
   for (let redirect = 0; redirect < 8; redirect++) {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:' || !(parsed.hostname === 'dropbox.com' || parsed.hostname.endsWith('.dropbox.com') || parsed.hostname.endsWith('.dropboxusercontent.com'))) {
