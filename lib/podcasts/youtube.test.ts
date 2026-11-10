@@ -1,10 +1,33 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createServer } from 'node:http';
 vi.mock('@/lib/supabase/server',()=>({createAdminClient:vi.fn()}));
-import { CHUNK_SIZE, uploadSessionUrl, uploadedOffset, videoMetadata } from './youtube';
+import { CHUNK_SIZE, uploadSessionUrl, uploadedOffset, videoMetadata, youtubeRequest } from './youtube';
 import { readBounded, sourceRange } from './youtube-upload';
 afterEach(()=>vi.unstubAllGlobals());
 
 describe('resumable YouTube transfers',()=>{
+  it('reads real HTTP 308 progress without following redirects or forwarding credentials',async()=>{
+    const requests: string[] = [];
+    const server = createServer((request,response)=>{
+      requests.push(request.url || '');
+      response.writeHead(308,{Range:'bytes=0-33554431',Location:'/must-not-follow'});
+      response.end();
+    });
+    await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Missing test address');
+      const response = await youtubeRequest(`http://127.0.0.1:${address.port}/upload`,'test-token',{
+        method:'PUT',headers:{'Content-Length':'0','Content-Range':'bytes */5273486804'},
+      });
+      expect(response.status).toBe(308);
+      expect(uploadedOffset(response.headers.get('range'),5273486804)).toBe(33554432);
+      expect(requests).toEqual(['/upload']);
+      await response.body?.cancel();
+    } finally {
+      await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+    }
+  });
   it('keeps drafts nonpublic and normalizes generated copy',()=>{
     const metadata=videoMetadata({title:'<Draft>',youtube_description:'One\\nTwo',tags:['a'.repeat(500),'b']},'original.mp4');
     expect(metadata.status.privacyStatus).toBe('unlisted');
