@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 const PUBLIC_PATHS = [
   '/', '/inquire', '/api/inquiry-forms', '/smart-files', '/api/smart-files', '/book', '/login', '/gallery', '/portal', '/property', '/property-report', '/api/property-public',
   '/meet', '/pay/project', '/api/crm/billing/checkout',
+  '/social', '/api/social-onboarding', // social media client onboarding page + its intake/upload API
   '/api/crm/scheduling/public', '/api/crm/scheduling/manage',
   '/api/crm/scheduling/notifications',
   '/auth',             // magic-link / OAuth code-exchange callback — must be

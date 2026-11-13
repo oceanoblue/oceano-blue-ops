@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, CreditCard, ClipboardCheck, Inbox, Users, Workflow } from "lucide-react";
+import { CalendarDays, CreditCard, ClipboardCheck, Inbox, Share2, Users, Workflow } from "lucide-react";
 
 const sections = [
   { href: "/dashboard/crm", label: "Relationships", icon: Users },
   { href: "/dashboard/crm/inquiries", label: "Inquiry inbox", icon: Inbox },
+  { href: "/dashboard/crm/social-onboarding", label: "Social onboarding", icon: Share2 },
   { href: "/dashboard/crm/acquisition", label: "Emails & client files", icon: Workflow },
   { href: "/dashboard/crm/scheduling", label: "Scheduling", icon: CalendarDays },
   { href: "/dashboard/crm/billing", label: "Project payments", icon: CreditCard },
