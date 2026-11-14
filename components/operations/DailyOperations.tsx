@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
@@ -107,6 +107,7 @@ export function DailyOperations({
   scheduleSaved,
   runs,
   providers,
+  billing,
 }: {
   name: string;
   snapshot: OperationsSnapshot | null;
@@ -116,6 +117,7 @@ export function DailyOperations({
   scheduleSaved: boolean;
   runs: BriefRun[];
   providers: { openai: boolean; anthropic: boolean };
+  billing?: ReactNode;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -274,6 +276,7 @@ export function DailyOperations({
           </button>
         </div>
       )}
+      {billing}
       {snapshot && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

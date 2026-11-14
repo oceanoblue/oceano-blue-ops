@@ -17,6 +17,22 @@ export function invoiceStatus(o: InvoiceOrder, today: string) {
 export function balance(o: InvoiceOrder) {
   return o.download_paid_at || ['draft', 'cancelled'].includes(o.status) ? 0 : Math.max(0, o.total_cents ?? 0);
 }
+export const INVOICE_FILTERS = ['All', 'Outstanding', 'Unpaid', 'Overdue', 'Paid', 'No charge', 'Unpriced', 'Draft', 'Cancelled'] as const;
+export type InvoiceFilter = (typeof INVOICE_FILTERS)[number];
+export function parseInvoiceFilter(value: unknown): InvoiceFilter {
+  return INVOICE_FILTERS.includes(value as InvoiceFilter) ? value as InvoiceFilter : 'All';
+}
+export function matchesInvoiceFilter(o: InvoiceOrder, filter: InvoiceFilter, today: string) {
+  return filter === 'All' || (filter === 'Outstanding' ? balance(o) > 0 : invoiceStatus(o, today) === filter);
+}
+/** Delivery and archiving close production work, not the client's balance. */
+export function outstandingInvoices(orders: InvoiceOrder[]) {
+  return orders.filter(o => balance(o) > 0).sort((a, b) =>
+    Number(b.status === 'delivered') - Number(a.status === 'delivered') ||
+    (a.invoice_due_date ?? '9999').localeCompare(b.invoice_due_date ?? '9999') ||
+    a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
+  );
+}
 export function billingSummary(orders: InvoiceOrder[], today: string) {
   return { outstanding: orders.reduce((n, o) => n + balance(o), 0), overdue: orders.filter(o => invoiceStatus(o, today) === 'Overdue').reduce((n, o) => n + balance(o), 0), unpriced: orders.filter(o => invoiceStatus(o,today) === 'Unpriced').length };
 }

@@ -5,6 +5,9 @@ import { parseSettings } from "@/lib/operations/settings";
 import { providerConfigured } from "@/lib/operations/providers";
 import type { BriefRun, OperationsSnapshot } from "@/lib/operations/types";
 import { DailyOperations } from "@/components/operations/DailyOperations";
+import { OutstandingInvoices } from "@/components/billing/OutstandingInvoices";
+import { loadInvoices } from "@/lib/billing/load";
+import { fmtDateInTz } from "@/lib/utils/timezone";
 export const dynamic = "force-dynamic";
 export default async function DashboardHome() {
   const db = await createClient();
@@ -35,18 +38,24 @@ export default async function DashboardHome() {
       .limit(7),
   ]);
   const settings = parseSettings(saved.data);
-  let snapshot: OperationsSnapshot | null = null;
-  let error: string | null = null;
-  try {
-    snapshot = await loadSnapshot(db, user.id, settings.timezone);
-  } catch (e) {
-    error = e instanceof Error ? e.message : "Operations data is unavailable.";
-  }
+  // Billing must include completed orders and remain available when production data fails.
+  const [production, billing] = await Promise.allSettled([
+    loadSnapshot(db, user.id, settings.timezone),
+    loadInvoices(),
+  ]);
+  const snapshot: OperationsSnapshot | null = production.status === "fulfilled" ? production.value : null;
+  const error = production.status === "rejected"
+    ? production.reason instanceof Error ? production.reason.message : "Operations data is unavailable."
+    : null;
   return (
     <DailyOperations
       name={member.data.full_name?.split(" ")[0] || "team"}
       snapshot={snapshot}
       loadError={error}
+      billing={<OutstandingInvoices
+        orders={billing.status === "fulfilled" ? billing.value : null}
+        today={fmtDateInTz(new Date(), "America/New_York", "iso")}
+      />}
       settings={settings}
       settingsAvailable={!saved.error && !history.error}
       scheduleSaved={!!saved.data}
