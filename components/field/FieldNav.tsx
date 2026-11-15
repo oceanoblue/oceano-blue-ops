@@ -1,12 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Camera, CalendarDays, DollarSign, Clock, FileText, Video } from 'lucide-react';
+import { Camera, CalendarDays, DollarSign, Clock, FileText, FolderUp } from 'lucide-react';
 /** Shared navigation. Existing photo routes and payment flows are unchanged. */
 const TABS=[
   {href:'/field/shoots',label:'My shoots',icon:Camera},
   {href:'/field/hourly',label:'Hourly work',icon:Clock},
-  {href:'/field/video-intake',label:'Video handoffs',icon:Video},
+  {href:'/field/video-intake',label:'Upload requests',icon:FolderUp},
   {href:'/field/agreements',label:'Agreements',icon:FileText},
   {href:'/field/availability',label:'Availability',icon:Clock},
   {href:'/field/calendar',label:'Calendar',icon:CalendarDays},
