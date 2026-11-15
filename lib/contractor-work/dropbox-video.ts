@@ -8,7 +8,7 @@ export function videoIntakePath(id:string,title:string):string {
   if(!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Invalid intake ID.');
   const root=('/'+(process.env.DROPBOX_VIDEO_INTAKE_ROOT||'/Video Intake')).replace(/\/+/g,'/').replace(/\/$/,'');
   const photo=('/'+(process.env.DROPBOX_PHOTO_INTAKE_ROOT||'/Photo Intake')).replace(/\/+/g,'/').replace(/\/$/,'').toLowerCase();
-  if(!root || root.split('/').includes('..') || root.toLowerCase()===photo || root.toLowerCase().startsWith(photo+'/')) throw new Error('Video intake must use a separate Dropbox root.');
+  if(!root || root.split('/').includes('..') || root.toLowerCase()===photo || root.toLowerCase().startsWith(photo+'/')) throw new Error('Standalone uploads must use a separate Dropbox root.');
   const slug=title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
   return `${root}/vi-${id}${slug?'-'+slug:''}`;
 }
@@ -51,9 +51,9 @@ export async function createVideoRequest(path:string,title:string):Promise<{id:s
   const folder=await call('files/create_folder_v2',{path,autorename:false});
   if(!folder.ok) {
     const detail=await folder.text();
-    if(!(folder.status===409 && detail.includes('conflict') && detail.includes('folder'))) throw new Error('Dropbox could not prepare the video folder.');
+    if(!(folder.status===409 && detail.includes('conflict') && detail.includes('folder'))) throw new Error('Dropbox could not prepare the upload folder.');
   }
-  const r=await call('file_requests/create',{title:`Original footage: ${title} (Oceano Blue)`.slice(0,200),destination:path,open:true});
+  const r=await call('file_requests/create',{title:`Original files: ${title} (Oceano Blue)`.slice(0,200),destination:path,open:true});
   if(!r.ok) throw new Error('Dropbox could not create the upload request.');
   const d=await r.json() as {id?:string;url?:string};
   if(!d.id || !d.url || !/^https:\/\/(www\.)?dropbox\.com\/request\//.test(d.url)) throw new Error('Dropbox returned an invalid upload link.');
