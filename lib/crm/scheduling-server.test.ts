@@ -8,7 +8,7 @@ vi.mock("@/lib/google-calendar/api", () => ({ fetchMemberBusy: m.busy }));
 import { sessionAvailability, sessionCalendarWriteAccess, bookSession, publicSessionType, schedulingRead } from "./scheduling-server";
 import { appointmentTimeLabel } from "./appointment-time";
 import type { Appointment, SessionType } from "./scheduling-types";
-const t: SessionType = { id: "00000000-0000-4000-8000-000000000001", version: 1, name: "Planning", slug: "planning", description: "",confirmation_instructions:"",owner_id: "00000000-0000-4000-8000-000000000002", duration_minutes: 30, timezone: "America/New_York", availability: [{ day: 1, start: "09:00", end: "12:00" }], notice_minutes: 0, horizon_days: 90, booking_horizon_months: null, slot_interval_minutes:15, use_session_as_project_date:false, buffer_minutes: 0,buffer_before_minutes:null,buffer_after_minutes:null, location: "Phone", published: true };
+const t: SessionType = { category: "general", price_cents: 0, id: "00000000-0000-4000-8000-000000000001", version: 1, name: "Planning", slug: "planning", description: "",confirmation_instructions:"",owner_id: "00000000-0000-4000-8000-000000000002", duration_minutes: 30, timezone: "America/New_York", availability: [{ day: 1, start: "09:00", end: "12:00" }], notice_minutes: 0, horizon_days: 90, booking_horizon_months: null, slot_interval_minutes:15, use_session_as_project_date:false, buffer_minutes: 0,buffer_before_minutes:null,buffer_after_minutes:null, location: "Phone", published: true };
 beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -52,7 +52,7 @@ it("rechecks live availability immediately before the guarded booking commit", a
     expect(m.rpc).toHaveBeenCalledWith("crm_session_commit", expect.objectContaining({ p_type_version: 1, p_calendar_checked_at: "2026-10-17T12:00:00.000Z", p_data: expect.objectContaining({ email_consent: false, manage_token: expect.stringMatching(/^[a-f0-9]{64}$/) }) }));
 });
 it("blocks preview booking before touching data or providers", async () => { vi.stubEnv("VERCEL_ENV", "preview"); await expect(bookSession("planning", {})).rejects.toThrow("production"); expect(m.from).not.toHaveBeenCalled(); expect(m.busy).not.toHaveBeenCalled(); expect(m.rpc).not.toHaveBeenCalled(); });
-it("never serializes internal host, availability or version into the public type", () => { expect(Object.keys(publicSessionType(t)).sort()).toEqual(["description", "duration_minutes", "location", "name", "slug", "timezone"]); });
+it("never serializes internal host, availability or version into the public type", () => { expect(Object.keys(publicSessionType(t)).sort()).toEqual(["category", "description", "duration_minutes", "location", "name", "price_cents", "slug", "timezone"]); });
 it("preserves source date holds through the office read without exposing manage tokens", async () => {
     const hold = { starts_at: "2027-01-07T05:00:00Z", ends_at: "2027-01-08T05:00:00Z", timezone: "America/New_York", source_evidence: { all_day: true }, manage_token: "private" };
     m.from.mockImplementation((table: string) => {

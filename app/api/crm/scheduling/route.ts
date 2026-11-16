@@ -32,6 +32,11 @@ export async function POST(req: Request) {
                 throw new CrmError("Session not found.", 404);
             return Response.json(await changeSession(data, { action: "cancel", version: b.version }, actor), { headers: { "Cache-Control": "no-store" } });
         }
+        if (b.data.published && b.data.category !== "general") {
+            if (b.data.price_cents < 50 || !b.data.location) throw new CrmError("Add a price of at least $0.50 and a session location before publishing.");
+            const { requireSessionPayments } = await import("@/lib/crm/session-payments");
+            requireSessionPayments();
+        }
         if (b.data.published) {
             await sessionCalendarWriteAccess(b.data.owner_id);
             const verification = await fetchMemberBusy(b.data.owner_id, new Date().toISOString(), new Date(Date.now() + 86400000).toISOString());

@@ -28,6 +28,8 @@ export const sessionTypeSchema = z.object({
     buffer_after_minutes: z.number().int().min(0).max(180).nullable().default(null),
     location: z.string().trim().max(500),
     published: z.boolean(),
+    category: z.enum(["general", "family", "individual", "company"]).default("general"),
+    price_cents: z.number().int().min(0).max(10000000).default(0),
 });
 export const sessionBookingSchema = z.object({
     id: z.string().uuid(), starts_at: z.string().datetime({ offset: true }),
@@ -45,7 +47,7 @@ export type SessionType = z.infer<typeof sessionTypeSchema> & {
     id: string;
     version: number;
 };
-export type PublicSessionType = Pick<SessionType, "name" | "slug" | "description" | "duration_minutes" | "timezone" | "location">;
+export type PublicSessionType = Pick<SessionType, "name" | "slug" | "description" | "duration_minutes" | "timezone" | "location"> & { category?: SessionType["category"]; price_cents?: number };
 export const sessionRequiresPhone = (type: Pick<PublicSessionType,"location">) => /^phone\b/i.test(type.location.trim());
 export const validSessionPhone = (value: string) => { const digits=value.replace(/\D/g,"");return digits.length>=7&&digits.length<=15; };
 export type Appointment = {
@@ -64,7 +66,9 @@ export type Appointment = {
     timezone: string;
     title: string;
     location: string;
-    status: "confirmed" | "cancelled";
+    status: "confirmed" | "cancelled" | "pending_payment";
+    price_cents?: number;
+    payment_status?: "not_required" | "pending" | "paid" | "expired";
     version: number;
     email_consent: boolean;
     manage_token?: string;

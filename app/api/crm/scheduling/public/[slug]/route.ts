@@ -19,6 +19,9 @@ export async function POST(req:Request,{params}:Context) {
   try {
     sameOrigin(req);schedulingProduction();const limited=await enforceCrmPublicRateLimit(req,"session-book",8,3600);if(limited)return limited;
     const slug=sessionSlugSchema.parse((await params).slug);
-    return Response.json(await bookSession(slug,await readJson(req,10000)),{headers:{"Cache-Control":"no-store"}});
+    const booking = await bookSession(slug,await readJson(req,10000));
+    const { sessionCheckout } = await import("@/lib/crm/session-payments");
+    const checkout = booking.requires_payment ? await sessionCheckout(booking.id) : null;
+    return Response.json(checkout ? { ...booking, checkout_url: checkout } : booking,{headers:{"Cache-Control":"no-store"}});
   }catch(e){return crmError(e);}
 }

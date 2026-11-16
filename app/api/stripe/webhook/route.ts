@@ -35,6 +35,20 @@ export async function POST(req: Request) {
     );
   }
 
+  if (["checkout.session.completed", "checkout.session.async_payment_succeeded", "checkout.session.expired"].includes(event.type)) {
+    const session = event.data.object as import("stripe").default.Checkout.Session;
+    if (session.metadata?.photo_appointment_id) {
+      try {
+        const { settleSessionPayment } = await import("@/lib/crm/session-payments");
+        await settleSessionPayment(session);
+      } catch (error) {
+        captureError("stripe.photoSessionPayment", error, { eventId: event.id });
+        return NextResponse.json({ error: "payment_persistence_failed" }, { status: 500 });
+      }
+      return NextResponse.json({ received: true });
+    }
+  }
+
   if(billingAdjustmentTypes.has(event.type)){
     try{await holdCrmBillingProviderEvent(event);}catch(error){captureError('stripe.crmBillingAdjustment',error,{eventId:event.id,eventType:event.type});return NextResponse.json({error:'adjustment_persistence_failed'},{status:500});}
     return NextResponse.json({received:true});

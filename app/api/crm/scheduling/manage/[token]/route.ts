@@ -8,6 +8,7 @@ export async function GET(req:Request,{params}:Context) {
   try {
     const limited=await enforceCrmPublicRateLimit(req,"session-manage-read",80,3600);if(limited)return limited;
     const token=sessionTokenSchema.parse((await params).token),a=await appointmentByToken(token),q=new URL(req.url).searchParams;
+    if (a.status === "pending_payment") throw new CrmError("Payment is required before this session is confirmed.", 409);
     if(q.get("calendar")==="1")return new Response(sessionCalendarFile(a),{headers:{"Content-Type":"text/calendar; charset=utf-8","Content-Disposition":"attachment; filename=oceano-blue-session.ics","Cache-Control":"private, no-store","Referrer-Policy":"no-referrer"}});
     const {data,error}=a.session_type_id?await crmDb().from("crm_session_types").select("*").eq("id",a.session_type_id).maybeSingle():{data:null,error:null};
     if(error)throw new CrmError("Scheduling is unavailable.",503);
