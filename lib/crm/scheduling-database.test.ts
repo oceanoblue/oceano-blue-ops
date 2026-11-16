@@ -31,6 +31,7 @@ beforeAll(async () => {
     await db.exec(crew);
     await db.exec(readFileSync("supabase/migrations/20261018185935_crm_order_schedule_hold_guard.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/20261018185938_crm_session_shoot_travel_buffer.sql", "utf8"));
+    await db.exec(readFileSync("supabase/migrations/20261116135702_photo_session_payments.sql", "utf8"));
     await db.exec("grant select,insert,update on clients,projects,schedule_blocks,contractors,orders,business_settings to service_role");
 }, 60000);
 afterAll(async () => { await db?.close(); });
@@ -195,4 +196,48 @@ it.each([0, 30, 60])("enforces both booking directions with %i minutes organizat
     expect(await failed(() => book(randomUUID(), { starts_at: new Date(start.getTime() + 15 * 60000).toISOString() }))).toContain("just booked");
     expect(await failed(() => book(randomUUID(), { starts_at: new Date(start.getTime() - 15 * 60000).toISOString() }))).toContain("just booked");
     await book();
+});
+
+it("holds paid photo bookings without confirmation until verified full payment", async () => {
+    await typeSave({ ...settings, category: "family", price_cents: 35000 });
+    const b = await book();
+    expect((await db.query<any>("select status,payment_status,price_cents from crm_appointments where id=$1", [b.id])).rows[0]).toEqual({ status: "pending_payment", payment_status: "pending", price_cents: 35000 });
+    expect((await db.query<any>("select count(*)::int n from crm_session_notifications")).rows[0].n).toBe(0);
+    expect(await failed(() => book())).toContain("just booked");
+    expect(await failed(() => change(b.id, b.token, "cancel"))).toContain("Complete checkout");
+    expect(await failed(() => db.query("select crm_session_payment_result($1,'cs_photo',34999,'usd',true)", [b.id]))).toContain("does not match");
+    expect(await failed(() => db.query("select crm_session_payment_result($1,'cs_photo',35000,'eur',true)", [b.id]))).toContain("does not match");
+    await db.query("select crm_session_payment_result($1,'cs_photo',35000,'usd',true)", [b.id]);
+    await db.query("select crm_session_payment_result($1,'cs_photo',35000,'usd',true)", [b.id]);
+    expect((await db.query<any>("select status,payment_status from crm_appointments where id=$1", [b.id])).rows[0]).toEqual({status:"confirmed",payment_status:"paid"});
+    expect((await db.query<any>("select count(*)::int n from crm_session_notifications")).rows[0].n).toBe(4);
+    expect(await failed(() => db.query("select crm_session_payment_result($1,'cs_other',35000,'usd',true)", [b.id]))).toContain("does not match");
+});
+it("only releases unpaid slots after provider-confirmed expiry and handles repeated expiry", async () => {
+    await typeSave({ ...settings, category: "individual", price_cents: 18000 });
+    const b = await book();
+    await db.query("update crm_session_payments set expires_at=now()-interval '1 hour' where appointment_id=$1", [b.id]);
+    expect(await failed(() => book())).toContain("just booked");
+    await db.query("select crm_session_payment_result($1,'cs_expired',18000,'usd',false)", [b.id]);
+    await db.query("select crm_session_payment_result($1,'cs_expired',18000,'usd',false)", [b.id]);
+    expect((await db.query<any>("select status,payment_status from crm_appointments where id=$1", [b.id])).rows[0]).toEqual({status:"cancelled",payment_status:"expired"});
+    expect((await book()).ok).toBe(true);
+    expect(await failed(() => db.query("select crm_session_payment_result($1,'cs_expired',18000,'usd',true)", [b.id]))).toContain("no longer pending");
+});
+it("keeps payment snapshots unchanged when office updates a package", async () => {
+    await typeSave({ ...settings, category: "company", price_cents: 45000 });
+    const b = await book();
+    await typeSave({ ...settings, category: "company", price_cents: 55000, duration_minutes: 60 }, 1);
+    await db.query("select crm_session_payment_result($1,'cs_snapshot',45000,'usd',true)", [b.id]);
+    expect((await db.query<any>("select price_cents from crm_appointments where id=$1", [b.id])).rows[0].price_cents).toBe(45000);
+    expect(await failed(() => change(b.id,b.token,"reschedule",1,new Date(start.getTime()+3*3600000).toISOString(),2))).toContain("Contact the office");
+});
+it("allows draft packages without a price but rejects publishing them", async () => {
+    await typeSave({ ...settings, category: "family", price_cents: 0, published: false });
+    expect(await failed(() => typeSave({ ...settings, category: "family", price_cents: 0 },1))).toContain("crm_photo_package_ready");
+});
+it("denies public payment writes and settlement RPC execution", async () => {
+    await db.exec("set local role anon");
+    expect(await failed(() => db.query("select * from crm_session_payments"))).toContain("permission denied");
+    expect(await failed(() => db.query("select crm_session_payment_result($1,'forged',1,'usd',true)",[randomUUID()]))).toContain("permission denied");
 });

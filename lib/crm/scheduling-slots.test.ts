@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { sessionSlots, sessionCalendarFile, validSessionDay,sessionMonthHorizon } from "./scheduling-slots";
 import { sessionTypeSchema, type SessionType } from "./scheduling-types";
-const base: SessionType = { id: "00000000-0000-4000-8000-000000000001", version: 1, name: "Planning", slug: "planning", description: "",confirmation_instructions:"",owner_id: "00000000-0000-4000-8000-000000000002", duration_minutes: 30, timezone: "America/New_York", availability: [{ day: 1, start: "09:00", end: "12:00" }], notice_minutes: 60, horizon_days: 90, booking_horizon_months: null, slot_interval_minutes:15, use_session_as_project_date:false, buffer_minutes: 15,buffer_before_minutes:null,buffer_after_minutes:null, location: "Phone", published: true };
+const base: SessionType = { category: "general", price_cents: 0, id: "00000000-0000-4000-8000-000000000001", version: 1, name: "Planning", slug: "planning", description: "",confirmation_instructions:"",owner_id: "00000000-0000-4000-8000-000000000002", duration_minutes: 30, timezone: "America/New_York", availability: [{ day: 1, start: "09:00", end: "12:00" }], notice_minutes: 60, horizon_days: 90, booking_horizon_months: null, slot_interval_minutes:15, use_session_as_project_date:false, buffer_minutes: 15,buffer_before_minutes:null,buffer_after_minutes:null, location: "Phone", published: true };
 const now = new Date("2026-10-17T12:00:00Z");
 describe("session availability", () => {
     it("uses host wall time and blocks buffers around external commitments", () => {

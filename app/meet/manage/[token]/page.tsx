@@ -19,8 +19,12 @@ export default async function Page({ params }: {
     catch {
         notFound();
     }
+    if (a.payment_status === "pending" || a.payment_status === "expired") {
+        const { SessionPaymentStatus } = await import("@/components/crm/SessionPaymentStatus");
+        return <SessionPaymentStatus token={token.data} title={a.title} expired={a.payment_status === "expired"} readOnly={process.env.VERCEL_ENV !== "production"}/>;
+    }
     const { crmDb } = await import("@/lib/crm/server");
     const { data: type } = a.session_type_id ? await crmDb().from("crm_session_types").select("slug,published,owner_id").eq("id", a.session_type_id).maybeSingle() : { data: null };
     const managed = { appointment: { id: a.id, title: a.title, location: a.location, timezone: a.timezone, full_name: a.full_name, starts_at: a.starts_at, ends_at: a.ends_at, status: a.status, version: a.version,confirmation_instructions:a.confirmation_instructions??"" }, slug: type?.slug ?? "", canReschedule: a.import_state !== "reference" && !!type?.published && type?.owner_id === a.owner_id };
-    return <SchedulingBooking token={token.data} type={{ name: a.title, slug: type?.slug ?? "", description: "", duration_minutes: Math.round((Date.parse(a.ends_at) - Date.parse(a.starts_at)) / 60000), timezone: a.timezone, location: a.location }} managed={managed} readOnly={process.env.VERCEL_ENV !== "production"}/>;
+    return <SchedulingBooking token={token.data} type={{ name: a.title, slug: type?.slug ?? "", description: a.payment_status === "paid" ? "Paid in full. Contact the office with any refund questions." : "", duration_minutes: Math.round((Date.parse(a.ends_at) - Date.parse(a.starts_at)) / 60000), timezone: a.timezone, location: a.location }} managed={managed} readOnly={process.env.VERCEL_ENV !== "production"}/>;
 }

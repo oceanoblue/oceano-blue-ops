@@ -8,7 +8,7 @@ export function schedulingProduction() {
     if (process.env.VERCEL_ENV !== "production")
         throw new CrmError("Open production Ops to book or change a session.", 403);
 }
-export function publicSessionType(t: SessionType): PublicSessionType { return { name: t.name, slug: t.slug, description: t.description, duration_minutes: t.duration_minutes, timezone: t.timezone, location: t.location }; }
+export function publicSessionType(t: SessionType): PublicSessionType { return { name: t.name, slug: t.slug, description: t.description, duration_minutes: t.duration_minutes, timezone: t.timezone, location: t.location, category: t.category, price_cents: t.category && t.category !== "general" ? t.price_cents : 0 }; }
 export async function sessionCalendarWriteAccess(owner: string): Promise<string> {
     const { data, error } = await crmDb().from("team_calendar_connections").select("is_active,scope,account_email").eq("team_member_id", owner).eq("provider", "google").maybeSingle();
     const scopes = new Set(String(data?.scope ?? "").split(/\s+/));
@@ -82,26 +82,33 @@ export async function bookSession(slug: string, input: unknown, smartFileToken?:
     if (booking.website)
         throw new CrmError("Unable to book. Please contact the office.", 400);
     const hash = createHash("sha256").update(JSON.stringify({ ...booking, starts_at: new Date(booking.starts_at).toISOString(), slug, ...(smartFileToken ? { smart_file_token: smartFileToken } : {}) })).digest("hex");
-    const previous = await crmDb().from("crm_appointments").select("id,payload_hash,manage_token,session_type_id,crm_session_types(slug)").eq("id", booking.id).maybeSingle();
+    const previous = await crmDb().from("crm_appointments").select("id,payload_hash,manage_token,payment_status,session_type_id,crm_session_types(slug)").eq("id", booking.id).maybeSingle();
     if (previous.error)
         throw new CrmError("Booking is unavailable.", 503);
     if (previous.data) {
         if (previous.data.payload_hash !== hash)
             throw new CrmError("This booking request changed. Reload and try again.", 409);
-        return { ok: true, id: previous.data.id, token: previous.data.manage_token };
+        return { ok: true, id: previous.data.id, token: previous.data.manage_token, requires_payment: previous.data.payment_status === "pending" };
     }
     const type = await readSessionType(slug);
+    if (type.category && type.category !== "general") {
+        const { requireSessionPayments } = await import("./session-payments");
+        requireSessionPayments();
+        if (type.price_cents < 50) throw new CrmError("This package is not ready for booking.", 409);
+        if (smartFileToken) throw new CrmError("Book this paid photo package directly from its booking link.", 409);
+    }
     if(sessionRequiresPhone(type)&&!validSessionPhone(booking.phone))throw new CrmError("Enter a phone number we can use for this call.",400);
     const available = await sessionAvailability(type, localSessionDay(new Date(booking.starts_at), type.timezone));
     if (!available.slots.includes(new Date(booking.starts_at).toISOString()))
         throw new CrmError("That time is no longer available. Choose another time.", 409);
     const { data, error } = await crmDb().rpc("crm_session_commit", { p_id: booking.id, p_slug: slug, p_hash: hash, p_type_version: type.version, p_calendar_checked_at: available.checkedAt, p_data: { ...booking, ...(smartFileToken ? { smart_file_token: smartFileToken } : {}), manage_token: randomBytes(32).toString("hex") } });
     sessionRpcError(error);
-    return data;
+    return { ...data, requires_payment: !!type.category && type.category !== "general" };
 }
 export async function changeSession(appointment: Appointment, input: unknown, actor: string | null = null) {
     schedulingProduction();
     const change = sessionChangeSchema.parse(input);
+    if (appointment.status === "pending_payment") throw new CrmError("Complete checkout before changing this session.", 409);
     let check: {
         checkedAt: string;
     } | null = null, type: SessionType | null = null;
@@ -110,6 +117,7 @@ export async function changeSession(appointment: Appointment, input: unknown, ac
         if (error || !data)
             throw new CrmError("Session availability is unavailable.", 503);
         type = data as SessionType;
+        if (appointment.payment_status === "paid" && type.duration_minutes !== Math.round((Date.parse(appointment.ends_at) - Date.parse(appointment.starts_at)) / 60000)) throw new CrmError("Contact the office to reschedule this package.", 409);
         const available = await sessionAvailability(type, localSessionDay(new Date(change.starts_at), type.timezone), appointment);
         if (!available.slots.includes(new Date(change.starts_at).toISOString()))
             throw new CrmError("That time is no longer available. Choose another time.", 409);
@@ -123,7 +131,7 @@ export async function schedulingRead(): Promise<SchedulingData> {
     const db = crmDb(), since = new Date(Date.now() - 30 * 86400000).toISOString();
     const [types, appointments, team, notifications] = await Promise.all([
         db.from("crm_session_types").select("*").order("name").limit(200),
-        db.from("crm_appointments").select("id,session_type_id,client_id,project_id,owner_id,title,location,timezone,full_name,email,phone,notes,starts_at,ends_at,status,version,email_consent,created_at,source_system,source_id,source_evidence,import_state").gte("starts_at", since).order("starts_at").limit(500),
+        db.from("crm_appointments").select("id,session_type_id,client_id,project_id,owner_id,title,location,timezone,full_name,email,phone,notes,starts_at,ends_at,status,price_cents,payment_status,version,email_consent,created_at,source_system,source_id,source_evidence,import_state").gte("starts_at", since).order("starts_at").limit(500),
         db.from("team_members").select("id,full_name").eq("is_active", true).in("role", ["admin", "coordinator"]).order("full_name"),
         db.from("crm_session_notifications").select("id,appointment_id,kind,status,last_error,due_at").in("status", ["pending", "sending", "needs_review"]).order("due_at").limit(300),
     ]);
