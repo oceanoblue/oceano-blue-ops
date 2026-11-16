@@ -2,7 +2,9 @@ import Link from "next/link";
 import { Camera, Users, UserRound, Building2, ArrowRight, Clock } from "lucide-react";
 import { crmDb } from "@/lib/crm/server";
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Book a Photo Session | Oceano Blue Media", description: "Family portraits, individual photography and company photo sessions. Choose a package, find a time and pay securely." };
+const title = "Book a Photo Session | Oceano Blue Media";
+const description = "Family portraits, individual photography and company photo sessions. Choose a package, find a time and pay securely.";
+export const metadata = { title, description, openGraph: { title, description, siteName: "Oceano Blue Media", type: "website" }, twitter: { card: "summary", title, description } };
 const categories = [
   { id: "family", title: "Families", text: "Make time for the people who matter most.", icon: Users },
   { id: "individual", title: "Individuals", text: "Portraits and headshots that feel like you.", icon: UserRound },
