@@ -1,11 +1,12 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-const mock = vi.hoisted(() => ({ limit: vi.fn(), type: vi.fn(), availability: vi.fn(), book: vi.fn(), appointment: vi.fn(), change: vi.fn(), guard: vi.fn(), checkout: vi.fn(), run: vi.fn() }));
+const mock = vi.hoisted(() => ({ limit: vi.fn(), type: vi.fn(), availability: vi.fn(), book: vi.fn(), appointment: vi.fn(), change: vi.fn(), guard: vi.fn(), checkout: vi.fn(), run: vi.fn(), photoCheckout: vi.fn(), reconcile: vi.fn() }));
 vi.mock("@/lib/security/crm-public-rate-limit", () => ({ enforceCrmPublicRateLimit: mock.limit }));
 vi.mock("@/lib/crm/scheduling-server", async () => {
   const actual = await vi.importActual<typeof import("@/lib/crm/scheduling-server")>("@/lib/crm/scheduling-server");
   return { ...actual, readSessionType: mock.type, sessionAvailability: mock.availability, bookSession: mock.book, appointmentByToken: mock.appointment, changeSession: mock.change, schedulingProduction: mock.guard };
 });
 vi.mock("@/lib/crm/billing-server", () => ({ projectCheckout: mock.checkout }));
+vi.mock("@/lib/crm/session-payments", () => ({ sessionCheckout: mock.photoCheckout, reconcileSessionPayments: mock.reconcile }));
 vi.mock("@/lib/crm/scheduling-mail", () => ({ runSessionNotifications: mock.run }));
 import { POST as book, GET as slots } from "@/app/api/crm/scheduling/public/[slug]/route";
 import { POST as manage, GET as details } from "@/app/api/crm/scheduling/manage/[token]/route";
@@ -55,7 +56,7 @@ it("returns only the appointment fields needed by its private management page", 
 it("projects public session fields without leaking the host or internal availability", async () => {
   const actual = await vi.importActual<typeof import("@/lib/crm/scheduling-server")>("@/lib/crm/scheduling-server");
   const result = actual.publicSessionType(await mock.type());
-  expect(Object.keys(result).sort()).toEqual(["name", "slug", "description", "duration_minutes", "timezone", "location"].sort());
+  expect(Object.keys(result).sort()).toEqual(["name", "slug", "description", "duration_minutes", "timezone", "location", "category", "price_cents"].sort());
 });
 it("limits valid payment preparations without requiring an office session", async () => {
   const r = await checkout(req(), tokenContext);
@@ -66,4 +67,15 @@ it("requires the worker Bearer secret independently of public routing", async ()
   expect((await worker(new Request("https://ops.example/api/crm/scheduling/notifications"))).status).toBe(401); expect(mock.run).not.toHaveBeenCalled();
   mock.run.mockResolvedValue({ processed: 0 });
   expect((await worker(new Request("https://ops.example/api/crm/scheduling/notifications", { headers: { authorization: "Bearer worker-test-secret" } }))).status).toBe(200); expect(mock.run).toHaveBeenCalledTimes(1);
+});
+
+it("creates paid checkout only for a reservation that requires payment",async()=>{
+ mock.book.mockResolvedValue({ok:true,id:"photo",token,requires_payment:true});
+ mock.photoCheckout.mockResolvedValue("https://checkout.stripe.com/photo");
+ const response=await book(req(),slugContext);
+ expect(response.status).toBe(200);expect((await response.json()).checkout_url).toBe("https://checkout.stripe.com/photo");
+ expect(mock.photoCheckout).toHaveBeenCalledWith("photo");
+});
+it("keeps general free scheduling independent of checkout",async()=>{
+ expect((await book(req(),slugContext)).status).toBe(200);expect(mock.photoCheckout).not.toHaveBeenCalled();
 });

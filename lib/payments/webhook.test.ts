@@ -84,3 +84,13 @@ it('asks Stripe to retry if CRM payment persistence fails', async () => {
 });
 
 it('routes signed refund events through exact project association and retries failed holds',async()=>{vi.mocked(holdCrmBillingProviderEvent).mockResolvedValue({held:true});expect((await POST(request('paid','charge.refunded'))).status).toBe(200);expect(holdCrmBillingProviderEvent).toHaveBeenCalledWith(expect.objectContaining({type:'charge.refunded'}));expect(rpc).not.toHaveBeenCalled();vi.mocked(holdCrmBillingProviderEvent).mockRejectedValue(new Error('offline'));expect((await POST(request('paid','charge.refunded'))).status).toBe(500);});
+
+it("routes signed photo payments to the reservation ledger without paying a real estate order", async () => {
+ expect((await POST(request('paid','checkout.session.completed','payment',{photo_appointment_id:'photo-id',order_id:'unrelated'}))).status).toBe(200);
+ expect(rpc).toHaveBeenCalledWith('crm_session_payment_result',expect.objectContaining({p_id:'photo-id',p_paid:true,p_amount:25000}));
+ expect(rpc).not.toHaveBeenCalledWith('settle_order_checkout',expect.anything());
+});
+it("retries signed photo notifications if persistence fails",async()=>{
+ rpc.mockResolvedValue({error:{message:'unavailable'}});
+ expect((await POST(request('paid','checkout.session.completed','payment',{photo_appointment_id:'photo-id'}))).status).toBe(500);
+});
