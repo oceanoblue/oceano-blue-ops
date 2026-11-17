@@ -7,18 +7,30 @@ export type SessionRange = {
 const parts = (date: Date, timezone: string) => Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date).map(p => [p.type, p.value]));
 export function localSessionDay(date: Date, timezone: string) { const p = parts(date, timezone); return `${p.year}-${p.month}-${p.day}`; }
 export function validSessionDay(day: string) { return /^\d{4}-\d{2}-\d{2}$/.test(day) && !Number.isNaN(Date.parse(`${day}T12:00:00Z`)) && new Date(`${day}T12:00:00Z`).toISOString().slice(0, 10) === day; }
+export function validSessionMonth(month: string) { return /^\d{4}-\d{2}$/.test(month) && validSessionDay(`${month}-01`); }
+export function sessionMonthDays(month: string): string[] {
+    if (!validSessionMonth(month)) return [];
+    const days: string[] = [], cursor = new Date(`${month}-01T12:00:00Z`);
+    while (cursor.toISOString().slice(0, 7) === month) {
+        days.push(cursor.toISOString().slice(0, 10));
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return days;
+}
 export function sessionMonthHorizon(today:string,months:number) {
     const [y,m,d]=today.split("-").map(Number),target=new Date(Date.UTC(y,m-1+months,1)),last=new Date(Date.UTC(target.getUTCFullYear(),target.getUTCMonth()+1,0)).getUTCDate();
     return new Date(Date.UTC(target.getUTCFullYear(),target.getUTCMonth(),Math.min(d,last))).toISOString().slice(0,10);
 }
+export function sessionDateBounds(type: Pick<SessionType, "timezone" | "horizon_days" | "booking_horizon_months">, now = new Date()) {
+    const min_date = localSessionDay(now, type.timezone), horizon = new Date(`${min_date}T12:00:00Z`);
+    horizon.setUTCDate(horizon.getUTCDate() + type.horizon_days);
+    return { min_date, max_date: type.booking_horizon_months ? sessionMonthHorizon(min_date, type.booking_horizon_months) : horizon.toISOString().slice(0, 10) };
+}
 export function sessionSlots(type: SessionType, day: string, busy: SessionRange[], now = new Date()): string[] {
     if (!validSessionDay(day))
         return [];
-    const today = localSessionDay(now, type.timezone);
-    const horizon = new Date(`${today}T12:00:00Z`);
-    horizon.setUTCDate(horizon.getUTCDate() + type.horizon_days);
-    const lastDay=type.booking_horizon_months?sessionMonthHorizon(today,type.booking_horizon_months):horizon.toISOString().slice(0,10);
-    if (day < today || day > lastDay)
+    const { min_date, max_date } = sessionDateBounds(type, now);
+    if (day < min_date || day > max_date)
         return [];
     const dow = new Date(`${day}T12:00:00Z`).getUTCDay();
     const ranges = busy.map(r => ({ start: Date.parse(r.start), end: Date.parse(r.end) }));

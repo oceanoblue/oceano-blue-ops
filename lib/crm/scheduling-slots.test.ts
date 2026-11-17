@@ -1,9 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { sessionSlots, sessionCalendarFile, validSessionDay,sessionMonthHorizon } from "./scheduling-slots";
+import { sessionSlots, sessionCalendarFile, validSessionDay, validSessionMonth, sessionMonthDays, sessionDateBounds, sessionMonthHorizon } from "./scheduling-slots";
 import { sessionTypeSchema, type SessionType } from "./scheduling-types";
 const base: SessionType = { category: "general", price_cents: 0, id: "00000000-0000-4000-8000-000000000001", version: 1, name: "Planning", slug: "planning", description: "",confirmation_instructions:"",owner_id: "00000000-0000-4000-8000-000000000002", duration_minutes: 30, timezone: "America/New_York", availability: [{ day: 1, start: "09:00", end: "12:00" }], notice_minutes: 60, horizon_days: 90, booking_horizon_months: null, slot_interval_minutes:15, use_session_as_project_date:false, buffer_minutes: 15,buffer_before_minutes:null,buffer_after_minutes:null, location: "Phone", published: true };
 const now = new Date("2026-10-17T12:00:00Z");
 describe("session availability", () => {
+    it("enumerates only real calendar months including leap years and year boundaries", () => {
+        expect(sessionMonthDays("2028-02")).toHaveLength(29);
+        expect(sessionMonthDays("2027-02")).toHaveLength(28);
+        expect(sessionMonthDays("2026-12").at(-1)).toBe("2026-12-31");
+        for (const month of ["2026-00", "2026-13", "2026-1", "2026-01-01", ""]) {
+            expect(validSessionMonth(month)).toBe(false);
+            expect(sessionMonthDays(month)).toEqual([]);
+        }
+        expect(sessionDateBounds({ ...base, booking_horizon_months: 1 }, new Date("2027-02-01T02:00:00Z"))).toEqual({ min_date: "2027-01-31", max_date: "2027-02-28" });
+    });
     it("uses host wall time and blocks buffers around external commitments", () => {
         const all = sessionSlots(base, "2026-10-19", [], now);
         expect(all[0]).toBe("2026-10-19T13:00:00.000Z");
