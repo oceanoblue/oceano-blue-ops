@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Clock, MapPin, ArrowRight, CheckCircle2, Download } from "lucide-react";
 import { sessionRequiresPhone,validSessionPhone,type PublicSessionType } from "@/lib/crm/scheduling-types";
-import { localSessionDay } from "@/lib/crm/scheduling-slots";
+import { SessionAvailabilityCalendar } from "./SessionAvailabilityCalendar";
 type Managed = {
     appointment: {
         id: string;
@@ -38,14 +38,23 @@ export function SchedulingBooking({ type, readOnly, managed, token }: {
     token?: string;
 }) {
     const router = useRouter();
-    const [day, setDay] = useState(() => localSessionDay(new Date(), type.timezone)), [slots, setSlots] = useState<string[]>([]), [selected, setSelected] = useState(""), [loading, setLoading] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState(""), [success, setSuccess] = useState(""), [rescheduling, setRescheduling] = useState(false), [cancelConfirm, setCancelConfirm] = useState(false), [displayZone, setDisplayZone] = useState(type.timezone);
+    const [day, setDay] = useState(""), [slots, setSlots] = useState<string[]>([]), [selected, setSelected] = useState(""), [loading, setLoading] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState(""), [success, setSuccess] = useState(""), [rescheduling, setRescheduling] = useState(false), [cancelConfirm, setCancelConfirm] = useState(false), [displayZone, setDisplayZone] = useState(type.timezone);
     const nonce = useRef<string | null>(null), pending = useRef(false);
+    const [availabilityRetry, setAvailabilityRetry] = useState(0);
     const base = token ? `/api/crm/scheduling/manage/${token}` : `/api/crm/scheduling/public/${type.slug}`;
     const showPicker = !managed || rescheduling;
     const phoneRequired=sessionRequiresPhone(type);
+    const chooseDay = useCallback((nextDay: string) => {
+        setDay(nextDay);
+        setSelected("");
+        setSlots([]);
+        setLoading(Boolean(nextDay));
+        setError("");
+        nonce.current = null;
+    }, []);
     useEffect(() => { setDisplayZone(Intl.DateTimeFormat().resolvedOptions().timeZone || type.timezone); }, [type.timezone]);
     useEffect(() => {
-        if (!showPicker)
+        if (!showPicker || !day)
             return;
         const controller = new AbortController();
         setLoading(true);
@@ -59,8 +68,15 @@ export function SchedulingBooking({ type, readOnly, managed, token }: {
         } }).finally(() => { if (!controller.signal.aborted)
             setLoading(false); });
         return () => controller.abort();
-    }, [base, day, showPicker]);
+    }, [base, day, showPicker, availabilityRetry]);
     const stamp = (v: string) => new Intl.DateTimeFormat("en-US", { timeZone: displayZone, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(v));
+    const dayLabel = day ? new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", month: "short", day: "numeric" }).format(new Date(`${day}T12:00:00Z`)) : "Choose an available date";
+    const timeRange = (value: string) => {
+        const formatter = new Intl.DateTimeFormat("en-US", { timeZone: displayZone, hour: "numeric", minute: "2-digit" });
+        return `${formatter.format(new Date(value))} – ${formatter.format(new Date(Date.parse(value) + type.duration_minutes * 60000))}`;
+    };
+    const hours = Math.floor(type.duration_minutes / 60), minutes = type.duration_minutes % 60;
+    const durationLabel = [hours ? `${hours} ${hours === 1 ? "hour" : "hours"}` : "", minutes ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}` : ""].filter(Boolean).join(" ");
     async function mutate(payload: unknown) {
         if (pending.current)
             return;
@@ -89,11 +105,11 @@ export function SchedulingBooking({ type, readOnly, managed, token }: {
             setSaving(false);
         }
     }
-    return <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-8 sm:py-14"><div className="mx-auto max-w-5xl">
+    return <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-8 sm:py-14"><div className="mx-auto max-w-6xl">
     <a href="https://www.oceanoblue.net" className="mb-7 inline-flex items-center gap-2 text-sm font-semibold tracking-[.14em] text-ocean-900">OCEANO BLUE <span className="font-normal tracking-normal text-slate-500">Media</span></a>
-    <div className="overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-ink-100 md:grid md:grid-cols-[.82fr_1.18fr]">
-      <aside className="bg-ocean-950 p-7 text-white sm:p-10"><div className="mb-8 grid h-12 w-12 place-items-center rounded-2xl bg-white/10"><CalendarDays className="h-6 w-6"/></div><p className="mb-3 text-xs uppercase tracking-[.18em] text-ocean-200">{managed ? "Your session" : "Let’s make something great"}</p><h1 className="font-display text-3xl leading-tight sm:text-4xl">{type.name}</h1>{type.description && <p className="mt-5 text-sm leading-relaxed text-slate-200">{type.description}</p>}<div className="mt-8 space-y-4 text-sm">{(type.price_cents ?? 0) > 0 && <p className="text-2xl font-semibold">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(type.price_cents! / 100)}<span className="mt-1 block text-xs font-normal text-ocean-200">Full payment at booking</span></p>}<p className="flex items-center gap-3"><Clock className="h-4 w-4 shrink-0"/>{type.duration_minutes} minutes</p>{type.location && <p className="flex items-start gap-3 break-words"><MapPin className="mt-0.5 h-4 w-4 shrink-0"/><Location text={type.location}/></p>}</div><p className="mt-10 text-sm leading-relaxed text-slate-300">Questions or special arrangements?<br /><a className="text-white underline underline-offset-4" href="mailto:info@oceanoblue.net">info@oceanoblue.net</a></p></aside>
-      <section className="min-w-0 p-6 sm:p-10">
+    <div className="overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-ink-100 md:grid md:grid-cols-[.72fr_1.6fr]">
+      <aside className="bg-ocean-950 p-5 text-white sm:p-8"><div className="mb-6 hidden h-12 w-12 place-items-center rounded-2xl bg-white/10 md:grid"><CalendarDays className="h-6 w-6"/></div><p className="mb-3 text-xs uppercase tracking-[.18em] text-ocean-200">{managed ? "Your session" : "Let’s make something great"}</p><h1 className="font-display text-2xl leading-tight md:text-3xl">{type.name}</h1>{type.description && <p className="mt-3 text-sm leading-relaxed text-slate-200 md:mt-5">{type.description}</p>}<div className="mt-4 space-y-3 text-sm md:mt-8 md:space-y-4">{(type.price_cents ?? 0) > 0 && <p className="text-2xl font-semibold">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(type.price_cents! / 100)}<span className="mt-1 block text-xs font-normal text-ocean-200">Full payment at booking</span></p>}<p className="flex items-center gap-3"><Clock className="h-4 w-4 shrink-0"/>{durationLabel}</p>{type.location && <p className="flex items-start gap-3 break-words"><MapPin className="mt-0.5 h-4 w-4 shrink-0"/><Location text={type.location}/></p>}</div><p className="mt-5 text-xs leading-relaxed text-slate-300 md:mt-10 md:text-sm">Questions or special arrangements?<br /><a className="text-white underline underline-offset-4" href="mailto:info@oceanoblue.net">info@oceanoblue.net</a></p></aside>
+      <section className="min-w-0 p-4 py-6 sm:p-8">
         {readOnly && <p className="mb-6 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Preview only. Open production Ops to book or change a session.</p>}
         {error && <p role="alert" className="mb-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{error}</p>}{success && <p role="status" className="mb-5 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">{success}</p>}
         {managed && <div className="mb-7"><span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${managed.appointment.status === "cancelled" ? "bg-slate-100 text-slate-700" : "bg-emerald-50 text-emerald-800"}`}><CheckCircle2 className="h-3.5 w-3.5"/>{managed.appointment.status === "cancelled" ? "Cancelled" : "Confirmed"}</span><h2 className="mt-4 text-xl font-semibold text-ocean-950">{managed.appointment.full_name}</h2><p className="mt-2 text-lg text-ocean-900">{stamp(managed.appointment.starts_at)}</p><p className="mt-1 text-xs text-slate-500">Displayed in {displayZone}</p><div className="mt-5 flex flex-wrap gap-2"><a className="btn-secondary" href={`${base}?calendar=1`}><Download className="h-4 w-4"/>Add to calendar</a>{managed.appointment.status === "confirmed" && <><button className="btn-secondary" disabled={readOnly || !managed.canReschedule || saving} onClick={() => setRescheduling(v => !v)}>Reschedule</button><button className="btn-ghost text-rose-700" disabled={readOnly || saving || !managed.canReschedule} onClick={() => setCancelConfirm(true)}>Cancel session</button></>}</div>{!managed.canReschedule && managed.appointment.status === "confirmed" && <p className="mt-3 text-sm text-slate-600">Contact the office to change this appointment.</p>}{cancelConfirm && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-sm text-rose-900">Cancel this session and release the reserved time?</p><div className="mt-3 flex gap-2"><button className="btn-danger" disabled={saving} onClick={() => void mutate({ action: "cancel", version: managed.appointment.version })}>Yes, cancel session</button><button className="btn-secondary" onClick={() => setCancelConfirm(false)}>Keep session</button></div></div>}</div>}
@@ -103,8 +119,24 @@ export function SchedulingBooking({ type, readOnly, managed, token }: {
             void mutate({ action: "reschedule", version: managed.appointment.version, starts_at: selected });
             return;
         } const fields = new FormData(e.currentTarget); if(phoneRequired&&!validSessionPhone(String(fields.get("phone")??""))){setError("Enter a phone number we can use for this call.");return;} nonce.current ??= crypto.randomUUID(); void mutate({ id: nonce.current, starts_at: selected, full_name: fields.get("full_name"), email: fields.get("email"), phone: fields.get("phone"), notes: fields.get("notes"), email_consent: fields.get("email_consent") === "on", website: fields.get("website") }); }}>
-          <h2 className="text-xl font-semibold text-ocean-950">{managed ? "Choose a new time" : "Choose a time"}</h2><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium text-slate-700">Date <span className="block text-xs font-normal text-slate-500">Calendar in {type.timezone}</span><input aria-label="Session date" className="input mt-2" type="date" required value={day} min={localSessionDay(new Date(), type.timezone)} onChange={e => setDay(e.target.value)}/></label><label className="text-sm font-medium text-slate-700">Display times in<select className="input mt-2" value={displayZone} onChange={e => setDisplayZone(e.target.value)}>{[...new Set([displayZone, type.timezone, "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Europe/London", "UTC"])].map(z => <option key={z}>{z}</option>)}</select></label></div>
-          <div className="mt-5" aria-live="polite">{loading ? <p className="py-5 text-sm text-slate-500">Checking the calendar…</p> : slots.length ? <fieldset><legend className="sr-only">Available session times</legend><div className="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">{slots.map(s => <label key={s} className={`cursor-pointer rounded-xl border p-3 text-center text-sm transition ${selected === s ? "border-ocean-700 bg-ocean-50 font-semibold text-ocean-900" : "border-slate-200 text-slate-700 hover:border-ocean-400 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ocean-500"}`}><input className="sr-only" type="radio" name="slot" value={s} checked={selected === s} onChange={() => setSelected(s)} required/>{stamp(s)}</label>)}</div></fieldset> : !error && <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600">No available times on this date. Try another date or contact our office.</p>}</div>
+          <h2 className="text-2xl font-semibold tracking-tight text-ocean-950">{managed ? "Find a new date" : "Find your session date"}</h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-500">Available dates are highlighted. Choose a day, then a start time.</p>
+          <div className="mt-6 grid items-start gap-5 lg:grid-cols-[1.1fr_.9fr]">
+            <div>
+              <SessionAvailabilityCalendar base={base} timezone={type.timezone} value={day} onChange={chooseDay} disabled={saving} />
+              <p className="mt-3 text-xs leading-relaxed text-slate-400">Calendar dates follow {type.timezone.replaceAll("_", " ")}.</p>
+            </div>
+            <div className="min-w-0 rounded-2xl bg-slate-50 p-4 sm:p-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-ocean-600">Available times</p>
+              <h3 className="mt-2 text-base font-semibold text-ocean-950">{dayLabel}</h3>
+              <p className="mt-1 text-xs text-slate-500">{durationLabel} per session</p>
+              <div className="mt-4" aria-live="polite" aria-busy={loading}>
+                {loading ? <p className="py-4 text-sm text-slate-500">Checking start times…</p> : slots.length ? <fieldset><legend className="sr-only">Available session times for {dayLabel}</legend><div className="grid max-h-72 gap-2 overflow-y-auto pr-1">{slots.map(s => <label key={s} className={`cursor-pointer rounded-xl border bg-white p-3 text-center text-sm transition ${selected === s ? "border-ocean-700 bg-ocean-50 font-semibold text-ocean-900 ring-1 ring-ocean-700" : "border-slate-200 text-slate-700 hover:border-ocean-400 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ocean-500"}`}><input className="sr-only" type="radio" name="slot" value={s} checked={selected === s} disabled={saving} onChange={() => setSelected(s)} required/>{timeRange(s)}{displayZone !== type.timezone && <span className="mt-1 block text-xs font-normal text-slate-500">{stamp(s)}</span>}</label>)}</div></fieldset> : !error && <p className="py-4 text-sm leading-relaxed text-slate-500">{day ? "These times are no longer available. Choose another highlighted date." : "Select a highlighted day to see its available start times."}</p>}
+                {day && !loading && <button type="button" disabled={saving} className="mt-2 min-h-9 text-sm font-semibold text-ocean-900 underline underline-offset-4" onClick={() => { setSelected(""); setLoading(true); setAvailabilityRetry(current => current + 1); }}>Refresh times</button>}
+              </div>
+              <label className="mt-5 block text-xs font-medium text-slate-500">Display times in<select className="input mt-1.5 w-full min-w-0 text-xs" value={displayZone} onChange={e => setDisplayZone(e.target.value)}>{[...new Set([displayZone, type.timezone, "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Europe/London", "UTC"])].map(z => <option key={z} value={z}>{z.replaceAll("_", " ")}</option>)}</select></label>
+            </div>
+          </div>
           {selected && !managed && <fieldset className="mt-7 grid gap-4 border-t border-slate-100 pt-6"><legend className="sr-only">Your details</legend><label className="text-sm font-medium text-slate-700">Full name<input className="input mt-1.5" name="full_name" autoComplete="name" required minLength={2} maxLength={120}/></label><label className="text-sm font-medium text-slate-700">Email<input className="input mt-1.5" name="email" type="email" autoComplete="email" required maxLength={254}/></label><label className="text-sm font-medium text-slate-700">{phoneRequired?"Phone (required for this call)":"Phone"} {!phoneRequired&&<span className="font-normal text-slate-400">optional</span>}<input className="input mt-1.5" name="phone" type="tel" autoComplete="tel" maxLength={50} required={phoneRequired} minLength={phoneRequired?7:undefined}/></label><label className="text-sm font-medium text-slate-700">Anything we should know? <span className="font-normal text-slate-400">optional</span><textarea className="input mt-1.5" name="notes" rows={3} maxLength={2000}/></label><label className="flex items-start gap-3 text-sm text-slate-600"><input className="mt-1 h-4 w-4" type="checkbox" name="email_consent"/>Email me this session’s confirmation, changes and reminders 24 hours and one hour before. This does not subscribe me to marketing.</label><div aria-hidden="true" className="absolute -left-[10000px]"><label>Website<input name="website" tabIndex={-1} autoComplete="off"/></label></div></fieldset>}
           {selected && <button className="btn-primary mt-6 w-full" type="submit" disabled={readOnly || saving || loading}>{saving ? "Saving…" : managed ? "Confirm new time" : (type.price_cents ?? 0) > 0 ? "Continue to payment" : "Confirm session"}<ArrowRight className="h-4 w-4"/></button>}
           <p className="mt-5 text-xs leading-relaxed text-slate-500">{(type.price_cents ?? 0) > 0 ? "Your time is held during secure checkout and confirmed only after full payment. If checkout expires, the time is released." : "Your session is reserved after confirmation. Save the private management link to reschedule, cancel or add it to your calendar."}</p>

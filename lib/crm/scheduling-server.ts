@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { fetchMemberBusy } from "@/lib/google-calendar/api";
 import { memberWindows } from "@/lib/booking/crew-windows";
 import { CrmError, crmDb } from "./server";
-import { localSessionDay, sessionSlots, type SessionRange } from "./scheduling-slots";
+import { localSessionDay, sessionSlots, sessionDateBounds, sessionMonthDays, validSessionMonth, type SessionRange } from "./scheduling-slots";
 import { sessionBookingSchema, sessionChangeSchema, sessionRequiresPhone,validSessionPhone,type Appointment, type SessionType, type PublicSessionType, type SchedulingData } from "./scheduling-types";
 export function schedulingProduction() {
     if (process.env.VERCEL_ENV !== "production")
@@ -52,15 +52,31 @@ export async function sessionAvailability(type: SessionType, day: string, ignore
         return { slots: [], checkedAt: new Date().toISOString() };
     const start = new Date(`${day}T00:00:00Z`).getTime() - 86400000, end = start + 3 * 86400000;
     const from = new Date(start).toISOString(), to = new Date(end).toISOString();
+    const busy = await sessionBusyRanges(type, from, to, ignoreAppointment);
+    return { slots: sessionSlots(type, day, busy), checkedAt: new Date().toISOString() };
+}
+export async function sessionMonthAvailability(type: SessionType, month: string, ignoreAppointment?: Appointment) {
+    if (!validSessionMonth(month)) throw new CrmError("Choose a valid month.");
+    const now = new Date(), dates = sessionMonthDays(month), bounds = sessionDateBounds(type, now);
+    // Reuse the booking rules before making any provider calls. A month outside
+    // the notice/horizon or configured hours cannot offer a time.
+    const candidates = dates.filter(day => sessionSlots(type, day, [], now).length > 0);
+    if (!candidates.length) return { month, timezone: type.timezone, days: dates.map(date => ({ date, slot_count: 0 })), ...bounds };
+    const from = new Date(Date.parse(`${candidates[0]}T00:00:00Z`) - 86400000).toISOString();
+    const to = new Date(Date.parse(`${candidates[candidates.length - 1]}T00:00:00Z`) + 2 * 86400000).toISOString();
+    const busy = await sessionBusyRanges(type, from, to, ignoreAppointment);
+    return { month, timezone: type.timezone, days: dates.map(date => ({ date, slot_count: sessionSlots(type, date, busy, now).length })), ...bounds };
+}
+async function sessionBusyRanges(type: SessionType, from: string, to: string, ignoreAppointment?: Appointment): Promise<SessionRange[]> {
     const db = crmDb();
     const [blocks, orders, external, primary, settings] = await Promise.all([
-        db.from("schedule_blocks").select("id,starts_at,ends_at").eq("team_member_id", type.owner_id).eq("is_available", false).lt("starts_at", to).gt("ends_at", from).limit(1201),
-        db.from("orders").select("scheduled_at,duration_minutes,photographer_id,videographer_id,photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,contractors(team_member_id)").gte("scheduled_at", from).lte("scheduled_at", to).not("status", "in", "(cancelled,draft)").limit(1201),
+        db.from("schedule_blocks").select("id,starts_at,ends_at", { count: "exact" }).eq("team_member_id", type.owner_id).eq("is_available", false).lt("starts_at", to).gt("ends_at", from).limit(1201),
+        db.from("orders").select("scheduled_at,duration_minutes,photographer_id,videographer_id,photographer_start_offset_minutes,photographer_duration_minutes,videographer_start_offset_minutes,videographer_duration_minutes,contractors(team_member_id)", { count: "exact" }).gte("scheduled_at", from).lte("scheduled_at", to).not("status", "in", "(cancelled,draft)").limit(1201),
         fetchMemberBusy(type.owner_id, from, to),
         sessionCalendarWriteAccess(type.owner_id),
         db.from("business_settings").select("buffer_minutes").eq("id", true).maybeSingle(),
     ]);
-    if (blocks.error || orders.error || settings.error || (blocks.data?.length ?? 0) > 1200 || (orders.data?.length ?? 0) > 1200)
+    if (blocks.error || orders.error || settings.error || [blocks, orders].some(result => (result.data?.length ?? 0) > 1200 || (typeof result.count === "number" && result.count > (result.data?.length ?? 0))))
         throw new CrmError("Calendar availability could not be verified. Please contact the office.", 503);
     if (external.source !== "own")
         throw new CrmError("The host’s calendar needs to be connected before booking. Please contact the office.", 503);
@@ -74,7 +90,7 @@ export async function sessionAvailability(type: SessionType, day: string, ignore
             if (w.start && w.end)
                 busy.push({ start: new Date(Date.parse(w.start) - shootBufferMs).toISOString(), end: new Date(Date.parse(w.end) + shootBufferMs).toISOString() });
     }
-    return { slots: sessionSlots(type, day, busy), checkedAt: new Date().toISOString() };
+    return busy;
 }
 export async function bookSession(slug: string, input: unknown, smartFileToken?: string) {
     schedulingProduction();
