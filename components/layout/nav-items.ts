@@ -23,6 +23,7 @@ import {
   HardDrive,
   Camera,
   FileText,
+  Megaphone,
 } from 'lucide-react';
 
 export type NavItem = {
@@ -67,6 +68,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { href: '/dashboard/photos', label: 'Photos', icon: ImageIcon },
       { href: '/dashboard/photo-rescue', label: 'Photo Production', icon: Sparkles },
       { href: '/dashboard/podcasts', label: 'Podcasts', icon: Mic },
+      { href: '/dashboard/social', label: 'Social Media', icon: Megaphone },
       { href: '/dashboard/jobs', label: 'Jobs', icon: Briefcase },
       { href: '/dashboard/projects', label: 'Projects', icon: FolderKanban },
       { href: '/dashboard/deliveries', label: 'Deliveries', icon: Send },
