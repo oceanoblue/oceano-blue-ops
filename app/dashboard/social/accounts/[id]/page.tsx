@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { crmActor } from "@/lib/crm/server";
 import { AccountItems, AccountProfile, MediaLog, MediaRequests } from "@/components/social-studio/AccountPanel";
 import { auditMonth } from "@/lib/social/audit";
-import { accountHref, studioHref } from "@/lib/social/links";
+import { Breadcrumbs } from "@/components/social-studio/StudioFrame";
+import { SOCIAL_HOME, accountHref, clientHref } from "@/lib/social/links";
 import { loadAccount, mediaWindowStart } from "@/lib/social/server";
 import {
   ACCESS_LABEL,
@@ -53,12 +54,17 @@ export default async function AccountPage(props: {
   return (
     <div className="space-y-6">
       <div>
-        <Link href={studioHref("overview", program.id, month)} className="inline-flex items-center gap-1 text-sm text-ocean-700 hover:underline">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> {program.name}
-        </Link>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4 border-b border-ink-100/70 pb-5">
+        <Breadcrumbs
+          trail={[
+            { label: "Social Media", href: SOCIAL_HOME },
+            { label: program.name, href: clientHref("dashboard", program.id, month) },
+            { label: "Sub-accounts", href: clientHref("accounts", program.id, month) },
+            { label: account.name },
+          ]}
+        />
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-ink-100/70 pb-5">
           <div className="min-w-0">
-            <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean-600">{TIER_LABEL[account.tier]} account</div>
+            <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean-600">{TIER_LABEL[account.tier]} sub-account of {program.name}</div>
             <h1 className="font-display text-2xl font-semibold tracking-tight text-ocean-950 sm:text-3xl">{account.name}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
               <span className={`pill ${ACCESS_PILL[account.access_status]}`}>{ACCESS_LABEL[account.access_status]}</span>
@@ -98,7 +104,7 @@ export default async function AccountPage(props: {
           <section className="card overflow-hidden">
             <header className="border-b border-ink-100 px-5 py-3">
               <h2 className="font-display text-lg font-semibold text-ocean-950">Media library</h2>
-              <p className="mt-0.5 text-sm text-slate-600">Log what arrives so we know when this account is running short. Files stay in the client&apos;s folder.</p>
+              <p className="mt-0.5 text-sm text-slate-600">Log what arrives so we know when this sub-account is running short. Files stay in the client&apos;s folder.</p>
             </header>
             <MediaLog account={account} media={media} health={health} today={today} />
           </section>
@@ -111,7 +117,7 @@ export default async function AccountPage(props: {
         </div>
         <section className="card self-start overflow-hidden">
           <header className="border-b border-ink-100 px-5 py-3">
-            <h2 className="font-display text-lg font-semibold text-ocean-950">Account profile</h2>
+            <h2 className="font-display text-lg font-semibold text-ocean-950">Sub-account profile</h2>
           </header>
           <AccountProfile key={account.id} account={account} />
         </section>

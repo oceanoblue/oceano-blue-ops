@@ -19,7 +19,7 @@ export function useItemFilters(items: Item[], accounts: Account[], team: Member[
   const controls = (
     <div className="flex flex-wrap items-center gap-2">
       <select className="input w-auto min-w-52" value={account} onChange={(e) => setAccount(e.target.value)} aria-label="Filter by account">
-        <option value="">All accounts</option>
+        <option value="">All sub-accounts</option>
         {accounts.map((a) => (
           <option key={a.id} value={a.id}>{a.name}</option>
         ))}

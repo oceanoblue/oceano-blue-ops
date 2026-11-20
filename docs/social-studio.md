@@ -1,39 +1,48 @@
 # Social Studio
 
-`/dashboard/social` is where Oceano Blue Media runs social media programs for
-clients: who the accounts are, what each one is owed every month, where every
-piece of content is in production, and whether we have enough media to keep
-going. It is built for programs with many accounts, such as a hotel group.
+`/dashboard/social` is where Oceano Blue Media runs social media for clients:
+who each client is, which sub-accounts they have, what each one is owed every
+month, where every piece of content is in production, and whether we have
+enough media to keep going. It is built for clients with many sub-accounts,
+such as a hotel group.
 
 Social onboarding (`/social/start`, see `social-onboarding.md`) collects a new
 client's answers and files. Social Studio is what happens after that.
 
 ## How it is organized
 
-- **Program**: one client engagement. It has a contact, a status and the name
-  of the tool posts are published from.
-- **Account**: one property or brand inside a program. It holds the monthly
-  quota (posts, reels, Google posts), the platforms it is on with a link to
-  each profile, the Canva brand kit link, the media folder link, voice and
-  style notes, and whether we have access.
-- **Piece**: one post, reel or Google post for an account in a month. It has a
-  content type, a working title, a caption, a publish date, an assignee, a
+- **Client**: one company we manage social media for (in the database, a
+  `social_programs` row). It has a contact, a status, the tool posts are
+  published from, the terms it was sold on and its agreements.
+- **Sub-account**: one hotel, outlet or brand page that belongs to a client
+  (`social_accounts`). It holds the monthly quota (posts, reels, Google posts),
+  the platforms it is on with a link to each profile, the Canva brand kit
+  link, the media folder link, voice and style notes, and whether we have
+  access. A hotel group is one client with one sub-account per hotel.
+- **Piece**: one post, reel or Google post for a sub-account in a month. It has
+  a content type, a working title, a caption, a publish date, an assignee, a
   Canva design link, review notes and a stage.
-- **Media batch**: a note that photos or clips arrived for an account.
+- **Media batch**: a note that photos or clips arrived for a sub-account.
 - **Media request**: something we have asked the client to send.
 
-## The three views
+## Where things are
 
-- **Overview**: the month at a glance. Totals, what needs attention (accounts
-  short on media, accounts not connected, open requests), and a progress bar
-  for every account. "Plan the month" and "Add accounts" live here.
-- **Production board**: the month's pieces in columns by stage. Open a card to
-  edit it, or move it to the next stage with one click.
-- **Calendar**: the same pieces by publish date. Late pieces are outlined.
+- `/dashboard/social` lists every **client** as a card with this month at a
+  glance. "Add a client" is at the bottom.
+- `/dashboard/social/clients/<id>` is that client's own **dashboard**: the
+  month in numbers, what needs attention, what is due in the next 7 days,
+  "Plan the month", the onboarding checklist, the client report link, the
+  agreement status and every sub-account with a progress bar.
+- The tabs on a client are **Sub-accounts** (one table of every sub-account,
+  and where new ones are added), **Production board**, **Calendar**,
+  **Checks** and **Agreement** (agreements, plus fee, term and brand rules).
+- `/dashboard/social/accounts/<id>` is one **sub-account**. The trail at the
+  top always reads Social Media / client / Sub-accounts / sub-account.
+- Links from before clients had their own pages (`?program=<id>`) are sent to
+  the right place.
 
-Stages, in order: Planned, Needs media, In design, Our review, Client review,
-Approved, Scheduled, Published. A piece counts as done for the month once it is
-Scheduled or Published.
+The production board shows the month's pieces in columns by stage; the
+calendar shows them by date. Open a piece in either to edit it.
 
 ## Planning a month
 
@@ -43,9 +52,9 @@ property feature, local event, property feature, local story, flexible, so five
 posts give the 2-1-1-1 mix. It only adds what is missing: running it again, or
 after adding accounts or raising a quota, never duplicates or resets work.
 
-## Adding accounts
+## Adding sub-accounts
 
-Paste one account per line and pick the type. A line can include the account's
+On the client's Sub-accounts tab, paste one sub-account per line and pick the type. A line can include the account's
 profile links and its Canva brand kit link after the name, so a client's account list can be pasted from a
 spreadsheet:
 
@@ -86,12 +95,12 @@ profile). The rules live in `lib/social/audit.ts`.
 
 ## Program details and onboarding
 
-Program details hold what the client bought: monthly fee, the rate for an
+"Terms and brand rules" on the Agreement tab hold what the client bought: monthly fee, the rate for an
 account added or removed, a minimum monthly fee, term start and length, the day
 of the month media is due, a link to the signed agreement, and terms to avoid.
 These are records for the office; nothing is invoiced from them.
 
-The onboarding checklist is the same twelve steps for every program, from
+The onboarding checklist is the same twelve steps for every client, from
 "Agreement signed" to "Monthly report set up". Ticking a step records the date.
 
 ## Drafting captions with AI
@@ -102,12 +111,65 @@ told to use only the facts it is given and to leave a `[placeholder]` for
 anything it does not know, which the checks then flag until someone fills it
 in. The draft goes into the editor only; nothing is saved until Save.
 
+## Client report page
+
+Each client can have a private report page at `/social/report/<secret>`.
+Create the link from the client's dashboard and send it to the client. It
+shows one month at a time, by sub-account: what is live, scheduled, approved,
+ready for their review or in progress, and the media we still need.
+
+It is read-only and needs no sign-in, so the link itself is the key. It never
+shows fees, staff names, internal notes or check results, and it shows a
+caption or design link only once a piece has reached client review. "New
+link" replaces the secret, which stops the old link working; "Switch off"
+removes it.
+
+## Agreements signed in the system
+
+On a client's **Agreement** tab:
+
+1. **New agreement**: paste the text. A line starting with `# ` is a main
+   heading and `## ` a section heading. Anything left in [square brackets] is
+   counted as still to fill in.
+2. **Get the signing link**: this locks the text and creates a private link
+   (`/social/agreement/<secret>`). Nothing is emailed; send the link yourself.
+3. The client reads it, types their name, title and email, ticks the consent
+   box and signs. The office gets an email.
+4. **Countersign**: the agreement is then complete, the onboarding step
+   "Agreement signed" is ticked, and the same link shows the signed copy with
+   both signatures. Print that page to save a PDF.
+
+What is recorded with each signature: the name, title and email typed, the
+time, the consent wording shown, a SHA-256 fingerprint of the exact text, and
+for the client a hash of their network address. A sent agreement cannot be
+edited: cancel it and send a new one. A fully signed one cannot be cancelled.
+
+This is a simple typed-name signature, the same kind the booking files use.
+Have an attorney review the agreement text itself before it is sent.
+
+## Daily alert
+
+`/api/cron/social-digest` runs once a day (12:30 UTC, see `vercel.json`) and
+emails the office only when something needs someone:
+
+- **Active clients**, every day: pieces failing a check or held back from
+  scheduling (this month and next), pieces past their date, sub-accounts out
+  of or low on media, sub-accounts without confirmed access, media requests
+  past their date and, from the 20th, a next month that is not fully planned.
+- **Clients being onboarded**, Mondays only: how far onboarding is and the
+  next step.
+- Paused, ended and prospect clients are left alone.
+
+It goes to `SOCIAL_ALERT_EMAIL`, or the office reply address when that is not
+set. Running it twice in a day sends one email. Preview deployments never
+send.
+
 ## Make bridge
 
 `/api/automations/social` lets a Make scenario schedule approved content. It
 uses the same `x-pos-automation-secret` header as the podcast bridge.
 
-- `GET ?program=<program id>&month=YYYY-MM` returns `ready` (approved pieces
+- `GET ?client=<client id>&month=YYYY-MM` returns `ready` (approved pieces
   with account, platforms, profile links, caption, design link and publish
   date) and `held` (approved pieces with an error, and why).
 - `POST { "id", "event": "scheduled" | "published", "published_url"? }` records
@@ -129,11 +191,13 @@ developer access and are not part of this version.
 
 ## Deployment
 
-Apply `20261118130000_social_studio.sql` and then
-`20261120160000_social_studio_programs.sql` before deploying the code. The first adds five
+Apply `20261118130000_social_studio.sql`,
+`20261120160000_social_studio_programs.sql` and
+`20261120190000_social_studio_clients.sql`, in that order, before deploying the code. The first adds five
 tables (`social_programs`, `social_accounts`, `social_content_items`,
 `social_media_batches`, `social_media_requests`); the second adds program terms,
-onboarding and avoid-term columns. No existing data changes.
+onboarding and avoid-term columns; the third adds the client report link and
+the `social_agreements` table. No existing data changes.
 
 Like the rest of the office pages, changes are saved from production only.
 Preview deployments show the pages read-only. Access is admin and coordinator.

@@ -128,6 +128,55 @@ export const REQUEST_LABEL: Record<RequestStatus, string> = {
   cancelled: "Cancelled",
 };
 
+export const AGREEMENT_STATUSES = ["draft", "sent", "client_signed", "signed", "void"] as const;
+export type AgreementStatus = (typeof AGREEMENT_STATUSES)[number];
+export const AGREEMENT_LABEL: Record<AgreementStatus, string> = {
+  draft: "Draft",
+  sent: "Waiting for the client",
+  client_signed: "Signed by the client, needs our signature",
+  signed: "Signed by both",
+  void: "Cancelled",
+};
+export const AGREEMENT_PILL: Record<AgreementStatus, string> = {
+  draft: "bg-slate-100 text-slate-700",
+  sent: "bg-amber-100 text-amber-800",
+  client_signed: "bg-sky-100 text-sky-800",
+  signed: "bg-emerald-100 text-emerald-800",
+  void: "bg-slate-100 text-slate-500 line-through",
+};
+
+/** What a client agrees to when they sign. Stored with the signature, word for word. */
+export const CLIENT_SIGNING_CONSENT =
+  "I have read this agreement in full. I am authorized to sign it for the client named in it, I consent to using electronic records and signatures, and I agree that typing my full name is my signature.";
+/** What we agree to when we countersign. Stored with the signature, word for word. */
+export const COUNTERSIGN_CONSENT =
+  "I have reviewed the agreement the client signed. I am authorized to sign for Oceano Blue Media, I consent to using electronic records and signatures, and I agree that typing my full name is my signature.";
+
+/** How far along a piece is, in words a client understands. */
+export const CLIENT_STAGES = ["in_progress", "for_review", "approved", "scheduled", "live"] as const;
+export type ClientStage = (typeof CLIENT_STAGES)[number];
+export const CLIENT_STAGE_LABEL: Record<ClientStage, string> = {
+  in_progress: "In progress",
+  for_review: "Ready for your review",
+  approved: "Approved",
+  scheduled: "Scheduled",
+  live: "Live",
+};
+export const CLIENT_STAGE_PILL: Record<ClientStage, string> = {
+  in_progress: "bg-slate-100 text-slate-700",
+  for_review: "bg-amber-100 text-amber-800",
+  approved: "bg-sky-100 text-sky-800",
+  scheduled: "bg-indigo-100 text-indigo-800",
+  live: "bg-emerald-100 text-emerald-800",
+};
+export function clientStage(status: Status): ClientStage {
+  if (status === "published") return "live";
+  if (status === "scheduled") return "scheduled";
+  if (status === "approved") return "approved";
+  if (status === "client_review") return "for_review";
+  return "in_progress";
+}
+
 // ---------------------------------------------------------------------------
 // Months. A month is written "2027-01" in URLs and "2027-01-01" in the database.
 // ---------------------------------------------------------------------------
@@ -384,6 +433,9 @@ export const itemPatch = z
   .partial()
   .refine(some, "Nothing to change");
 
+/** Agreement text. Line breaks are kept; lines starting with "# " or "## " are headings. */
+const agreementBody = z.string().max(120000).refine((v) => v.trim().length > 0, "Add the agreement text");
+
 export const actionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("create_program"),
@@ -440,9 +492,62 @@ export const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("add_request"), account_id: id, ask: text(500).min(1), due_on: date.nullable().default(null) }),
   z.object({ action: z.literal("update_request"), id, status: z.enum(REQUEST_STATUSES) }),
   z.object({ action: z.literal("set_onboarding_step"), id, step: z.enum(ONBOARDING_STEPS), done: z.boolean() }),
+  z.object({ action: z.literal("set_report_link"), id, enabled: z.boolean() }),
+  z.object({ action: z.literal("create_agreement"), program_id: id, title: text(200).min(1), body: agreementBody }),
+  z.object({ action: z.literal("update_agreement"), id, title: text(200).min(1), body: agreementBody }),
+  z.object({ action: z.literal("send_agreement"), id }),
+  z.object({ action: z.literal("void_agreement"), id }),
+  z.object({
+    action: z.literal("countersign_agreement"),
+    id,
+    signer_name: text(120).min(2),
+    signer_title: text(120).default(""),
+    consent: z.literal(true),
+  }),
   z.object({ action: z.literal("draft_caption"), id }),
 ]);
 export type SocialAction = z.infer<typeof actionSchema>;
+
+/** What a client sends from the signing page. */
+export const signSchema = z.object({
+  signer_name: text(120).min(2, "Type your full name"),
+  signer_title: text(120).default(""),
+  signer_email: z.string().trim().email("Enter a valid email address").max(254).transform((v) => v.toLowerCase()),
+  consent: z.literal(true, "Tick the box to confirm"),
+  /** The version of the text the signer was shown. */
+  document_hash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type SignRequest = z.infer<typeof signSchema>;
+
+/** When a signature was made, in the business time zone with the zone named: "November 23, 2026 at 2:10:00 PM EST". */
+export function signatureTime(iso: string | null): string {
+  if (!iso) return "";
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? "" : at.toLocaleString("en-US", { dateStyle: "long", timeStyle: "long", timeZone: BUSINESS_TZ });
+}
+
+/** One line or block of agreement text, ready to display. */
+export type AgreementBlock = { type: "h1" | "h2" | "p"; text: string };
+/** Split agreement text into headings and paragraphs. Blank lines separate paragraphs. */
+export function agreementBlocks(body: string): AgreementBlock[] {
+  const blocks: AgreementBlock[] = [];
+  let paragraph: string[] = [];
+  const flush = () => {
+    if (paragraph.length) blocks.push({ type: "p", text: paragraph.join("\n") });
+    paragraph = [];
+  };
+  for (const raw of body.replace(/\r\n?/g, "\n").split("\n")) {
+    const line = raw.trimEnd();
+    const heading = /^(#{1,2})\s+(.+)$/.exec(line);
+    if (heading) {
+      flush();
+      blocks.push({ type: heading[1].length === 1 ? "h1" : "h2", text: heading[2].trim() });
+    } else if (line.trim() === "") flush();
+    else paragraph.push(line);
+  }
+  flush();
+  return blocks;
+}
 
 const HOSTS: [RegExp, Platform][] = [
   [/(^|\.)(facebook|fb)\.com$/, "facebook"],

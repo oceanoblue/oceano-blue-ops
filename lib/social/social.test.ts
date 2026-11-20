@@ -222,6 +222,9 @@ describe("automation bridge", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ program: "Test", month: "2027-01", ready: [], held: [] });
     expect(mock.approved).toHaveBeenCalledWith(id, "2027-01");
+    // "client" is the current name for the same id.
+    expect((await bridgeGet(bridge("GET", "s3cret-value", undefined, `?client=${id}&month=2027-02`))).status).toBe(200);
+    expect(mock.approved).toHaveBeenLastCalledWith(id, "2027-02");
   });
   it("refuses a missing or wrong secret, an unconfigured bridge and a missing program, and reads nothing", async () => {
     expect((await bridgeGet(bridge("GET", null))).status).toBe(401);

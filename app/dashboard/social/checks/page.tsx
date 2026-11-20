@@ -1,35 +1,11 @@
 import { redirect } from "next/navigation";
-import { ShieldCheck } from "lucide-react";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { StatCard } from "@/components/ui/StatCard";
-import { ChecksList } from "@/components/social-studio/ChecksList";
-import { StudioFrame } from "@/components/social-studio/StudioFrame";
-import { countIssues, hasError } from "@/lib/social/audit";
-import { studioPage } from "@/lib/social/page";
-import { monthLabel } from "@/lib/social/schema";
+import { SOCIAL_HOME, clientHref } from "@/lib/social/links";
+import { legacyTarget } from "@/lib/social/page";
 
 export const dynamic = "force-dynamic";
 
+/** This page moved under each client. Old links are sent to the right place. */
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { programs, program, month, workspace, audit, production } = await studioPage(searchParams);
-  if (!programs || !program || !workspace) redirect("/dashboard/social");
-  const totals = countIssues(audit);
-  const blocked = workspace.items.filter((i) => i.status === "approved" && hasError(audit[i.id])).length;
-  return (
-    <StudioFrame view="checks" programs={programs} program={program} month={month} production={production} checkErrors={Object.values(audit).filter(hasError).length}>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Pieces checked" value={workspace.items.length} hint={monthLabel(month)} icon={ShieldCheck} />
-        <StatCard label="Must fix" value={totals.errors} accent={totals.errors === 0} />
-        <StatCard label="Worth checking" value={totals.warnings} />
-        <StatCard label="Approved but held" value={blocked} hint="not sent to scheduling until fixed" />
-      </div>
-      {workspace.items.length === 0 ? (
-        <div className="card">
-          <EmptyState icon={ShieldCheck} title={`Nothing planned for ${monthLabel(month)}`} description="Checks run on every piece as soon as the month is planned." />
-        </div>
-      ) : (
-        <ChecksList items={workspace.items} accounts={workspace.accounts} team={workspace.team} audit={audit} />
-      )}
-    </StudioFrame>
-  );
+  const { clientId, month } = await legacyTarget(searchParams);
+  redirect(clientId ? clientHref("checks", clientId, month) : SOCIAL_HOME);
 }
