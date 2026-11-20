@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, UploadCloud } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
+import { ApproveAll, NoteForm, PieceActions } from "@/components/social/ClientPortal";
 import { Meter, VIZ } from "@/components/social-studio/Charts";
 import { SocialLogo } from "@/components/social-studio/Logo";
 import { reportHref } from "@/lib/social/links";
@@ -21,14 +22,19 @@ import { publicReport, type PublicReport } from "@/lib/social/server";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Your social media report | Oceano Blue Media",
+  title: "Your social media | Oceano Blue Media",
   robots: { index: false, follow: false },
   referrer: "no-referrer",
 };
 
 const count = (pieces: PublicReport["accounts"][number]["pieces"], stage: ClientStage) => pieces.filter((p) => p.stage === stage).length;
 
-/** A client's private monthly report. Read-only; opened with the secret link we send them. */
+/**
+ * A client's private page, opened with the secret link we send them: each
+ * month by account, with a way to approve pieces, ask for changes, send the
+ * team a note and see what media is needed. It shows this one client only,
+ * and nothing the office keeps for itself.
+ */
 export default async function SocialReportPage(props: { params: Promise<{ token: string }>; searchParams: Promise<{ month?: string | string[] }> }) {
   const { token } = await props.params;
   const month = parseMonth((await props.searchParams).month);
@@ -51,6 +57,7 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
   }
   if (!report) notFound();
 
+  const readOnly = process.env.VERCEL_ENV !== "production";
   const { totals } = report;
   const delivered = totals.live + totals.scheduled;
   const planned = CLIENT_STAGES.reduce((n, s) => n + totals[s], 0);
@@ -68,7 +75,7 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
           <div className="mt-12 flex flex-col gap-5 sm:flex-row sm:items-center">
             {report.logo_url && <SocialLogo name={report.client} url={report.logo_url} size="xl" />}
             <div className="min-w-0">
-              <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean-300">Social media report</p>
+              <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean-300">Your social media</p>
               <h1 className="mt-2 font-display text-4xl leading-tight tracking-tight sm:text-6xl">{report.client}</h1>
             </div>
           </div>
@@ -119,29 +126,54 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
           </dl>
         </section>
 
-        {needs.length > 0 && (
-          <section className="rounded-2xl bg-white p-6 shadow-soft ring-1 ring-amber-200">
-            <h2 className="font-display text-2xl text-ocean-950">What we need from you</h2>
-            <p className="mt-1 text-sm text-slate-600">Fresh photos and short video clips keep each account looking current. Here is where we are running short.</p>
-            <ul className="mt-4 divide-y divide-ink-100">
-              {needs.map((a) => (
-                <li key={a.name} className="py-3">
-                  <p className="text-sm font-semibold text-ink-900">{a.name}</p>
-                  <ul className="mt-1 space-y-0.5 text-sm text-slate-700">
-                    {a.media === "out" && <li>We are out of recent photos and video for this account.</li>}
-                    {a.media === "low" && <li>We are running low on recent photos and video for this account.</li>}
-                    {a.requests.map((r, i) => (
-                      <li key={i}>
-                        {r.ask}
-                        {r.due_on && <span className="text-slate-500"> (by {shortDate(r.due_on)})</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          </section>
+        {totals.for_review > 0 && (
+          <p className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
+            <strong>
+              {totals.for_review} {totals.for_review === 1 ? "piece is" : "pieces are"} ready for your review.
+            </strong>{" "}
+            Open an account marked &ldquo;ready for your review&rdquo; below to approve it or ask for changes.
+          </p>
         )}
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <section className="rounded-2xl bg-white p-6 shadow-soft ring-1 ring-ink-100">
+            <h2 className="font-display text-2xl text-ocean-950">Tell us something</h2>
+            <p className="mt-1 text-sm text-slate-600">An event coming up, a promotion, a correction or a question. It goes straight to our team.</p>
+            <div className="mt-4">
+              <NoteForm token={token} readOnly={readOnly} accounts={report.accounts.map((a) => ({ id: a.id, name: a.name }))} />
+            </div>
+          </section>
+          <section className="rounded-2xl bg-white p-6 shadow-soft ring-1 ring-ink-100">
+            <h2 className="font-display text-2xl text-ocean-950">Send photos and video</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Fresh photos and short clips are what make each account look current. Phone photos and 10 to 20 second clips are perfect.
+            </p>
+            {report.media_upload_url ? (
+              <a href={report.media_upload_url} target="_blank" rel="noreferrer" className="btn-primary mt-4">
+                <UploadCloud className="h-4 w-4" aria-hidden="true" /> Open the shared folder
+              </a>
+            ) : (
+              <p className="mt-4 text-sm text-slate-700">
+                Email them to{" "}
+                <a className="font-semibold text-ocean-700 underline" href="mailto:info@oceanoblue.net">
+                  info@oceanoblue.net
+                </a>{" "}
+                or use the shared folder we set up with you.
+              </p>
+            )}
+          </section>
+        </div>
+
+        <details className="rounded-2xl bg-white shadow-soft ring-1 ring-ink-100 print:hidden">
+          <summary className="cursor-pointer p-5 text-base font-semibold text-ink-900">How this page works</summary>
+          <ul className="list-disc space-y-1.5 px-10 pb-5 text-sm leading-relaxed text-slate-700">
+            <li>Use the arrows at the top to move between months.</li>
+            <li>Every piece is one of: in progress, ready for your review, approved, scheduled or live.</li>
+            <li>You see the caption and design once a piece is ready for your review. Before that you see its topic and date.</li>
+            <li>Approve a piece, or ask for changes and tell us what to change. You can also ask for a change after a piece is approved or live.</li>
+            <li>This page is private to {report.client}. Anyone with the link can use it, so please share it only with your team.</li>
+          </ul>
+        </details>
 
         <section>
           <h2 className="font-display text-2xl text-ocean-950">By account</h2>
@@ -166,10 +198,15 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
                     </span>
                     {review > 0 && <span className={`pill ${CLIENT_STAGE_PILL.for_review}`}>{review} ready for your review</span>}
                   </summary>
+                  {review > 1 && (
+                    <div className="flex border-t border-ink-100 px-5 py-3">
+                      <ApproveAll token={token} accountId={a.id} month={month} count={review} readOnly={readOnly} />
+                    </div>
+                  )}
                   {a.pieces.length > 0 && (
                     <ul className="divide-y divide-ink-100 border-t border-ink-100">
                       {a.pieces.map((p, i) => (
-                        <li key={i} className="grid gap-2 px-5 py-3 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-start">
+                        <li key={p.id || i} className="grid gap-2 px-5 py-3 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-start">
                           <span className="text-sm tabular-nums text-slate-500">{shortDate(p.date)}</span>
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-ink-900">
@@ -190,6 +227,15 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
                                 )}
                               </span>
                             )}
+                            {p.feedback && (
+                              <span className="mt-2 block rounded-lg bg-ink-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-ink-100">
+                                {p.feedback.decision === "approved" ? "Approved" : "Change requested"}
+                                {p.feedback.by && ` by ${p.feedback.by}`}
+                                {p.feedback.at && ` on ${shortDate(p.feedback.at.slice(0, 10))}`}
+                                {p.feedback.decision === "changes" && p.feedback.note && <span className="mt-1 block whitespace-pre-line text-slate-600">&ldquo;{p.feedback.note}&rdquo;</span>}
+                              </span>
+                            )}
+                            {p.id && <PieceActions key={`${p.id}-${p.stage}`} token={token} itemId={p.id} canApprove={p.stage === "for_review"} readOnly={readOnly} />}
                           </span>
                           <span className={`pill justify-self-start sm:justify-self-end ${CLIENT_STAGE_PILL[p.stage]}`}>{CLIENT_STAGE_LABEL[p.stage]}</span>
                         </li>
@@ -201,6 +247,30 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
             })}
           </div>
         </section>
+
+        {needs.length > 0 && (
+          <section className="rounded-2xl bg-white p-6 shadow-soft ring-1 ring-amber-200">
+            <h2 className="font-display text-2xl text-ocean-950">What we need from you</h2>
+            <p className="mt-1 text-sm text-slate-600">Fresh photos and short video clips keep each account looking current. Here is where we are running short.</p>
+            <ul className="mt-4 divide-y divide-ink-100">
+              {needs.map((a) => (
+                <li key={a.name} className="py-3">
+                  <p className="text-sm font-semibold text-ink-900">{a.name}</p>
+                  <ul className="mt-1 space-y-0.5 text-sm text-slate-700">
+                    {a.media === "out" && <li>We are out of recent photos and video for this account.</li>}
+                    {a.media === "low" && <li>We are running low on recent photos and video for this account.</li>}
+                    {a.requests.map((r, i) => (
+                      <li key={i}>
+                        {r.ask}
+                        {r.due_on && <span className="text-slate-500"> (by {shortDate(r.due_on)})</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <footer className="border-t border-ink-200 pt-6 text-sm text-slate-500">
           <p>This page is private to {report.client}. Please do not forward the link outside your team.</p>

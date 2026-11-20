@@ -486,6 +486,7 @@ export const actionSchema = z.discriminatedUnion("action", [
         term_months: count(60),
         media_due_day: z.number().int().min(1).max(28).nullable(),
         agreement_url: link,
+        media_upload_url: link,
         avoid_terms: terms,
       })
       .partial()
@@ -516,6 +517,10 @@ export const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("add_request"), account_id: id, ask: text(500).min(1), due_on: date.nullable().default(null) }),
   z.object({ action: z.literal("update_request"), id, status: z.enum(REQUEST_STATUSES) }),
   z.object({ action: z.literal("set_onboarding_step"), id, step: z.enum(ONBOARDING_STEPS), done: z.boolean() }),
+  /** The office has dealt with a client's change request on a piece. */
+  z.object({ action: z.literal("resolve_client_feedback"), id }),
+  /** The office has dealt with a note the client sent. */
+  z.object({ action: z.literal("resolve_client_note"), id }),
   z.object({ action: z.literal("remove_logo"), target: z.enum(LOGO_TARGETS), id }),
   /** Give other sub-accounts of the same client this sub-account's logo. */
   z.object({ action: z.literal("share_logo"), account_id: id, to: z.array(id).min(1).max(60) }),
@@ -552,6 +557,22 @@ export function signatureTime(iso: string | null): string {
   const at = new Date(iso);
   return Number.isNaN(at.getTime()) ? "" : at.toLocaleString("en-US", { dateStyle: "long", timeStyle: "long", timeZone: BUSINESS_TZ });
 }
+
+/** A person's name as they type it on a client page. There is no sign-in, so this is what they tell us. */
+const personName = text(120).min(2, "Type your name");
+
+/**
+ * What a client can send from their private page: an answer on one piece, an
+ * approval of everything waiting for one sub-account, or a note to the team.
+ */
+export const clientActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("approve"), item_id: id, name: personName }),
+  z.object({ action: z.literal("request_changes"), item_id: id, name: personName, note: text(2000).min(3, "Tell us what to change") }),
+  /** Approve everything waiting for one sub-account in the month the client is looking at. */
+  z.object({ action: z.literal("approve_all"), account_id: id, month, name: personName }),
+  z.object({ action: z.literal("note"), account_id: id.nullable().default(null), name: personName, message: text(2000).min(3, "Write your note") }),
+]);
+export type ClientAction = z.infer<typeof clientActionSchema>;
 
 /** One line or block of agreement text, ready to display. */
 export type AgreementBlock = { type: "h1" | "h2" | "p"; text: string };

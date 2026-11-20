@@ -20,6 +20,9 @@ export type AuditItem = {
   scheduled_for: string | null;
   assignee: string | null;
   design_url: string;
+  /** "changes" while a client's change request is waiting on us. */
+  client_decision?: string;
+  client_note?: string;
 };
 export type AuditAccount = { id: string; platforms: Platform[]; avoid_terms: string[] };
 
@@ -81,6 +84,9 @@ export function auditItem(
     else if (!done) add("late", "warning", "Past its date and not scheduled.");
   }
   if (IN_PRODUCTION.includes(item.status) && !item.assignee) add("unassigned", "warning", "In production with nobody assigned.");
+  // An error, so an approved piece with an open request is held back from scheduling until someone deals with it.
+  if (item.client_decision === "changes")
+    add("client_changes", "error", `The client asked for a change${item.client_note ? `: "${item.client_note.slice(0, 300)}"` : "."} Make it and send it back for review, or mark it handled.`);
 
   if (caption) {
     const platforms = platformsFor(item.kind, account);

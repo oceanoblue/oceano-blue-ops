@@ -18,6 +18,7 @@ import {
   quotaTotal,
   type AccessStatus,
   type AgreementStatus,
+  type ClientAction,
   type ClientStage,
   type Kind,
   type MediaHealth,
@@ -55,6 +56,8 @@ export type Program = {
   report_token: string | null;
   /** Link to the client's logo, or blank. */
   logo_url: string;
+  /** Where the client sends photos and video, or blank. */
+  media_upload_url: string;
 };
 export type Agreement = {
   id: string;
@@ -111,6 +114,21 @@ export type Item = {
   published_url: string;
   review_note: string;
   updated_at: string;
+  /** The client's latest answer: "approved", "changes", or blank. */
+  client_decision: "" | "approved" | "changes";
+  client_note: string;
+  client_reviewer: string;
+  client_reviewed_at: string | null;
+};
+/** A note a client sent the team from their page. */
+export type ClientNote = {
+  id: string;
+  program_id: string;
+  account_id: string | null;
+  author: string;
+  message: string;
+  status: "open" | "done";
+  created_at: string;
 };
 export type MediaBatch = {
   id: string;
@@ -133,11 +151,11 @@ export type MediaRequest = {
 export type Member = { id: string; full_name: string };
 
 const PROGRAM =
-  "id,name,contact_name,contact_email,publishing_tool,status,notes,monthly_fee_cents,account_rate_cents,minimum_fee_cents,term_start,term_months,media_due_day,agreement_url,onboarding,avoid_terms,report_token,logo_url";
+  "id,name,contact_name,contact_email,publishing_tool,status,notes,monthly_fee_cents,account_rate_cents,minimum_fee_cents,term_start,term_months,media_due_day,agreement_url,onboarding,avoid_terms,report_token,logo_url,media_upload_url";
 const ACCOUNT =
   "id,program_id,name,tier,platforms,posts_per_month,reels_per_month,google_posts_per_month,profile_links,brand_kit_url,media_folder_url,voice_notes,access_status,access_note,is_active,avoid_terms,logo_url";
 const ITEM =
-  "id,account_id,month,kind,slot,pillar,title,caption,status,scheduled_for,assignee,design_url,published_url,review_note,updated_at";
+  "id,account_id,month,kind,slot,pillar,title,caption,status,scheduled_for,assignee,design_url,published_url,review_note,updated_at,client_decision,client_note,client_reviewer,client_reviewed_at";
 const BATCH = "id,account_id,received_on,source,photos,videos,link,note";
 const REQUEST = "id,account_id,ask,due_on,status,created_at";
 const AGREEMENT =
@@ -185,6 +203,19 @@ export async function getProgram(id: string): Promise<Program | null> {
   const { data, error } = await crmDb().from("social_programs").select(PROGRAM).eq("id", id).maybeSingle();
   if (error) throw unavailable();
   return (data as unknown as Program) ?? null;
+}
+
+/** Notes a client has sent that nobody has dealt with yet, newest first. */
+export async function listClientNotes(programId: string): Promise<ClientNote[]> {
+  const { data, error } = await crmDb()
+    .from("social_client_notes")
+    .select("id,program_id,account_id,author,message,status,created_at")
+    .eq("program_id", programId)
+    .eq("status", "open")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw unavailable();
+  return (data ?? []) as unknown as ClientNote[];
 }
 
 /** Every agreement written for a client, newest first. */
@@ -347,7 +378,8 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
     case "update_item": {
       const { data, error } = await db
         .from("social_content_items")
-        .update({ ...a.patch, updated_by: actor, updated_at: now })
+        // Sending a piece to the client starts a new round, so their earlier answer no longer stands.
+        .update({ ...a.patch, ...(a.patch.status === "client_review" ? { client_decision: "" } : {}), updated_by: actor, updated_at: now })
         .eq("id", a.id)
         .select("id");
       if (error) {
@@ -393,6 +425,28 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
       else delete onboarding[a.step];
       const { error } = await db.from("social_programs").update({ onboarding, updated_at: now }).eq("id", a.id);
       if (error) throw unavailable();
+      return {};
+    }
+    case "resolve_client_feedback": {
+      const { data, error } = await db
+        .from("social_content_items")
+        .update({ client_decision: "", updated_by: actor, updated_at: now })
+        .eq("id", a.id)
+        .eq("client_decision", "changes")
+        .select("id");
+      if (error) throw unavailable();
+      if (!data?.length) throw new CrmError("There is no open request from the client on this piece.", 409);
+      return {};
+    }
+    case "resolve_client_note": {
+      const { data, error } = await db
+        .from("social_client_notes")
+        .update({ status: "done", resolved_at: now, resolved_by: actor })
+        .eq("id", a.id)
+        .eq("status", "open")
+        .select("id");
+      if (error) throw unavailable();
+      if (!data?.length) throw new CrmError("That note was already dealt with.", 409);
       return {};
     }
     case "remove_logo": {
@@ -711,6 +765,8 @@ export async function signAgreement(token: string, sign: SignRequest, ipHash: st
 }
 
 export type PublicPiece = {
+  /** Set once the client can act on the piece (from review onward); blank before that. */
+  id: string;
   kind: Kind;
   title: string;
   date: string | null;
@@ -719,13 +775,18 @@ export type PublicPiece = {
   caption: string;
   design_url: string;
   published_url: string;
+  /** The client's own latest answer on this piece, if any. */
+  feedback: { decision: "approved" | "changes"; note: string; by: string; at: string | null } | null;
 };
 export type PublicReport = {
   client: string;
   logo_url: string;
+  /** Where the client sends photos and video, or blank. */
+  media_upload_url: string;
   month: string;
   totals: Record<ClientStage, number> & { owed: number };
   accounts: {
+    id: string;
     name: string;
     logo_url: string;
     owed: number;
@@ -743,7 +804,7 @@ export type PublicReport = {
  */
 export async function publicReport(token: string, month: string): Promise<PublicReport | null> {
   if (!TOKEN_RE.test(token)) return null;
-  const { data, error } = await crmDb().from("social_programs").select("id,name,logo_url").eq("report_token", token).maybeSingle();
+  const { data, error } = await crmDb().from("social_programs").select("id,name,logo_url,media_upload_url").eq("report_token", token).maybeSingle();
   if (error) throw unavailable();
   if (!data) return null;
   const workspace = await loadWorkspace(data.id as string, month);
@@ -759,6 +820,7 @@ export async function publicReport(token: string, month: string): Promise<Public
           totals[stage] += 1;
           const visible = stage !== "in_progress";
           return {
+            id: visible ? i.id : "",
             kind: i.kind,
             title: i.title,
             date: i.scheduled_for,
@@ -766,10 +828,12 @@ export async function publicReport(token: string, month: string): Promise<Public
             caption: visible ? i.caption : "",
             design_url: visible ? i.design_url : "",
             published_url: stage === "live" ? i.published_url : "",
+            feedback: visible && i.client_decision ? { decision: i.client_decision, note: i.client_note ?? "", by: i.client_reviewer ?? "", at: i.client_reviewed_at ?? null } : null,
           };
         });
       totals.owed += quotaTotal(account);
       return {
+        id: account.id,
         name: account.name,
         logo_url: account.logo_url ?? "",
         owed: quotaTotal(account),
@@ -781,5 +845,104 @@ export async function publicReport(token: string, month: string): Promise<Public
         requests: workspace.requests.filter((r) => r.account_id === account.id).map((r) => ({ ask: r.ask, due_on: r.due_on })),
       };
     });
-  return { client: data.name as string, logo_url: (data.logo_url as string) ?? "", month, totals, accounts };
+  return {
+    client: data.name as string,
+    logo_url: (data.logo_url as string) ?? "",
+    media_upload_url: (data.media_upload_url as string) ?? "",
+    month,
+    totals,
+    accounts,
+  };
+}
+
+/** What happened, for the email that tells the office. Null when nothing needs telling. */
+export type ClientActionResult = {
+  client: string;
+  program_id: string;
+  /** Number of pieces approved. */
+  approved: number;
+  /** Set when the office should hear about it straight away. */
+  notify: { kind: "changes" | "note"; by: string; account: string; title: string; text: string } | null;
+};
+
+/** Stages where a client has been shown a piece, so may ask for a change to it. */
+const SHOWN_TO_CLIENT: Status[] = ["client_review", "approved", "scheduled", "published"];
+
+/**
+ * Carry out what a client asked for from their private page. Everything is
+ * checked against the client the link belongs to: a piece or sub-account of
+ * another client, or one the client has not been shown yet, is "not found".
+ */
+export async function clientAction(token: string, a: ClientAction): Promise<ClientActionResult> {
+  if (!TOKEN_RE.test(token)) throw new CrmError("This link is not valid.", 404);
+  const db = crmDb();
+  const program = await db.from("social_programs").select("id,name").eq("report_token", token).maybeSingle();
+  if (program.error) throw unavailable();
+  if (!program.data) throw new CrmError("This link is no longer valid.", 404);
+  const programId = program.data.id as string;
+  const result: ClientActionResult = { client: program.data.name as string, program_id: programId, approved: 0, notify: null };
+  const now = new Date().toISOString();
+
+  /** The client's own active sub-account, or "not found". */
+  const ownAccount = async (accountId: string) => {
+    const account = await db.from("social_accounts").select("id,name").eq("id", accountId).eq("program_id", programId).eq("is_active", true).maybeSingle();
+    if (account.error) throw unavailable();
+    if (!account.data) throw new CrmError("That account was not found.", 404);
+    return account.data as { id: string; name: string };
+  };
+
+  switch (a.action) {
+    case "note": {
+      const account = a.account_id ? await ownAccount(a.account_id) : null;
+      const { error } = await db.from("social_client_notes").insert({ program_id: programId, account_id: account?.id ?? null, author: a.name, message: a.message });
+      if (error) throw unavailable();
+      result.notify = { kind: "note", by: a.name, account: account?.name ?? "", title: "", text: a.message };
+      return result;
+    }
+    case "approve_all": {
+      const account = await ownAccount(a.account_id);
+      const { data, error } = await db
+        .from("social_content_items")
+        .update({ status: "approved", client_decision: "approved", client_note: "", client_reviewer: a.name, client_reviewed_at: now, updated_at: now })
+        .eq("account_id", account.id)
+        .eq("month", monthStart(a.month))
+        .eq("status", "client_review")
+        .select("id");
+      if (error) throw unavailable();
+      result.approved = data?.length ?? 0;
+      return result;
+    }
+    case "approve":
+    case "request_changes": {
+      const item = await db.from("social_content_items").select("id,account_id,title,status").eq("id", a.item_id).maybeSingle();
+      if (item.error) throw unavailable();
+      // A piece the client has not been shown is treated exactly like one that does not exist.
+      if (!item.data || !SHOWN_TO_CLIENT.includes(item.data.status as Status)) throw new CrmError("That piece was not found.", 404);
+      const account = await ownAccount(item.data.account_id as string);
+      if (a.action === "approve") {
+        const { data, error } = await db
+          .from("social_content_items")
+          .update({ status: "approved", client_decision: "approved", client_note: "", client_reviewer: a.name, client_reviewed_at: now, updated_at: now })
+          .eq("id", a.item_id)
+          .eq("status", "client_review")
+          .select("id");
+        if (error) throw unavailable();
+        if (!data?.length) throw new CrmError("This piece is no longer waiting for your review. Reload the page to see where it is.", 409);
+        result.approved = 1;
+        return result;
+      }
+      // Asking for a change sends a piece under review back to design. One that is already approved,
+      // scheduled or live stays where it is: the office decides what to do, and it is held from scheduling meanwhile.
+      const patch = { client_decision: "changes", client_note: a.note, client_reviewer: a.name, client_reviewed_at: now, updated_at: now };
+      const back = await db.from("social_content_items").update({ ...patch, status: "in_design" }).eq("id", a.item_id).eq("status", "client_review").select("id");
+      if (back.error) throw unavailable();
+      if (!back.data?.length) {
+        const kept = await db.from("social_content_items").update(patch).eq("id", a.item_id).in("status", ["approved", "scheduled", "published"]).select("id");
+        if (kept.error) throw unavailable();
+        if (!kept.data?.length) throw new CrmError("That piece was not found.", 404);
+      }
+      result.notify = { kind: "changes", by: a.name, account: account.name, title: (item.data.title as string) || "Untitled piece", text: a.note };
+      return result;
+    }
+  }
 }

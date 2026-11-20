@@ -2,7 +2,7 @@ import { defaultReplyTo, sendEmail } from "@/lib/email/resend";
 import { emailButton, emailShell, escapeHtml } from "@/lib/email/templates";
 import { appOrigin, clientHref } from "./links";
 import { ONBOARDING_LABEL, ONBOARDING_STEPS, monthLabel, shiftMonth, todayKey } from "./schema";
-import { listPrograms, loadWorkspace, type Program } from "./server";
+import { listClientNotes, listPrograms, loadWorkspace, type Program } from "./server";
 import { clientMonth, type MonthData } from "./summary";
 
 /** One thing the office should know about, with the sub-accounts it concerns. */
@@ -26,6 +26,8 @@ export function digestSection(
   current: { month: string; data: MonthData },
   next: { month: string; data: MonthData },
   today: string,
+  /** Notes the client has sent that nobody has dealt with. */
+  openNotes = 0,
 ): DigestSection | null {
   const lines: DigestLine[] = [];
   const day = Number(today.slice(8, 10));
@@ -64,6 +66,8 @@ export function digestSection(
       text: `${plural(now.summary.late, "piece is", "pieces are")} past the planned date and not scheduled.`,
       names: now.rows.filter((r) => r.late > 0).map((r) => r.account.name),
     });
+
+  if (openNotes > 0) lines.push({ text: `${plural(openNotes, "note from the client is", "notes from the client are")} waiting for an answer.`, names: [] });
 
   const out = now.rows.filter((r) => r.health === "out");
   const low = now.rows.filter((r) => r.health === "low");
@@ -118,6 +122,21 @@ export function digestEmail(sections: DigestSection[], today: string): { subject
   return { subject, html };
 }
 
+/** Tell the office a client asked for a change or sent a note from their page. */
+export function clientFeedbackEmail(p: { client: string; kind: "changes" | "note"; by: string; account: string; title: string; text: string; url: string }): { subject: string; html: string } {
+  const about = [p.account, p.title].filter(Boolean).join(": ");
+  const subject = p.kind === "changes" ? `${p.client} asked for a change${about ? ` (${about})` : ""}` : `Note from ${p.client}${p.account ? ` (${p.account})` : ""}`;
+  const html = emailShell(
+    `<h1 style="font-size:20px;margin:0 0 10px;color:#0c1620;">${escapeHtml(p.kind === "changes" ? `${p.client} asked for a change` : `A note from ${p.client}`)}</h1>
+    ${about ? `<p style="font-size:14px;color:#708698;margin:0 0 10px;">${escapeHtml(about)}</p>` : ""}
+    <p style="font-size:15px;line-height:1.5;margin:0 0 6px;white-space:pre-line;border-left:3px solid #0c8de9;padding-left:12px;">${escapeHtml(p.text)}</p>
+    <p style="font-size:13px;color:#708698;margin:0 0 18px;">From ${escapeHtml(p.by)}, as typed on the client page.</p>
+    ${emailButton(p.url, p.kind === "changes" ? "Open the checks" : "Open the client")}`,
+    subject,
+  );
+  return { subject, html };
+}
+
 /** Tell the office a client signed, so we can countersign. */
 export function agreementSignedEmail(p: { client: string; title: string; signer: string; url: string }): { subject: string; html: string } {
   const subject = `${p.client} signed: ${p.title}`;
@@ -144,7 +163,8 @@ export async function runSocialDigest(now: Date = new Date()) {
   const sections: DigestSection[] = [];
   for (const program of programs) {
     const [current, next] = await Promise.all([loadWorkspace(program.id, month), loadWorkspace(program.id, nextMonth)]);
-    const section = digestSection(program, { month, data: current }, { month: nextMonth, data: next }, today);
+    const notes = program.status === "active" ? (await listClientNotes(program.id)).length : 0;
+    const section = digestSection(program, { month, data: current }, { month: nextMonth, data: next }, today, notes);
     if (section) sections.push(section);
   }
   if (sections.length === 0) return { sent: false, clients: 0 };

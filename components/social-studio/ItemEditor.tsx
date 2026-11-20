@@ -121,6 +121,26 @@ export function ItemEditor({
               ))}
             </ul>
           )}
+          {item.client_decision && (
+            <div className={`rounded-lg p-3 text-sm sm:col-span-2 ${item.client_decision === "changes" ? "bg-amber-50 text-amber-950 ring-1 ring-amber-200" : "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"}`}>
+              <p className="font-semibold">
+                {item.client_decision === "changes" ? "The client asked for a change" : "Approved by the client"}
+                <span className="font-normal">
+                  {item.client_reviewer && ` · ${item.client_reviewer}`}
+                  {item.client_reviewed_at && ` · ${new Date(item.client_reviewed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}`}
+                </span>
+              </p>
+              {item.client_decision === "changes" && (
+                <>
+                  {item.client_note && <p className="mt-1 whitespace-pre-line">&ldquo;{item.client_note}&rdquo;</p>}
+                  <p className="mt-2 text-xs text-amber-900/80">Sending the piece back to client review clears this. If no change is needed, mark it handled.</p>
+                  <button type="button" className="btn-secondary mt-2" disabled={busy} onClick={async () => (await run({ action: "resolve_client_feedback", id: item.id })) && onClose()}>
+                    Mark as handled
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           <label className="sm:col-span-2">
             <span className="label">Working title</span>
             <input ref={firstField} className="input" maxLength={200} value={draft.title} onChange={(e) => set("title", e.target.value)} placeholder="What this piece is about" />

@@ -142,18 +142,47 @@ Chart colors live in `components/social-studio/Charts.tsx` (`VIZ`): one blue
 ramp for amounts and progress, and green, amber and red only for good, warning
 and problem states, always with a label.
 
-## Client report page
+## The client's page
 
-Each client can have a private report page at `/social/report/<secret>`.
-Create the link from the client's dashboard and send it to the client. It
-shows one month at a time, by sub-account: what is live, scheduled, approved,
-ready for their review or in progress, and the media we still need.
+Each client can have a private page at `/social/report/<secret>`. Create the
+link from the client's dashboard ("The client's page") and send it to the
+client. It shows one month at a time, by sub-account. On it the client can:
 
-It is read-only and needs no sign-in, so the link itself is the key. It never
-shows fees, staff names, internal notes or check results, and it shows a
-caption or design link only once a piece has reached client review. "New
-link" replaces the secret, which stops the old link working; "Switch off"
-removes it.
+- **See where every piece is**: in progress, ready for their review, approved,
+  scheduled or live. A caption and design link appear only once a piece has
+  reached client review.
+- **Approve a piece** that is waiting for their review, or **approve all** the
+  pieces waiting for one sub-account in the month on screen.
+- **Ask for a change**, with a note. A piece under review goes back to "In
+  design". A piece that is already approved, scheduled or live stays where it
+  is, and a failed check ("The client asked for a change") holds it from
+  scheduling until the office makes the change and sends it back for review,
+  or opens the piece and chooses "Mark as handled".
+- **Send a note** to the team, optionally about one sub-account. Notes show in
+  "From the client" on the client's dashboard until marked done.
+- **Send photos and video**: a button opens the link saved in "Where the
+  client sends photos and video" (Agreement tab, Terms and brand rules).
+
+The office is emailed when a client asks for a change or sends a note.
+Approvals are quiet. Open notes are also counted in the daily alert.
+
+### What a client can and cannot see
+
+The page has no sign-in, so the link itself is the key: anyone holding it can
+use the page. "New link" replaces the secret, which stops the old link
+working; "Switch off" removes it.
+
+- A link opens **one client only**. Every piece and sub-account a client acts
+  on is checked on the server against the client the link belongs to; another
+  client's, a paused sub-account's, or a piece not yet shown to the client is
+  answered as "not found".
+- The page never carries fees, terms, agreements, staff names or assignees,
+  internal review notes, check results, access notes, voice notes, or another
+  client's data. The name a person types is recorded with their answer; it is
+  not verified.
+- Clients cannot reach `/dashboard/social` or `/api/social`: both require a
+  signed-in office account (admin or coordinator). The database tables refuse
+  everyone except office staff, including signed-in clients and field staff.
 
 ## Agreements signed in the system
 
@@ -224,12 +253,14 @@ developer access and are not part of this version.
 
 Apply `20261118130000_social_studio.sql`,
 `20261120160000_social_studio_programs.sql`,
-`20261120190000_social_studio_clients.sql` and
-`20261120200000_social_studio_logos.sql`, in that order, before deploying the code. The first adds five
+`20261120190000_social_studio_clients.sql`,
+`20261120200000_social_studio_logos.sql` and
+`20261120210000_social_studio_client_side.sql`, in that order, before deploying the code. The first adds five
 tables (`social_programs`, `social_accounts`, `social_content_items`,
 `social_media_batches`, `social_media_requests`); the second adds program terms,
 onboarding and avoid-term columns; the third adds the client report link and
-the `social_agreements` table; the fourth adds the logo links. No existing data changes.
+the `social_agreements` table; the fourth adds the logo links; the fifth adds client answers on pieces, client
+notes and the media link. No existing data changes.
 
 Like the rest of the office pages, changes are saved from production only.
 Preview deployments show the pages read-only. Access is admin and coordinator.
