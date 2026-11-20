@@ -325,3 +325,6 @@ export function assignmentConfirmedEmail(p: {name:string;address:string;when:str
     <p>If you can no longer cover this shoot, open the details and decline so we can arrange coverage.</p>
     ${button(p.respondUrl,'Review shoot')}`, `Confirmed automatically: ${p.address}`)};
 }
+
+// Building blocks for templates that live beside their feature (for example lib/social/digest.ts).
+export { shell as emailShell, button as emailButton, escapeHtml };

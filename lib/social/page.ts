@@ -1,41 +1,81 @@
 import { notFound } from "next/navigation";
 import { crmActor } from "@/lib/crm/server";
-import { auditMonth, type Issue } from "./audit";
+import type { Issue } from "./audit";
 import { parseMonth, todayKey } from "./schema";
-import { listPrograms, loadWorkspace, type Program, type Workspace } from "./server";
+import { clientMonth, type AccountRow, type ClientSummary } from "./summary";
+import { getProgram, listPrograms, loadWorkspace, type Program, type Workspace } from "./server";
 
-export type StudioPage = {
-  programs: Program[] | null;
-  program: Program | null;
-  month: string;
-  workspace: Workspace | null;
-  /** Automatic check results for the month, by piece id. Pieces with no issues are absent. */
-  audit: Record<string, Issue[]>;
-  production: boolean;
-};
+type Search = Promise<Record<string, string | string[] | undefined>>;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * What every Social Studio page starts from: office access, the chosen program
- * (or the first one that is not ended) and the chosen month. `programs` is
- * null when the data could not be loaded, for example before the database
- * update for this feature is installed.
- */
-export async function studioPage(
-  searchParams: Promise<Record<string, string | string[] | undefined>>,
-): Promise<StudioPage> {
+/** Office access for a Social Studio page. Anyone else gets "not found". */
+async function office() {
   try {
     await crmActor();
   } catch {
     notFound();
   }
-  const params = await searchParams;
-  const month = parseMonth(params.month);
+}
+
+export type ClientCard = { program: Program; summary: ClientSummary };
+export type SocialHome = {
+  /** Null when the data could not be loaded, for example before a database update is installed. */
+  clients: ClientCard[] | null;
+  month: string;
+  production: boolean;
+};
+
+/** The Social Media front page: every client, with this month at a glance. */
+export async function socialHome(searchParams: Search): Promise<SocialHome> {
+  await office();
+  const month = parseMonth((await searchParams).month);
   const production = process.env.VERCEL_ENV === "production";
-  const programs = await listPrograms().catch(() => null);
-  if (!programs) return { programs: null, program: null, month, workspace: null, audit: {}, production };
-  const program =
-    programs.find((p) => p.id === params.program) ?? programs.find((p) => p.status !== "ended") ?? programs[0] ?? null;
-  const workspace = program ? await loadWorkspace(program.id, month).catch(() => null) : null;
-  const audit = program && workspace ? auditMonth(workspace.items, workspace.accounts, program.avoid_terms, todayKey()) : {};
-  return { programs: program && !workspace ? null : programs, program, month, workspace, audit, production };
+  const today = todayKey();
+  try {
+    const programs = await listPrograms();
+    const months = await Promise.all(programs.map((p) => loadWorkspace(p.id, month)));
+    return { clients: programs.map((program, i) => ({ program, summary: clientMonth(program, months[i], today).summary })), month, production };
+  } catch {
+    return { clients: null, month, production };
+  }
+}
+
+export type ClientPage = {
+  program: Program;
+  month: string;
+  today: string;
+  workspace: Workspace;
+  /** Automatic check results for the month, by piece id. Pieces with no issues are absent. */
+  audit: Record<string, Issue[]>;
+  /** One row per active sub-account. */
+  rows: AccountRow[];
+  summary: ClientSummary;
+  production: boolean;
+};
+
+/**
+ * What every page of one client starts from: office access, the client and
+ * the chosen month. An unknown client is "not found".
+ */
+export async function clientPage(params: Promise<{ id: string }>, searchParams: Search): Promise<ClientPage> {
+  await office();
+  const { id } = await params;
+  if (!UUID.test(id)) notFound();
+  const month = parseMonth((await searchParams).month);
+  const program = await getProgram(id);
+  if (!program) notFound();
+  const workspace = await loadWorkspace(program.id, month);
+  const today = todayKey();
+  return { program, month, today, workspace, ...clientMonth(program, workspace, today), production: process.env.VERCEL_ENV === "production" };
+}
+
+/**
+ * Where an old Social Studio link (…/board?program=…) lives now. Without a
+ * client in the link it goes to the client list.
+ */
+export async function legacyTarget(searchParams: Search): Promise<{ clientId: string | null; month: string | null }> {
+  const params = await searchParams;
+  const program = typeof params.program === "string" && UUID.test(params.program) ? params.program : null;
+  const month = typeof params.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month) ? params.month : null;
+  return { clientId: program, month };
 }

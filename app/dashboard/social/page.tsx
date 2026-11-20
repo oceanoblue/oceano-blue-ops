@@ -1,176 +1,128 @@
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Clock, ImageOff, Megaphone, Send, Users } from "lucide-react";
+import { redirect } from "next/navigation";
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Megaphone, Users } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/ui/StatCard";
-import { StudioFrame } from "@/components/social-studio/StudioFrame";
-import { CopyMediaAsk, NewProgramForm, ProgramSetup } from "@/components/social-studio/ProgramSetup";
-import { OnboardingChecklist, ProgramTerms } from "@/components/social-studio/ProgramTerms";
-import { countIssues, hasError } from "@/lib/social/audit";
-import { accountHref, studioHref } from "@/lib/social/links";
-import { studioPage } from "@/lib/social/page";
-import {
-  ACCESS_LABEL,
-  ACCESS_PILL,
-  DONE,
-  IN_PRODUCTION,
-  MEDIA_HEALTH_LABEL,
-  MEDIA_HEALTH_PILL,
-  PLATFORM_LABEL,
-  STATUSES,
-  STATUS_BAR,
-  STATUS_LABEL,
-  TIERS,
-  TIER_LABEL,
-  countByStatus,
-  isLate,
-  mediaHealth,
-  monthLabel,
-  quotaTotal,
-  sumOf,
-  todayKey,
-} from "@/lib/social/schema";
+import { NewProgramForm } from "@/components/social-studio/ProgramSetup";
+import { ClientStatusPill, SocialHomeFrame } from "@/components/social-studio/StudioFrame";
+import { clientHref } from "@/lib/social/links";
+import { legacyTarget, socialHome, type ClientCard } from "@/lib/social/page";
+import { formatCents, monthLabel } from "@/lib/social/schema";
 
 export const dynamic = "force-dynamic";
 
-export default async function SocialStudioPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { programs, program, month, workspace, audit, production } = await studioPage(searchParams);
+type Search = Promise<Record<string, string | string[] | undefined>>;
 
-  if (!programs)
+/** Social Media front page: one card per client. Each card opens that client's own dashboard. */
+export default async function SocialClientsPage({ searchParams }: { searchParams: Search }) {
+  // Links saved before clients had their own pages carried the client in the address.
+  const legacy = await legacyTarget(searchParams);
+  if (legacy.clientId) redirect(clientHref("dashboard", legacy.clientId, legacy.month));
+
+  const { clients, month, production } = await socialHome(searchParams);
+
+  if (!clients)
     return (
-      <StudioFrame view="overview" programs={[]} program={null} month={month} production={production}>
+      <SocialHomeFrame production={production}>
         <p role="alert" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
-          Social Studio couldn&apos;t be loaded. If this page is new, the database update for it may not be installed yet.
+          Social Media couldn&apos;t be loaded. If this page is new, the database update for it may not be installed yet.
         </p>
-      </StudioFrame>
+      </SocialHomeFrame>
     );
-  if (!program || !workspace)
+
+  if (clients.length === 0)
     return (
-      <StudioFrame view="overview" programs={programs} program={null} month={month} production={production}>
+      <SocialHomeFrame production={production}>
         <div className="card mx-auto max-w-2xl p-6">
-          <EmptyState compact icon={Megaphone} title="No social media programs yet" description="A program is one client engagement. Create it, add the client's accounts, then plan the month." />
+          <EmptyState compact icon={Megaphone} title="No social media clients yet" description="Add the client first. Then add their hotels, outlets or brand pages as sub-accounts and plan the month." />
           <NewProgramForm />
         </div>
-      </StudioFrame>
+      </SocialHomeFrame>
     );
 
-  const today = todayKey();
-  const active = workspace.accounts.filter((a) => a.is_active);
-  const rows = active.map((account) => {
-    const items = workspace.items.filter((i) => i.account_id === account.id);
-    const recent = workspace.media.filter((m) => m.account_id === account.id);
-    return {
-      account,
-      counts: countByStatus(items),
-      planned: items.length,
-      owed: quotaTotal(account),
-      late: items.filter((i) => isLate(i, today)).length,
-      health: mediaHealth(account, {
-        photos: recent.reduce((n, m) => n + m.photos, 0),
-        videos: recent.reduce((n, m) => n + m.videos, 0),
-      }),
-      requests: workspace.requests.filter((r) => r.account_id === account.id),
-    };
-  });
-  const totals = countByStatus(workspace.items);
-  const owed = rows.reduce((n, r) => n + r.owed, 0);
-  const planned = rows.reduce((n, r) => n + r.planned, 0);
-  const done = sumOf(totals, DONE);
-  const late = rows.reduce((n, r) => n + r.late, 0);
-  const shortOnMedia = rows.filter((r) => r.health !== "good");
-  const accessProblems = rows.filter((r) => r.account.access_status !== "connected");
-  const ask = [
-    `Media we need for ${program.name}:`,
-    ...shortOnMedia.map((r) => `- ${r.account.name}: ${r.health === "out" ? "new photos and short video clips needed now" : "running low, more photos and clips within 30 days"}`),
-    ...workspace.requests.map((r) => `- ${active.find((a) => a.id === r.account_id)?.name ?? "Account"}: ${r.ask}${r.due_on ? ` (by ${r.due_on})` : ""}`),
-  ].join("\n");
+  const live = clients.filter((c) => c.program.status !== "ended");
+  const total = (pick: (c: ClientCard) => number) => live.reduce((n, c) => n + pick(c), 0);
+  const owed = total((c) => c.summary.owed);
+  const done = total((c) => c.summary.done);
 
   return (
-    <StudioFrame view="overview" programs={programs} program={program} month={month} production={production} checkErrors={Object.values(audit).filter(hasError).length}>
-      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <StatCard label="Accounts" value={active.length} icon={Users} />
-        <StatCard label="Planned" value={`${planned} / ${owed}`} hint={`pieces for ${monthLabel(month)}`} icon={Megaphone} />
-        <StatCard label="In production" value={sumOf(totals, IN_PRODUCTION)} icon={Clock} href={studioHref("board", program.id, month)} />
-        <StatCard label="With client" value={totals.client_review} icon={Send} href={studioHref("board", program.id, month)} />
-        <StatCard label="Scheduled or live" value={done} hint={owed > 0 ? `${Math.round((done / owed) * 100)}% of the month` : undefined} icon={CheckCircle2} accent />
-        <StatCard label="To fix" value={countIssues(audit).errors} hint={late > 0 ? `${late} late` : undefined} icon={AlertTriangle} href={studioHref("checks", program.id, month)} />
+    <SocialHomeFrame production={production}>
+      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Clients" value={live.length} icon={Building2} />
+        <StatCard label="Sub-accounts" value={total((c) => c.summary.accounts)} icon={Users} />
+        <StatCard label="Scheduled or live" value={`${done} / ${owed}`} hint={`pieces for ${monthLabel(month)}`} icon={CheckCircle2} accent />
+        <StatCard label="To fix" value={total((c) => c.summary.errors)} hint="failed checks, all clients" icon={AlertTriangle} />
       </div>
 
-      {(shortOnMedia.length > 0 || accessProblems.length > 0 || workspace.requests.length > 0) && (
-        <section className="card p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="font-display text-lg font-semibold text-ocean-950">Needs attention</h2>
-              <p className="mt-0.5 text-sm text-slate-600">
-                {shortOnMedia.length} {shortOnMedia.length === 1 ? "account is" : "accounts are"} short on media, {accessProblems.length} not connected, {workspace.requests.length} open media {workspace.requests.length === 1 ? "request" : "requests"}.
-              </p>
-            </div>
-            {(shortOnMedia.length > 0 || workspace.requests.length > 0) && <CopyMediaAsk text={ask} />}
-          </div>
-          <ul className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {rows
-              .filter((r) => r.health !== "good" || r.account.access_status !== "connected" || r.requests.length > 0)
-              .slice(0, 12)
-              .map((r) => (
-                <li key={r.account.id}>
-                  <Link href={accountHref(r.account.id, month)} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 ring-1 ring-ink-100 hover:bg-ink-50">
-                    <span className="truncate text-sm font-medium text-ink-900">{r.account.name}</span>
-                    <span className="flex shrink-0 gap-1">
-                      {r.health !== "good" && <span className={`pill ${MEDIA_HEALTH_PILL[r.health]}`}><ImageOff className="mr-1 h-3 w-3" aria-hidden="true" />{MEDIA_HEALTH_LABEL[r.health]}</span>}
-                      {r.account.access_status !== "connected" && <span className={`pill ${ACCESS_PILL[r.account.access_status]}`}>{ACCESS_LABEL[r.account.access_status]}</span>}
+      <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {clients.map(({ program, summary }) => {
+          const flags = [
+            summary.errors > 0 && { text: `${summary.errors} to fix`, tone: "bg-rose-100 text-rose-800" },
+            summary.late > 0 && { text: `${summary.late} late`, tone: "bg-rose-100 text-rose-800" },
+            summary.outOfMedia + summary.lowOnMedia > 0 && { text: `${summary.outOfMedia + summary.lowOnMedia} short on media`, tone: "bg-amber-100 text-amber-800" },
+            summary.accessProblems > 0 && { text: `${summary.accessProblems} access not confirmed`, tone: "bg-amber-100 text-amber-800" },
+            summary.withClient > 0 && { text: `${summary.withClient} with the client`, tone: "bg-sky-100 text-sky-800" },
+          ].filter((f): f is { text: string; tone: string } => Boolean(f));
+          return (
+            <li key={program.id}>
+              <Link href={clientHref("dashboard", program.id, month)} className="card card-interactive block p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-linear-to-br from-ocean-500 to-ocean-700 text-white shadow-soft">
+                      <Building2 className="h-5 w-5" aria-hidden="true" />
                     </span>
-                  </Link>
-                </li>
-              ))}
-          </ul>
-        </section>
-      )}
-
-      <OnboardingChecklist key={`onboarding-${program.id}`} program={program} />
-      <ProgramSetup program={program} month={month} accountCount={active.length} planned={planned} owed={owed} />
-      <ProgramTerms key={`terms-${program.id}`} program={program} accountCount={active.length} />
-
-      {TIERS.map((tier) => {
-        const group = rows.filter((r) => r.account.tier === tier);
-        if (group.length === 0) return null;
-        return (
-          <section key={tier} className="card overflow-hidden">
-            <header className="flex items-baseline justify-between gap-3 border-b border-ink-100 px-5 py-3">
-              <h2 className="font-display text-lg font-semibold text-ocean-950">{TIER_LABEL[tier]} accounts</h2>
-              <span className="text-sm text-slate-500">{group.length}</span>
-            </header>
-            <ul className="divide-y divide-ink-100">
-              {group.map((r) => (
-                <li key={r.account.id}>
-                  <Link href={accountHref(r.account.id, month)} className="grid items-center gap-3 px-5 py-3 hover:bg-ink-50/70 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_auto]">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-ink-900">{r.account.name}</div>
-                      <div className="mt-0.5 truncate text-xs text-slate-500">
-                        {r.account.platforms.map((p) => PLATFORM_LABEL[p]).join(" · ") || "No platforms set"}
-                      </div>
+                      <h2 className="font-display text-xl font-semibold leading-snug text-ocean-950">{program.name}</h2>
+                      <p className="mt-0.5 text-sm text-slate-600">
+                        {summary.accounts} {summary.accounts === 1 ? "sub-account" : "sub-accounts"}
+                        {program.monthly_fee_cents > 0 && ` · ${formatCents(program.monthly_fee_cents)} a month`}
+                        {program.contact_name && ` · ${program.contact_name}`}
+                      </p>
                     </div>
-                    <div>
-                      <div className="flex h-2 overflow-hidden rounded-full bg-ink-100" role="img" aria-label={STATUSES.filter((s) => r.counts[s] > 0).map((s) => `${r.counts[s]} ${STATUS_LABEL[s].toLowerCase()}`).join(", ") || "Nothing planned"}>
-                        {STATUSES.map((s) =>
-                          r.counts[s] > 0 ? <span key={s} className={STATUS_BAR[s]} style={{ width: `${(r.counts[s] / Math.max(r.owed, r.planned, 1)) * 100}%` }} /> : null,
-                        )}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {sumOf(r.counts, DONE)} of {r.owed} scheduled or live
-                        {r.planned < r.owed && ` · ${r.owed - r.planned} not planned`}
-                        {r.late > 0 && <span className="font-semibold text-rose-700"> · {r.late} late</span>}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1 md:justify-end">
-                      <span className={`pill ${MEDIA_HEALTH_PILL[r.health]}`}>{MEDIA_HEALTH_LABEL[r.health]}</span>
-                      <span className={`pill ${ACCESS_PILL[r.account.access_status]}`}>{ACCESS_LABEL[r.account.access_status]}</span>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        );
-      })}
-    </StudioFrame>
+                  </div>
+                  <ClientStatusPill status={program.status} />
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+                    <span className="font-medium text-ink-900">{monthLabel(month)}</span>
+                    <span className="tabular-nums text-slate-600">
+                      {summary.done} of {summary.owed} scheduled or live
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-ink-100" role="img" aria-label={`${summary.percentDone}% of the month is scheduled or live`}>
+                    <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${summary.percentDone}%` }} />
+                  </div>
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    {summary.planned === 0
+                      ? "Nothing planned for this month yet."
+                      : `${summary.planned} planned · ${summary.inProduction} in production · ${summary.approved} approved`}
+                    {summary.onboardingDone < summary.onboardingTotal && ` · Onboarding ${summary.onboardingDone} of ${summary.onboardingTotal}`}
+                  </p>
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {flags.length === 0 ? <span className="pill bg-emerald-100 text-emerald-800">Nothing needs attention</span> : flags.map((f) => <span key={f.text} className={`pill ${f.tone}`}>{f.text}</span>)}
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-ocean-700">
+                    Open dashboard <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                </div>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+
+      <section className="card">
+        <details className="p-5">
+          <summary className="cursor-pointer text-sm font-semibold text-ocean-800">Add a client</summary>
+          <div className="mt-4 max-w-2xl">
+            <NewProgramForm />
+          </div>
+        </details>
+      </section>
+    </SocialHomeFrame>
   );
 }

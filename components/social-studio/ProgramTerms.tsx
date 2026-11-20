@@ -18,8 +18,8 @@ import { useSocialAction } from "./useSocialAction";
 const dollars = (cents: number) => (cents ? String(cents / 100) : "");
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 
-/** What the client bought: fee, term, rates for a changing account list, due date, agreement and brand rules. */
-export function ProgramTerms({ program, accountCount }: { program: Program; accountCount: number }) {
+/** What the client bought: fee, term, rates for a changing sub-account list, due date and brand rules. */
+export function ProgramTerms({ program, accountCount, open = false }: { program: Program; accountCount: number; open?: boolean }) {
   const { run, busy, error } = useSocialAction();
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState({
@@ -44,7 +44,7 @@ export function ProgramTerms({ program, accountCount }: { program: Program; acco
     program.monthly_fee_cents > 0 && `${formatCents(program.monthly_fee_cents)} a month`,
     program.term_start && program.term_months > 0 && `${program.term_months} months, ${monthLabel(program.term_start.slice(0, 7))} to ${termEndLabel(program.term_start, program.term_months)}`,
     program.media_due_day && `media due on the ${ordinal(program.media_due_day)}`,
-    program.monthly_fee_cents > 0 && accountCount > 0 && `${formatCents(Math.round(program.monthly_fee_cents / accountCount))} per account`,
+    program.monthly_fee_cents > 0 && accountCount > 0 && `${formatCents(Math.round(program.monthly_fee_cents / accountCount))} per sub-account`,
   ].filter(Boolean);
 
   async function save(e: React.FormEvent) {
@@ -72,10 +72,10 @@ export function ProgramTerms({ program, accountCount }: { program: Program; acco
   }
 
   return (
-    <details className="card group">
+    <details className="card group" open={open}>
       <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3 p-5">
         <span>
-          <span className="block font-display text-lg font-semibold text-ocean-950">Program details</span>
+          <span className="block font-display text-lg font-semibold text-ocean-950">Terms and brand rules</span>
           <span className="mt-0.5 block text-sm text-slate-600">{summary.length ? summary.join(" · ") : "Add the fee, term and brand rules for this client."}</span>
         </span>
         {program.agreement_url && (
@@ -90,7 +90,7 @@ export function ProgramTerms({ program, accountCount }: { program: Program; acco
           <input className="input" inputMode="decimal" value={form.monthly_fee} onChange={set("monthly_fee")} />
         </label>
         <label className="sm:col-span-2">
-          <span className="label">Per account added or removed ($)</span>
+          <span className="label">Per sub-account added or removed ($)</span>
           <input className="input" inputMode="decimal" value={form.account_rate} onChange={set("account_rate")} />
         </label>
         <label className="sm:col-span-2">
@@ -122,12 +122,12 @@ export function ProgramTerms({ program, accountCount }: { program: Program; acco
           <input className="input" maxLength={80} value={form.publishing_tool} onChange={set("publishing_tool")} />
         </label>
         <label className="sm:col-span-6">
-          <span className="label">Link to the signed agreement</span>
+          <span className="label">Link to an agreement signed outside this system</span>
           <input type="url" className="input" maxLength={500} placeholder="https://" value={form.agreement_url} onChange={set("agreement_url")} />
         </label>
         <label className="sm:col-span-6">
           <span className="label">Words and phrases no caption may use</span>
-          <input className="input" value={form.avoid_terms} onChange={set("avoid_terms")} placeholder="Separate with commas. Applies to every account in this program." />
+          <input className="input" value={form.avoid_terms} onChange={set("avoid_terms")} placeholder="Separate with commas. Applies to every sub-account of this client." />
         </label>
         <label className="sm:col-span-6">
           <span className="label">Notes</span>

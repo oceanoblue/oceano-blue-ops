@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * shared `x-pos-automation-secret` header (env POS_AUTOMATION_SECRET), the
  * same as the podcast bridge. Not a user session.
  *
- * GET  ?program=<id>&month=YYYY-MM  approved pieces ready to schedule, plus
+ * GET  ?client=<id>&month=YYYY-MM  approved pieces ready to schedule, plus
  *      approved pieces held back by a failed check.
  * POST { id, event: "scheduled" | "published", published_url? }  record what
  *      the publishing tool did. Only ever moves a piece forward.
@@ -41,8 +41,9 @@ export async function GET(request: Request) {
   try {
     authorize(request);
     const url = new URL(request.url);
-    const program = uuid.safeParse(url.searchParams.get("program"));
-    if (!program.success) throw new CrmError("Pass the program id.", 400);
+    // "client" is the current name; "program" is still accepted for scenarios built earlier.
+    const program = uuid.safeParse(url.searchParams.get("client") ?? url.searchParams.get("program"));
+    if (!program.success) throw new CrmError("Pass the client id.", 400);
     const result = await approvedPieces(program.data, parseMonth(url.searchParams.get("month")));
     return Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {

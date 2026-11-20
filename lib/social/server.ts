@@ -1,8 +1,11 @@
+import { createHash, randomBytes } from "node:crypto";
 import { crmDb, CrmError } from "@/lib/crm/server";
 import { generateText, providerConfigured } from "@/lib/operations/providers";
 import { parseSettings } from "@/lib/operations/settings";
 import { CAPTION_LIMIT, auditMonth, hasError } from "./audit";
 import {
+  COUNTERSIGN_CONSENT,
+  CLIENT_SIGNING_CONSENT,
   KIND_LABEL,
   MEDIA_WINDOW_DAYS,
   PILLAR_LABEL,
@@ -10,8 +13,14 @@ import {
   monthStart,
   planSlots,
   todayKey,
+  clientStage,
+  mediaHealth,
+  quotaTotal,
   type AccessStatus,
+  type AgreementStatus,
+  type ClientStage,
   type Kind,
+  type MediaHealth,
   type MediaSource,
   type Onboarding,
   type Pillar,
@@ -19,6 +28,7 @@ import {
   type ProfileLinks,
   type ProgramStatus,
   type RequestStatus,
+  type SignRequest,
   type SocialAction,
   type Status,
   type Tier,
@@ -41,6 +51,27 @@ export type Program = {
   agreement_url: string;
   onboarding: Onboarding;
   avoid_terms: string[];
+  /** The secret in the client's report link, or null when no link is switched on. */
+  report_token: string | null;
+};
+export type Agreement = {
+  id: string;
+  program_id: string;
+  title: string;
+  body: string;
+  status: AgreementStatus;
+  token: string | null;
+  document_hash: string | null;
+  sent_at: string | null;
+  client_name: string;
+  client_title: string;
+  client_email: string;
+  client_signed_at: string | null;
+  counter_name: string;
+  counter_title: string;
+  countersigned_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 export type Account = {
   id: string;
@@ -98,13 +129,21 @@ export type MediaRequest = {
 export type Member = { id: string; full_name: string };
 
 const PROGRAM =
-  "id,name,contact_name,contact_email,publishing_tool,status,notes,monthly_fee_cents,account_rate_cents,minimum_fee_cents,term_start,term_months,media_due_day,agreement_url,onboarding,avoid_terms";
+  "id,name,contact_name,contact_email,publishing_tool,status,notes,monthly_fee_cents,account_rate_cents,minimum_fee_cents,term_start,term_months,media_due_day,agreement_url,onboarding,avoid_terms,report_token";
 const ACCOUNT =
   "id,program_id,name,tier,platforms,posts_per_month,reels_per_month,google_posts_per_month,profile_links,brand_kit_url,media_folder_url,voice_notes,access_status,access_note,is_active,avoid_terms";
 const ITEM =
   "id,account_id,month,kind,slot,pillar,title,caption,status,scheduled_for,assignee,design_url,published_url,review_note,updated_at";
 const BATCH = "id,account_id,received_on,source,photos,videos,link,note";
 const REQUEST = "id,account_id,ask,due_on,status,created_at";
+const AGREEMENT =
+  "id,program_id,title,body,status,token,document_hash,sent_at,client_name,client_title,client_email,client_signed_at,counter_name,counter_title,countersigned_at,created_at,updated_at";
+/** The shape of the secrets in report and signing links. */
+const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
+const newToken = () => randomBytes(32).toString("base64url");
+/** Fingerprint of an agreement's text. Both signatures record it. */
+export const documentHash = (title: string, body: string) => createHash("sha256").update(`${title}\n\n${body}`).digest("hex");
+const cleanBody = (body: string) => body.replace(/\r\n?/g, "\n").trim();
 
 const unavailable = () => new CrmError("Social Studio is unavailable. Please retry.", 503);
 /** Supabase returns at most 1,000 rows a request; a month of one program stays well under this. */
@@ -121,6 +160,25 @@ export async function listPrograms(): Promise<Program[]> {
   const { data, error } = await crmDb().from("social_programs").select(PROGRAM).order("created_at");
   if (error) throw unavailable();
   return (data ?? []) as unknown as Program[];
+}
+
+/** One client, or null when it does not exist. */
+export async function getProgram(id: string): Promise<Program | null> {
+  const { data, error } = await crmDb().from("social_programs").select(PROGRAM).eq("id", id).maybeSingle();
+  if (error) throw unavailable();
+  return (data as unknown as Program) ?? null;
+}
+
+/** Every agreement written for a client, newest first. */
+export async function listAgreements(programId: string): Promise<Agreement[]> {
+  const { data, error } = await crmDb()
+    .from("social_agreements")
+    .select(AGREEMENT)
+    .eq("program_id", programId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw unavailable();
+  return (data ?? []) as unknown as Agreement[];
 }
 
 export type Workspace = {
@@ -212,13 +270,13 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
     case "update_program": {
       const { data, error } = await db.from("social_programs").update({ ...a.patch, updated_at: now }).eq("id", a.id).select("id");
       if (error) throw unavailable();
-      if (!data?.length) throw new CrmError("That program no longer exists.", 404);
+      if (!data?.length) throw new CrmError("That client no longer exists.", 404);
       return {};
     }
     case "add_accounts": {
       const program = await db.from("social_programs").select("id").eq("id", a.program_id).maybeSingle();
       if (program.error) throw unavailable();
-      if (!program.data) throw new CrmError("That program no longer exists.", 404);
+      if (!program.data) throw new CrmError("That client no longer exists.", 404);
       const defaults = TIER_DEFAULTS[a.tier];
       const rows = a.accounts.map((account) => ({
         program_id: a.program_id,
@@ -241,10 +299,10 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
     case "update_account": {
       const { data, error } = await db.from("social_accounts").update({ ...a.patch, updated_at: now }).eq("id", a.id).select("id");
       if (error) {
-        if (error.code === "23505") throw new CrmError("Another account in this program already has that name.", 409);
+        if (error.code === "23505") throw new CrmError("This client already has a sub-account with that name.", 409);
         throw unavailable();
       }
-      if (!data?.length) throw new CrmError("That account no longer exists.", 404);
+      if (!data?.length) throw new CrmError("That sub-account no longer exists.", 404);
       return {};
     }
     case "plan_month": {
@@ -292,14 +350,14 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
         note: a.note,
         created_by: actor,
       });
-      if (error) throw error.code === "23503" ? new CrmError("That account no longer exists.", 404) : unavailable();
+      if (error) throw error.code === "23503" ? new CrmError("That sub-account no longer exists.", 404) : unavailable();
       return {};
     }
     case "add_request": {
       const { error } = await db
         .from("social_media_requests")
         .insert({ account_id: a.account_id, ask: a.ask, due_on: a.due_on, created_by: actor });
-      if (error) throw error.code === "23503" ? new CrmError("That account no longer exists.", 404) : unavailable();
+      if (error) throw error.code === "23503" ? new CrmError("That sub-account no longer exists.", 404) : unavailable();
       return {};
     }
     case "update_request": {
@@ -311,12 +369,96 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
     case "set_onboarding_step": {
       const program = await db.from("social_programs").select("onboarding").eq("id", a.id).maybeSingle();
       if (program.error) throw unavailable();
-      if (!program.data) throw new CrmError("That program no longer exists.", 404);
+      if (!program.data) throw new CrmError("That client no longer exists.", 404);
       const onboarding: Onboarding = { ...((program.data.onboarding ?? {}) as Onboarding) };
       if (a.done) onboarding[a.step] ??= todayKey();
       else delete onboarding[a.step];
       const { error } = await db.from("social_programs").update({ onboarding, updated_at: now }).eq("id", a.id);
       if (error) throw unavailable();
+      return {};
+    }
+    case "set_report_link": {
+      // Switching on always makes a new link, so an old one stops working.
+      const token = a.enabled ? newToken() : null;
+      const { data, error } = await db.from("social_programs").update({ report_token: token, updated_at: now }).eq("id", a.id).select("id");
+      if (error) throw unavailable();
+      if (!data?.length) throw new CrmError("That client no longer exists.", 404);
+      return { token };
+    }
+    case "create_agreement": {
+      const { data, error } = await db
+        .from("social_agreements")
+        .insert({ program_id: a.program_id, title: a.title, body: cleanBody(a.body), created_by: actor })
+        .select("id")
+        .single();
+      if (error) throw error.code === "23503" ? new CrmError("That client no longer exists.", 404) : unavailable();
+      return { id: data.id };
+    }
+    case "update_agreement": {
+      const { data, error } = await db
+        .from("social_agreements")
+        .update({ title: a.title, body: cleanBody(a.body), updated_at: now })
+        .eq("id", a.id)
+        .eq("status", "draft")
+        .select("id");
+      if (error) throw unavailable();
+      if (!data?.length) throw new CrmError("Only a draft can be edited. To change a sent agreement, cancel it and send a new one.", 409);
+      return {};
+    }
+    case "send_agreement": {
+      const draft = await db.from("social_agreements").select("title,body,status,updated_at").eq("id", a.id).maybeSingle();
+      if (draft.error) throw unavailable();
+      if (!draft.data) throw new CrmError("That agreement no longer exists.", 404);
+      if (draft.data.status !== "draft") throw new CrmError("This agreement was already sent.", 409);
+      const token = newToken();
+      // The last-saved time is matched again, so an edit that lands in between is never sent under the wrong fingerprint.
+      const { data, error } = await db
+        .from("social_agreements")
+        .update({ status: "sent", token, document_hash: documentHash(draft.data.title, draft.data.body), sent_at: now, updated_at: now })
+        .eq("id", a.id)
+        .eq("status", "draft")
+        .eq("updated_at", draft.data.updated_at)
+        .select("id");
+      if (error) throw unavailable();
+      if (!data?.length) throw new CrmError("The agreement changed while it was being sent. Check it and try again.", 409);
+      return { token };
+    }
+    case "void_agreement": {
+      const { data, error } = await db
+        .from("social_agreements")
+        .update({ status: "void", updated_at: now })
+        .eq("id", a.id)
+        .in("status", ["draft", "sent", "client_signed"])
+        .select("id");
+      if (error) throw unavailable();
+      if (!data?.length) throw new CrmError("A fully signed agreement cannot be cancelled here.", 409);
+      return {};
+    }
+    case "countersign_agreement": {
+      const { data, error } = await db
+        .from("social_agreements")
+        .update({
+          status: "signed",
+          counter_name: a.signer_name,
+          counter_title: a.signer_title,
+          counter_consent: COUNTERSIGN_CONSENT,
+          countersigned_at: now,
+          countersigned_by: actor,
+          updated_at: now,
+        })
+        .eq("id", a.id)
+        .eq("status", "client_signed")
+        .select("program_id");
+      if (error) throw unavailable();
+      if (!data?.length) throw new CrmError("The client has not signed this agreement yet.", 409);
+      // Tick the onboarding step. The signature stands even if this small update fails.
+      const programId = data[0].program_id as string;
+      const program = await db.from("social_programs").select("onboarding").eq("id", programId).maybeSingle();
+      const onboarding = { ...((program.data?.onboarding ?? {}) as Onboarding) };
+      if (!program.error && program.data && !onboarding.agreement_signed) {
+        onboarding.agreement_signed = todayKey();
+        await db.from("social_programs").update({ onboarding, updated_at: now }).eq("id", programId);
+      }
       return {};
     }
     case "draft_caption":
@@ -401,7 +543,7 @@ export type OutboundPiece = {
 export async function approvedPieces(programId: string, month: string) {
   const [programs, workspace] = await Promise.all([listPrograms(), loadWorkspace(programId, month)]);
   const program = programs.find((p) => p.id === programId);
-  if (!program) throw new CrmError("That program does not exist.", 404);
+  if (!program) throw new CrmError("That client does not exist.", 404);
   const audit = auditMonth(workspace.items, workspace.accounts, program.avoid_terms, todayKey());
   const byId = new Map(workspace.accounts.map((a) => [a.id, a]));
   const ready: OutboundPiece[] = [];
@@ -450,4 +592,148 @@ export async function recordPublishing(id: string, event: "scheduled" | "publish
   // Already there (a retry) is fine; any other stage is a real conflict.
   if (current.data.status === event || (event === "scheduled" && current.data.status === "published")) return { changed: false };
   throw new CrmError(`This piece is at "${current.data.status}", so it cannot be marked ${event}.`, 409);
+}
+
+// ---------------------------------------------------------------------------
+// Pages a client opens with a private link (no sign-in)
+// ---------------------------------------------------------------------------
+
+export type PublicAgreement = {
+  client: string;
+  title: string;
+  body: string;
+  status: "sent" | "client_signed" | "signed";
+  document_hash: string;
+  sent_at: string;
+  client_name: string;
+  client_title: string;
+  client_signed_at: string | null;
+  counter_name: string;
+  counter_title: string;
+  countersigned_at: string | null;
+};
+
+/** The agreement behind a signing link, or null when the link is wrong or was cancelled. */
+export async function publicAgreement(token: string): Promise<PublicAgreement | null> {
+  if (!TOKEN_RE.test(token)) return null;
+  const db = crmDb();
+  const { data, error } = await db
+    .from("social_agreements")
+    .select("program_id,title,body,status,document_hash,sent_at,client_name,client_title,client_signed_at,counter_name,counter_title,countersigned_at")
+    .eq("token", token)
+    .in("status", ["sent", "client_signed", "signed"])
+    .maybeSingle();
+  if (error) throw unavailable();
+  if (!data) return null;
+  const program = await db.from("social_programs").select("name").eq("id", data.program_id).maybeSingle();
+  if (program.error || !program.data) throw unavailable();
+  const { program_id: _programId, ...agreement } = data;
+  return { client: program.data.name as string, ...(agreement as unknown as Omit<PublicAgreement, "client">) };
+}
+
+/**
+ * Record a client's signature. It is saved only if the agreement is still
+ * waiting and its text is exactly what the signer was shown.
+ */
+export async function signAgreement(token: string, sign: SignRequest, ipHash: string): Promise<{ title: string; client: string; program_id: string }> {
+  if (!TOKEN_RE.test(token)) throw new CrmError("This link is not valid.", 404);
+  const db = crmDb();
+  const now = new Date().toISOString();
+  const { data, error } = await db
+    .from("social_agreements")
+    .update({
+      status: "client_signed",
+      client_name: sign.signer_name,
+      client_title: sign.signer_title,
+      client_email: sign.signer_email,
+      client_consent: CLIENT_SIGNING_CONSENT,
+      client_signed_at: now,
+      client_ip_hash: ipHash,
+      updated_at: now,
+    })
+    .eq("token", token)
+    .eq("status", "sent")
+    .eq("document_hash", sign.document_hash)
+    .select("title,program_id");
+  if (error) throw unavailable();
+  if (!data?.length) {
+    const current = await db.from("social_agreements").select("status").eq("token", token).maybeSingle();
+    if (current.error) throw unavailable();
+    if (!current.data || current.data.status === "void" || current.data.status === "draft") throw new CrmError("This link is no longer valid.", 404);
+    if (current.data.status !== "sent") throw new CrmError("This agreement has already been signed.", 409);
+    throw new CrmError("This agreement was updated. Reload the page and read it again before signing.", 409);
+  }
+  const program = await db.from("social_programs").select("name").eq("id", data[0].program_id).maybeSingle();
+  return { title: data[0].title as string, client: (program.data?.name as string) ?? "", program_id: data[0].program_id as string };
+}
+
+export type PublicPiece = {
+  kind: Kind;
+  title: string;
+  date: string | null;
+  stage: ClientStage;
+  /** Shown once a piece is ready for review; empty before that. */
+  caption: string;
+  design_url: string;
+  published_url: string;
+};
+export type PublicReport = {
+  client: string;
+  month: string;
+  totals: Record<ClientStage, number> & { owed: number };
+  accounts: {
+    name: string;
+    owed: number;
+    media: MediaHealth;
+    pieces: PublicPiece[];
+    /** Media we have asked for and not yet received. */
+    requests: { ask: string; due_on: string | null }[];
+  }[];
+};
+
+/**
+ * What a client sees on their report page for one month. It carries no fees,
+ * staff names, internal notes or check results, and no caption or design link
+ * for a piece that has not reached client review.
+ */
+export async function publicReport(token: string, month: string): Promise<PublicReport | null> {
+  if (!TOKEN_RE.test(token)) return null;
+  const { data, error } = await crmDb().from("social_programs").select("id,name").eq("report_token", token).maybeSingle();
+  if (error) throw unavailable();
+  if (!data) return null;
+  const workspace = await loadWorkspace(data.id as string, month);
+  const totals = { owed: 0, in_progress: 0, for_review: 0, approved: 0, scheduled: 0, live: 0 };
+  const accounts = workspace.accounts
+    .filter((a) => a.is_active)
+    .map((account) => {
+      const recent = workspace.media.filter((m) => m.account_id === account.id);
+      const pieces = workspace.items
+        .filter((i) => i.account_id === account.id)
+        .map((i): PublicPiece => {
+          const stage = clientStage(i.status);
+          totals[stage] += 1;
+          const visible = stage !== "in_progress";
+          return {
+            kind: i.kind,
+            title: i.title,
+            date: i.scheduled_for,
+            stage,
+            caption: visible ? i.caption : "",
+            design_url: visible ? i.design_url : "",
+            published_url: stage === "live" ? i.published_url : "",
+          };
+        });
+      totals.owed += quotaTotal(account);
+      return {
+        name: account.name,
+        owed: quotaTotal(account),
+        media: mediaHealth(account, {
+          photos: recent.reduce((n, m) => n + m.photos, 0),
+          videos: recent.reduce((n, m) => n + m.videos, 0),
+        }),
+        pieces,
+        requests: workspace.requests.filter((r) => r.account_id === account.id).map((r) => ({ ask: r.ask, due_on: r.due_on })),
+      };
+    });
+  return { client: data.name as string, month, totals, accounts };
 }

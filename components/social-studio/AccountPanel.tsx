@@ -122,7 +122,7 @@ export function AccountProfile({ account }: { account: Account }) {
   return (
     <form onSubmit={save} className="grid gap-4 p-5 sm:grid-cols-6">
       <label className="sm:col-span-4">
-        <span className="label">Account name</span>
+        <span className="label">Sub-account name</span>
         <input className="input" required maxLength={160} value={form.name} onChange={(e) => set("name", e.target.value)} />
       </label>
       <label className="sm:col-span-2">
@@ -195,7 +195,7 @@ export function AccountProfile({ account }: { account: Account }) {
         </label>
         <div className="flex items-center gap-3">
           <p role="status" className={`text-sm ${error ? "text-rose-700" : "text-emerald-700"}`}>{error || (saved ? "Saved." : "")}</p>
-          <button className="btn-primary" disabled={busy}>{busy ? "Saving..." : "Save account"}</button>
+          <button className="btn-primary" disabled={busy}>{busy ? "Saving..." : "Save sub-account"}</button>
         </div>
       </div>
     </form>
