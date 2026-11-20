@@ -191,6 +191,8 @@ clients: reading the month, approving, asking for changes, sending notes and
 media, privacy, and signing the agreement, with computer and phone screens.
 It uses sample content only, so the same file is right for every client.
 
+- A **Client guide** button sits at the top of every page of a client: in the
+  header of the dashboard, and beside the tabs on the other pages.
 - On a client's dashboard, the card "The client's page" has **Open the guide**
   and **Copy guide link**, to send along with the client's link.
 - On the client's own page, "How this page works" has **Open the full guide (PDF)**.
