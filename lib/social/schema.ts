@@ -433,6 +433,30 @@ export const itemPatch = z
   .partial()
   .refine(some, "Nothing to change");
 
+/** What a logo can belong to. */
+export const LOGO_TARGETS = ["client", "account"] as const;
+export type LogoTarget = (typeof LOGO_TARGETS)[number];
+
+/** One or two letters to show where a logo has not been added: "NH" for Newport Hospitality Group. */
+export function initials(name: string): string {
+  const words = name.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  const first = words[0];
+  const second = words.find((w, i) => i > 0 && !["of", "the", "and", "by", "at", "inn", "suites"].includes(w.toLowerCase()));
+  return ((first[0] ?? "") + (second?.[0] ?? first[1] ?? "")).toUpperCase();
+}
+
+/**
+ * Other names that start with the same word, taken as the same brand
+ * ("Courtyard Somerset" and "Courtyard West Orange"). Used to offer one
+ * uploaded logo to the rest of a brand's sub-accounts.
+ */
+export function sameBrand<T extends { id: string; name: string }>(of: T, all: T[]): { brand: string; others: T[] } {
+  const brand = of.name.trim().split(/\s+/)[0] ?? "";
+  if (!brand) return { brand, others: [] };
+  return { brand, others: all.filter((a) => a.id !== of.id && a.name.trim().split(/\s+/)[0]?.toLowerCase() === brand.toLowerCase()) };
+}
+
 /** Agreement text. Line breaks are kept; lines starting with "# " or "## " are headings. */
 const agreementBody = z.string().max(120000).refine((v) => v.trim().length > 0, "Add the agreement text");
 
@@ -492,6 +516,9 @@ export const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("add_request"), account_id: id, ask: text(500).min(1), due_on: date.nullable().default(null) }),
   z.object({ action: z.literal("update_request"), id, status: z.enum(REQUEST_STATUSES) }),
   z.object({ action: z.literal("set_onboarding_step"), id, step: z.enum(ONBOARDING_STEPS), done: z.boolean() }),
+  z.object({ action: z.literal("remove_logo"), target: z.enum(LOGO_TARGETS), id }),
+  /** Give other sub-accounts of the same client this sub-account's logo. */
+  z.object({ action: z.literal("share_logo"), account_id: id, to: z.array(id).min(1).max(60) }),
   z.object({ action: z.literal("set_report_link"), id, enabled: z.boolean() }),
   z.object({ action: z.literal("create_agreement"), program_id: id, title: text(200).min(1), body: agreementBody }),
   z.object({ action: z.literal("update_agreement"), id, title: text(200).min(1), body: agreementBody }),

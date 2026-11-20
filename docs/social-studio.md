@@ -111,6 +111,37 @@ told to use only the facts it is given and to leave a `[placeholder]` for
 anything it does not know, which the checks then flag until someone fills it
 in. The draft goes into the editor only; nothing is saved until Save.
 
+## Logos
+
+A client and each of its sub-accounts can have a logo. Tap the logo tile (it
+has a small camera badge) on the client's dashboard, in the Sub-accounts
+table or on a sub-account's page, and choose a PNG, JPEG or WebP image up to
+3 MB. PNG with a transparent background looks best. Until a logo is added the
+tile shows the name's initials.
+
+After a sub-account's logo is uploaded from the Sub-accounts table, the page
+offers the same logo to the other sub-accounts whose name starts with the same
+word and that have none yet (for example every "Courtyard"), so a brand's logo
+is uploaded once.
+
+The server re-encodes every upload as a PNG no larger than 512 pixels and
+stores it under `social-logos/` in the public `public-assets` bucket. Logos
+also appear on the client's report page.
+
+## Charts on a client's dashboard
+
+- **The header**: the share of the month's pieces that are scheduled or live,
+  with a bar that also shows what is still in production.
+- **By planned date**: one column per day, split into scheduled or live and
+  still in production. Point at a day, or use the arrow keys, for its numbers.
+- **Where every piece is**: a bar per stage, in pipeline order.
+- **Media supply** and **Account access**: sub-accounts in each state.
+- **Where they post**: sub-accounts on each platform.
+
+Chart colors live in `components/social-studio/Charts.tsx` (`VIZ`): one blue
+ramp for amounts and progress, and green, amber and red only for good, warning
+and problem states, always with a label.
+
 ## Client report page
 
 Each client can have a private report page at `/social/report/<secret>`.
@@ -192,12 +223,13 @@ developer access and are not part of this version.
 ## Deployment
 
 Apply `20261118130000_social_studio.sql`,
-`20261120160000_social_studio_programs.sql` and
-`20261120190000_social_studio_clients.sql`, in that order, before deploying the code. The first adds five
+`20261120160000_social_studio_programs.sql`,
+`20261120190000_social_studio_clients.sql` and
+`20261120200000_social_studio_logos.sql`, in that order, before deploying the code. The first adds five
 tables (`social_programs`, `social_accounts`, `social_content_items`,
 `social_media_batches`, `social_media_requests`); the second adds program terms,
 onboarding and avoid-term columns; the third adds the client report link and
-the `social_agreements` table. No existing data changes.
+the `social_agreements` table; the fourth adds the logo links. No existing data changes.
 
 Like the rest of the office pages, changes are saved from production only.
 Preview deployments show the pages read-only. Access is admin and coordinator.

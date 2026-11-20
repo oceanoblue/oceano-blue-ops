@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
+import { Meter, VIZ } from "@/components/social-studio/Charts";
+import { SocialLogo } from "@/components/social-studio/Logo";
 import { reportHref } from "@/lib/social/links";
 import {
   CLIENT_STAGES,
@@ -53,13 +55,9 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
   const delivered = totals.live + totals.scheduled;
   const planned = CLIENT_STAGES.reduce((n, s) => n + totals[s], 0);
   const needs = report.accounts.filter((a) => a.media !== "good" || a.requests.length > 0);
-  const tiles: { label: string; value: number; hint?: string }[] = [
-    { label: "Live", value: totals.live },
-    { label: "Scheduled", value: totals.scheduled },
-    { label: "Approved", value: totals.approved },
-    { label: "Ready for your review", value: totals.for_review },
-    { label: "In progress", value: totals.in_progress },
-  ];
+  // A piece's journey in order, lightest to darkest: the darker the bar, the closer to live.
+  const tiles = CLIENT_STAGES.map((stage, i) => ({ stage, label: CLIENT_STAGE_LABEL[stage], value: totals[stage], color: VIZ.ramp[i] }));
+  const percent = totals.owed > 0 ? Math.min(100, Math.round((delivered / totals.owed) * 100)) : 0;
 
   return (
     <div className="min-h-screen bg-ink-50 text-ink-900">
@@ -67,8 +65,13 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
         <div aria-hidden="true" className="pointer-events-none absolute -right-40 -top-56 h-[38rem] w-[38rem] rounded-full bg-ocean-600/25 blur-3xl" />
         <div className="relative mx-auto max-w-6xl px-5 pb-12 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
           <BrandLogo variant="white" className="h-8 w-auto sm:h-9" />
-          <p className="mt-12 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean-300">Social media report</p>
-          <h1 className="mt-2 font-display text-4xl leading-tight tracking-tight sm:text-6xl">{report.client}</h1>
+          <div className="mt-12 flex flex-col gap-5 sm:flex-row sm:items-center">
+            {report.logo_url && <SocialLogo name={report.client} url={report.logo_url} size="xl" />}
+            <div className="min-w-0">
+              <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean-300">Social media report</p>
+              <h1 className="mt-2 font-display text-4xl leading-tight tracking-tight sm:text-6xl">{report.client}</h1>
+            </div>
+          </div>
           <div className="mt-6 flex flex-wrap items-center gap-2">
             <Link href={reportHref(token, shiftMonth(month, -1))} className="grid h-10 w-10 place-items-center rounded-full ring-1 ring-white/20 hover:bg-white/10" aria-label="Previous month">
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -78,23 +81,43 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-200">
-            {planned === 0
-              ? `Nothing is on the calendar for ${monthLabel(month)} yet.`
-              : `${delivered} of ${totals.owed} pieces are live or scheduled across ${report.accounts.length} ${report.accounts.length === 1 ? "account" : "accounts"}.`}
-          </p>
+          {planned === 0 ? (
+            <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-200">Nothing is on the calendar for {monthLabel(month)} yet.</p>
+          ) : (
+            <div className="mt-8 max-w-xl">
+              <p className="flex flex-wrap items-baseline gap-x-3">
+                <span className="text-5xl font-bold leading-none tracking-tight sm:text-6xl">{percent}%</span>
+                <span className="text-base text-ink-100">
+                  live or scheduled, {delivered} of {totals.owed} pieces across {report.accounts.length} {report.accounts.length === 1 ? "account" : "accounts"}
+                </span>
+              </p>
+              <div className="mt-4">
+                <Meter dark thick done={delivered} inProgress={planned - delivered} total={totals.owed} label={`${delivered} of ${totals.owed} pieces live or scheduled, ${planned - delivered} more on the way`} />
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl space-y-8 px-5 py-10 sm:px-8">
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {tiles.map((t) => (
-            <div key={t.label} className="rounded-2xl bg-white p-4 shadow-soft ring-1 ring-ink-100">
-              <dt className="font-mono text-[10px] font-medium uppercase tracking-wider text-slate-500">{t.label}</dt>
-              <dd className="mt-1 text-3xl font-bold tabular-nums text-ocean-950">{t.value}</dd>
+        <section aria-label="Where every piece is">
+          {planned > 0 && (
+            <div className="mb-3 flex h-2 w-full gap-0.5 overflow-hidden rounded-full" role="img" aria-label={tiles.map((t) => `${t.value} ${t.label.toLowerCase()}`).join(", ")}>
+              {tiles.map((t) => (t.value > 0 ? <span key={t.stage} className="h-full rounded-full" style={{ width: `${(t.value / planned) * 100}%`, backgroundColor: t.color }} /> : null))}
             </div>
-          ))}
-        </dl>
+          )}
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {tiles.map((t) => (
+              <div key={t.stage} className="rounded-2xl bg-white p-4 shadow-soft ring-1 ring-ink-100">
+                <dt className="flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: t.color }} />
+                  {t.label}
+                </dt>
+                <dd className="mt-1 text-3xl font-bold text-ocean-950">{t.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
 
         {needs.length > 0 && (
           <section className="rounded-2xl bg-white p-6 shadow-soft ring-1 ring-amber-200">
@@ -134,9 +157,12 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
               return (
                 <details key={a.name} className="group rounded-2xl bg-white shadow-soft ring-1 ring-ink-100">
                   <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3 p-5">
-                    <span className="min-w-0">
-                      <span className="block truncate text-base font-semibold text-ink-900">{a.name}</span>
-                      <span className="mt-0.5 block text-sm text-slate-600">{a.pieces.length === 0 ? "Nothing on the calendar yet" : line.join(" · ") || `${a.pieces.length} pieces`}</span>
+                    <span className="flex min-w-0 items-center gap-3">
+                      <SocialLogo name={a.name} url={a.logo_url} size="md" />
+                      <span className="min-w-0">
+                      <span className="block text-base font-semibold leading-snug text-ink-900">{a.name}</span>
+                        <span className="mt-0.5 block text-sm text-slate-600">{a.pieces.length === 0 ? "Nothing on the calendar yet" : line.join(" · ") || `${a.pieces.length} pieces`}</span>
+                      </span>
                     </span>
                     {review > 0 && <span className={`pill ${CLIENT_STAGE_PILL.for_review}`}>{review} ready for your review</span>}
                   </summary>

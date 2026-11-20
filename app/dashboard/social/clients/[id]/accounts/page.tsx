@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
+import { LogoUploader } from "@/components/social-studio/LogoUploader";
 import { AddAccounts } from "@/components/social-studio/ProgramSetup";
 import { StudioFrame } from "@/components/social-studio/StudioFrame";
 import { accountHref } from "@/lib/social/links";
@@ -12,7 +13,9 @@ import {
   PLATFORM_LABEL,
   TIERS,
   TIER_LABEL,
+  sameBrand,
 } from "@/lib/social/schema";
+import type { Account } from "@/lib/social/server";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +23,13 @@ export const dynamic = "force-dynamic";
 export default async function ClientAccountsPage(props: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { program, month, workspace, rows, summary, production } = await clientPage(props.params, props.searchParams);
   const paused = workspace.accounts.filter((a) => !a.is_active);
+  const active = rows.map((r) => r.account);
+  const withLogo = active.filter((a) => a.logo_url).length;
+  /** Same-brand sub-accounts that still have no logo, offered this one after an upload. */
+  const brandOf = (account: Account) => {
+    const { brand, others } = sameBrand(account, active);
+    return { brand, mates: others.filter((o) => !o.logo_url).map((o) => ({ id: o.id, name: o.name })) };
+  };
   const ordered = TIERS.flatMap((tier) => rows.filter((r) => r.account.tier === tier));
   const totals = rows.reduce(
     (t, r) => ({
@@ -41,7 +51,7 @@ export default async function ClientAccountsPage(props: { params: Promise<{ id: 
               {summary.accounts} {summary.accounts === 1 ? "sub-account" : "sub-accounts"} of {program.name}
             </h2>
             <span className="text-sm text-slate-500">
-              Each month: {totals.posts} posts · {totals.reels} reels and videos{totals.google > 0 && ` · ${totals.google} Google posts`}
+              {withLogo} of {active.length} have a logo (tap a tile to add one) · Each month: {totals.posts} posts · {totals.reels} reels and videos{totals.google > 0 && ` · ${totals.google} Google posts`}
             </span>
           </header>
           <div className="overflow-x-auto">
@@ -63,9 +73,12 @@ export default async function ClientAccountsPage(props: { params: Promise<{ id: 
                 {ordered.map(({ account, health }) => (
                   <tr key={account.id} className="hover:bg-ink-50/70">
                     <th scope="row" className="px-5 py-2.5 text-left font-semibold">
-                      <Link href={accountHref(account.id, month)} className="text-ocean-800 hover:underline">
-                        {account.name}
-                      </Link>
+                      <div className="flex items-center gap-3">
+                        <LogoUploader key={account.id} target="account" id={account.id} name={account.name} url={account.logo_url} size="md" showActions={false} {...brandOf(account)} />
+                        <Link href={accountHref(account.id, month)} className="text-ocean-800 hover:underline">
+                          {account.name}
+                        </Link>
+                      </div>
                     </th>
                     <td className="px-3 py-2.5 text-slate-600">{TIER_LABEL[account.tier]}</td>
                     <td className="px-3 py-2.5 text-slate-600">{account.platforms.map((p) => PLATFORM_LABEL[p]).join(", ") || "Not set"}</td>
@@ -73,10 +86,10 @@ export default async function ClientAccountsPage(props: { params: Promise<{ id: 
                     <td className="px-3 py-2.5 text-right tabular-nums">{account.reels_per_month}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{account.google_posts_per_month}</td>
                     <td className="px-3 py-2.5">
-                      <span className={`pill ${ACCESS_PILL[account.access_status]}`}>{ACCESS_LABEL[account.access_status]}</span>
+                      <span className={`pill whitespace-nowrap ${ACCESS_PILL[account.access_status]}`}>{ACCESS_LABEL[account.access_status]}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className={`pill ${MEDIA_HEALTH_PILL[health]}`}>{MEDIA_HEALTH_LABEL[health]}</span>
+                      <span className={`pill whitespace-nowrap ${MEDIA_HEALTH_PILL[health]}`}>{MEDIA_HEALTH_LABEL[health]}</span>
                     </td>
                     <td className="px-5 py-2.5">
                       {account.brand_kit_url ? (

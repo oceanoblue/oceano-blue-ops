@@ -15,9 +15,9 @@ import { POST as signPost } from "@/app/api/social-public/agreements/[token]/rou
 import { CrmError } from "@/lib/crm/server";
 import { digestEmail, digestSection } from "./digest";
 import { accountHref, agreementHref, clientHref, reportHref } from "./links";
-import { actionSchema, agreementBlocks, clientStage, signSchema, signatureTime, STATUSES } from "./schema";
+import { actionSchema, agreementBlocks, clientStage, initials, sameBrand, signSchema, signatureTime, STATUSES } from "./schema";
 import type { Account, Item, MediaBatch, MediaRequest, Program } from "./server";
-import { clientMonth } from "./summary";
+import { accountRows, clientMonth, healthCounts, platformCounts, rhythm } from "./summary";
 
 const origin = "https://app.oceanoblue.net";
 const id = "11111111-1111-4111-8111-111111111111";
@@ -42,6 +42,7 @@ const program = (over: Partial<Program> = {}): Program => ({
   onboarding: {},
   avoid_terms: [],
   report_token: null,
+  logo_url: "",
   ...over,
 });
 const account = (name: string, over: Partial<Account> = {}): Account => ({
@@ -61,6 +62,7 @@ const account = (name: string, over: Partial<Account> = {}): Account => ({
   access_note: "",
   is_active: true,
   avoid_terms: [],
+  logo_url: "",
   ...over,
 });
 let slot = 0;
@@ -157,6 +159,51 @@ describe("a client's month at a glance", () => {
   });
 });
 
+describe("logos and chart numbers", () => {
+  it("makes initials for a tile with no logo yet", () => {
+    expect(initials("Newport Hospitality Group")).toBe("NH");
+    expect(initials("Hampton Inn Jacksonville Beach/Oceanfront")).toBe("HJ");
+    expect(initials("Sleep Inn & Suites Clintwood")).toBe("SC");
+    expect(initials("Nunzio")).toBe("NU");
+    expect(initials("  ")).toBe("?");
+  });
+  it("finds the other sub-accounts of the same brand by their first word", () => {
+    const list = ["Courtyard Somerset", "Courtyard West Orange", "courtyard Lowercase", "Home2 Suites Brunswick", "Homewood Suites Columbus Easton"].map((name, i) => ({ id: String(i), name }));
+    expect(sameBrand(list[0], list)).toEqual({ brand: "Courtyard", others: [list[1], list[2]] });
+    expect(sameBrand(list[3], list).others).toEqual([]);
+  });
+  it("counts pieces by planned date, leaving out undated pieces and other months", () => {
+    const a = account("Hotel A");
+    const days = rhythm(
+      [
+        item(a, { status: "published", scheduled_for: "2027-02-03" }),
+        item(a, { status: "scheduled", scheduled_for: "2027-02-03" }),
+        item(a, { status: "in_design", scheduled_for: "2027-02-03" }),
+        item(a, { status: "planned", scheduled_for: "2027-02-28" }),
+        item(a, { status: "planned", scheduled_for: null }),
+        item(a, { status: "planned", scheduled_for: "2027-03-01" }),
+      ],
+      "2027-02",
+    );
+    expect(days).toHaveLength(28);
+    expect(days[2]).toEqual({ day: 3, label: "Feb 3", done: 2, open: 1 });
+    expect(days[27]).toEqual({ day: 28, label: "Feb 28", done: 0, open: 1 });
+    expect(days.reduce((n, d) => n + d.done + d.open, 0)).toBe(4);
+  });
+  it("counts sub-accounts by platform, media supply and access", () => {
+    const a = account("Hotel A", { platforms: ["facebook", "instagram", "google"] });
+    const b = account("Hotel B", { platforms: ["facebook"], access_status: "issue" });
+    const c = account("Hotel C", { platforms: [], access_status: "pending" });
+    const rows = accountRows({ accounts: [a, b, c], items: [], media: [media(a, 40, 9)], requests: [] }, {}, "2027-01-15");
+    expect(platformCounts(rows)).toEqual([
+      { label: "Facebook", value: 2 },
+      { label: "Instagram", value: 1 },
+      { label: "Google", value: 1 },
+    ]);
+    expect(healthCounts(rows)).toEqual({ media: { good: 1, low: 0, out: 2 }, access: { connected: 1, pending: 1, issue: 1 } });
+  });
+});
+
 describe("daily digest", () => {
   const a = account("Hotel A");
   const b = account("Hotel B", { access_status: "pending" });
@@ -246,6 +293,10 @@ describe("agreements", () => {
     expect(actionSchema.safeParse({ action: "countersign_agreement", id, signer_name: "Gus R", consent: false }).success).toBe(false);
     expect(actionSchema.safeParse({ action: "set_report_link", id, enabled: true }).success).toBe(true);
     expect(actionSchema.safeParse({ action: "set_report_link", id }).success).toBe(false);
+    expect(actionSchema.safeParse({ action: "remove_logo", target: "client", id }).success).toBe(true);
+    expect(actionSchema.safeParse({ action: "remove_logo", target: "team", id }).success).toBe(false);
+    expect(actionSchema.safeParse({ action: "share_logo", account_id: id, to: [id] }).success).toBe(true);
+    expect(actionSchema.safeParse({ action: "share_logo", account_id: id, to: [] }).success).toBe(false);
   });
 });
 
@@ -310,7 +361,7 @@ describe("database", () => {
       create table team_members(id uuid primary key, full_name text, role text, is_active boolean);
       grant select on team_members to authenticated, service_role;
       insert into team_members values ('${office}','Office','admin',true), ('${field}','Field','photographer',true);`);
-    for (const file of ["20261118130000_social_studio.sql", "20261120160000_social_studio_programs.sql", "20261120190000_social_studio_clients.sql"])
+    for (const file of ["20261118130000_social_studio.sql", "20261120160000_social_studio_programs.sql", "20261120190000_social_studio_clients.sql", "20261120200000_social_studio_logos.sql"])
       await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
   }, 60000);
   afterAll(async () => await db?.close());
@@ -338,6 +389,13 @@ describe("database", () => {
     await rows("update social_programs set report_token=null where id=$1", [one]);
     const [{ id: draft }] = await rows("insert into social_agreements(program_id,title,body) values($1,'Second','Text') returning id", [one]);
     await expect(rows("update social_agreements set status='sent', token=$2, document_hash=$3, sent_at=now() where id=$1", [draft, token, hash])).rejects.toThrow();
+  });
+  it("stores a logo link on clients and sub-accounts, blank by default", async () => {
+    const [{ id: client, logo_url }] = await rows("insert into social_programs(name) values('Logo Co') returning id, logo_url");
+    expect(logo_url).toBe("");
+    const [sub] = await rows("insert into social_accounts(program_id,name,logo_url) values($1,'Hotel Logo','https://example.test/social-logos/a.png') returning logo_url", [client]);
+    expect(sub.logo_url).toBe("https://example.test/social-logos/a.png");
+    await expect(rows("update social_programs set logo_url=$2 where id=$1", [client, "x".repeat(501)])).rejects.toThrow();
   });
   it("lets office staff read agreements, hides them from field staff and the public, and lets nobody write from the browser", async () => {
     const as = async (role: string, who: string | null, sql: string) => {

@@ -1,10 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Building2, ChevronLeft, ChevronRight, Megaphone } from "lucide-react";
+import { ChevronLeft, ChevronRight, Megaphone } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { monthLabel, parseMonth, shiftMonth } from "@/lib/social/schema";
 import { SOCIAL_HOME, clientHref, type ClientView } from "@/lib/social/links";
 import type { Program } from "@/lib/social/server";
+import { SocialLogo } from "./Logo";
 
 const humanize = (s: string) => s.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
@@ -87,6 +88,7 @@ export function StudioFrame({
   production,
   accountCount,
   checkErrors = 0,
+  hero,
   children,
 }: {
   view: ClientView;
@@ -97,6 +99,8 @@ export function StudioFrame({
   accountCount: number;
   /** Pieces with a failed check this month, shown on the Checks tab. */
   checkErrors?: number;
+  /** A larger header to show in place of the compact one (the dashboard's). */
+  hero?: ReactNode;
   children: ReactNode;
 }) {
   const thisMonth = parseMonth(null);
@@ -116,22 +120,27 @@ export function StudioFrame({
             ...(view === "dashboard" ? [] : [{ label: VIEWS.find((v) => v.id === view)?.label ?? "" }]),
           ]}
         />
-        <PageHeader
-          eyebrow="Client"
-          icon={Building2}
-          title={program.name}
-          subtitle={
-            [
-              `${accountCount} ${accountCount === 1 ? "sub-account" : "sub-accounts"}`,
-              program.contact_name && `Contact: ${program.contact_name}`,
-              program.publishing_tool && `Published from ${program.publishing_tool}`,
-            ]
-              .filter(Boolean)
-              .join(" · ")
-          }
-        >
-          <ClientStatusPill status={program.status} />
-        </PageHeader>
+        {hero ?? (
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-ink-100/70 pb-5">
+            <div className="flex min-w-0 items-center gap-4">
+              <SocialLogo name={program.name} url={program.logo_url} size="lg" />
+              <div className="min-w-0">
+                <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean-600">Client</div>
+                <h1 className="font-display text-2xl font-semibold leading-tight tracking-tight text-ocean-950 sm:text-3xl">{program.name}</h1>
+                <p className="mt-1 text-sm text-slate-600">
+                  {[
+                    `${accountCount} ${accountCount === 1 ? "sub-account" : "sub-accounts"}`,
+                    program.contact_name && `Contact: ${program.contact_name}`,
+                    program.publishing_tool && `Published from ${program.publishing_tool}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
+            </div>
+            <ClientStatusPill status={program.status} />
+          </div>
+        )}
       </div>
 
       <PreviewNotice production={production} />
