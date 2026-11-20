@@ -52,7 +52,7 @@ function AccountCard({ row, month }: { row: AccountRow; month: string }) {
       <div className="flex min-w-0 items-start gap-3">
         <SocialLogo name={account.name} url={account.logo_url} size="md" />
         <div className="min-w-0">
-          <h4 className="line-clamp-2 text-sm font-semibold leading-snug text-ink-900">{account.name}</h4>
+          <h4 className="line-clamp-3 text-sm font-semibold leading-snug text-ink-900">{account.name}</h4>
           <div className="mt-1.5">
             <PlatformIcons platforms={account.platforms} />
           </div>
