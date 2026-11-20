@@ -15,7 +15,7 @@ import { POST as signPost } from "@/app/api/social-public/agreements/[token]/rou
 import { POST as clientPost } from "@/app/api/social-public/report/[token]/route";
 import { CrmError } from "@/lib/crm/server";
 import { digestEmail, digestSection } from "./digest";
-import { accountHref, agreementHref, clientHref, reportHref } from "./links";
+import { accountHref, agreementHref, CLIENT_GUIDE_HREF, clientHref, reportHref } from "./links";
 import { actionSchema, agreementBlocks, clientActionSchema, clientStage, initials, sameBrand, signSchema, signatureTime, STATUSES } from "./schema";
 import type { Account, Item, MediaBatch, MediaRequest, Program } from "./server";
 import { accountRows, clientMonth, healthCounts, platformCounts, rhythm } from "./summary";
@@ -116,6 +116,14 @@ describe("links", () => {
     expect(accountHref(id, "2027-02")).toBe(`/dashboard/social/accounts/${id}?month=2027-02`);
     expect(reportHref(token, "2027-01")).toBe(`/social/report/${token}?month=2027-01`);
     expect(agreementHref(token)).toBe(`/social/agreement/${token}`);
+  });
+
+  it("points the client guide at a PDF that ships with the system, under the public guides folder", () => {
+    // /guides is open without signing in, so a client can open the guide from their page.
+    expect(CLIENT_GUIDE_HREF.startsWith("/guides/")).toBe(true);
+    const file = readFileSync(`public${CLIENT_GUIDE_HREF}`);
+    expect(file.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    expect(file.length).toBeGreaterThan(100000);
   });
 });
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Link2, RefreshCw } from "lucide-react";
-import { reportHref } from "@/lib/social/links";
+import { BookOpen, ExternalLink, Link2, RefreshCw } from "lucide-react";
+import { CLIENT_GUIDE_HREF, reportHref } from "@/lib/social/links";
 import type { ClientNote, Program } from "@/lib/social/server";
 import { CopyButton } from "./ProgramSetup";
 import { useSocialAction } from "./useSocialAction";
@@ -71,6 +71,22 @@ export function ReportLink({ program, origin }: { program: Pick<Program, "id" | 
         </div>
       )}
       {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
+
+      {/* The guide uses sample content, so it is the same file for every client. */}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-4">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-ink-900">Client guide</h3>
+          <p className="mt-0.5 max-w-prose text-sm text-slate-600">
+            A short PDF that shows the client how to use their page and sign their agreement, on a phone or a computer. Send it along with their link. It is also linked on their page.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <a className="btn-secondary" href={CLIENT_GUIDE_HREF} target="_blank" rel="noreferrer">
+            <BookOpen className="h-4 w-4" aria-hidden="true" /> Open the guide
+          </a>
+          <CopyButton text={`${origin}${CLIENT_GUIDE_HREF}`} label="Copy guide link" />
+        </div>
+      </div>
     </section>
   );
 }

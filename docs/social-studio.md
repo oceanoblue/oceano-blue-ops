@@ -184,6 +184,21 @@ working; "Switch off" removes it.
   signed-in office account (admin or coordinator). The database tables refuse
   everyone except office staff, including signed-in clients and field staff.
 
+### The client guide
+
+`public/guides/social-media-client-guide.pdf` is an eight page guide for
+clients: reading the month, approving, asking for changes, sending notes and
+media, privacy, and signing the agreement, with computer and phone screens.
+It uses sample content only, so the same file is right for every client.
+
+- On a client's dashboard, the card "The client's page" has **Open the guide**
+  and **Copy guide link**, to send along with the client's link.
+- On the client's own page, "How this page works" has **Open the full guide (PDF)**.
+- `/guides` is open without signing in. The file holds no client data.
+- To replace the guide, put the new PDF at the same path. The PDF must hold no
+  transparency (no soft shadows or see-through colors): some phone PDF viewers
+  draw those as gray boxes.
+
 ## Agreements signed in the system
 
 On a client's **Agreement** tab:
