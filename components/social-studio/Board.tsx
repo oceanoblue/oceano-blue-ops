@@ -13,6 +13,7 @@ import {
   type Status,
 } from "@/lib/social/schema";
 import type { Account, Item, Member } from "@/lib/social/server";
+import { hasError, type Issue } from "@/lib/social/audit";
 import { ItemEditor } from "./ItemEditor";
 import { useItemFilters } from "./ItemFilters";
 import { useSocialAction } from "./useSocialAction";
@@ -21,7 +22,7 @@ const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
 
 /** The month's pieces as columns, one per production stage. */
-export function Board({ items, accounts, team, today }: { items: Item[]; accounts: Account[]; team: Member[]; today: string }) {
+export function Board({ items, accounts, team, today, audit = {} }: { items: Item[]; accounts: Account[]; team: Member[]; today: string; audit?: Record<string, Issue[]> }) {
   const { visible, controls } = useItemFilters(items, accounts, team);
   const [open, setOpen] = useState<string | null>(null);
   const { run, busy, error } = useSocialAction();
@@ -72,6 +73,11 @@ export function Board({ items, accounts, team, today }: { items: Item[]; account
                             {late && " (late)"}
                           </span>
                           {item.design_url && <Palette className="h-3 w-3 text-fuchsia-600" aria-label="Has a design" />}
+                          {audit[item.id] && (
+                            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${hasError(audit[item.id]) ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>
+                              {audit[item.id].length} {audit[item.id].length === 1 ? "check" : "checks"}
+                            </span>
+                          )}
                         </div>
                       </button>
                       <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-2">
@@ -108,6 +114,7 @@ export function Board({ items, accounts, team, today }: { items: Item[]; account
           accountName={accountOf.get(editing.account_id)?.name ?? "Account"}
           brandKitUrl={accountOf.get(editing.account_id)?.brand_kit_url}
           team={team}
+          issues={audit[editing.id]}
           onClose={() => setOpen(null)}
         />
       )}

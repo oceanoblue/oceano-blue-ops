@@ -5,16 +5,17 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { StudioFrame } from "@/components/social-studio/StudioFrame";
 import { Board } from "@/components/social-studio/Board";
 import { studioHref } from "@/lib/social/links";
+import { hasError } from "@/lib/social/audit";
 import { studioPage } from "@/lib/social/page";
 import { monthLabel, todayKey } from "@/lib/social/schema";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { programs, program, month, workspace, production } = await studioPage(searchParams);
+  const { programs, program, month, workspace, audit, production } = await studioPage(searchParams);
   if (!programs || !program || !workspace) redirect("/dashboard/social");
   return (
-    <StudioFrame view="board" programs={programs} program={program} month={month} production={production}>
+    <StudioFrame view="board" programs={programs} program={program} month={month} production={production} checkErrors={Object.values(audit).filter(hasError).length}>
       {workspace.items.length === 0 ? (
         <div className="card">
           <EmptyState
@@ -25,7 +26,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           />
         </div>
       ) : (
-        <Board items={workspace.items} accounts={workspace.accounts} team={workspace.team} today={todayKey()} />
+        <Board items={workspace.items} accounts={workspace.accounts} team={workspace.team} today={todayKey()} audit={audit} />
       )}
     </StudioFrame>
   );

@@ -133,11 +133,11 @@ export function ProgramSetup({ program, month, accountCount, planned, owed }: { 
                 className="input min-h-32 font-mono text-xs"
                 value={lines}
                 onChange={(e) => setLines(e.target.value)}
-                placeholder={"Hampton Inn Example City\nSalt Beachside Bar | https://www.facebook.com/... | https://www.instagram.com/..."}
+                placeholder={"Hampton Inn Example City\nExample Beach Bar | https://www.facebook.com/... | https://www.instagram.com/... | https://www.canva.com/brand/..."}
               />
             </label>
             <p className="mt-2 text-xs text-slate-500">
-              Paste profile links after a name and they are saved to the account. {parsed.length > 0 && `${parsed.length} ready to add.`}
+              Paste profile links and a Canva brand kit link after a name and they are saved to the account. {parsed.length > 0 && `${parsed.length} ready to add.`}
             </p>
             <button className="btn-secondary mt-3" disabled={busy || parsed.length === 0 || parsed.length > 60}>
               <Plus className="h-4 w-4" aria-hidden="true" /> Add {parsed.length || ""} {parsed.length === 1 ? "account" : "accounts"}

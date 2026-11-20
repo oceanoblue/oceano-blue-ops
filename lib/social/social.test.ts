@@ -3,14 +3,15 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mock = vi.hoisted(() => ({ actor: vi.fn(), run: vi.fn() }));
+const mock = vi.hoisted(() => ({ actor: vi.fn(), run: vi.fn(), approved: vi.fn(), record: vi.fn() }));
 vi.mock("@/lib/crm/server", async () => ({
   ...(await vi.importActual<typeof import("@/lib/crm/server")>("@/lib/crm/server")),
   crmActor: mock.actor,
 }));
-vi.mock("./server", () => ({ runAction: mock.run }));
+vi.mock("./server", () => ({ runAction: mock.run, approvedPieces: mock.approved, recordPublishing: mock.record }));
 
 import { POST } from "@/app/api/social/route";
+import { GET as bridgeGet, POST as bridgePost } from "@/app/api/automations/social/route";
 import { CrmError } from "@/lib/crm/server";
 import {
   actionSchema,
@@ -18,7 +19,11 @@ import {
   isLate,
   mediaHealth,
   monthLabel,
+  dollarsToCents,
+  formatCents,
   parseAccountLines,
+  parseTerms,
+  termEndLabel,
   parseMonth,
   planSlots,
   platformOf,
@@ -131,10 +136,25 @@ describe("pasted account lists", () => {
         ].join("\n"),
       ),
     ).toEqual([
-      { name: "Hampton Inn Example", profile_links: { facebook: "https://www.facebook.com/hamptonexample", instagram: "https://www.instagram.com/hamptonexample/" } },
-      { name: "Salt Beachside Bar", profile_links: {} },
-      { name: "Hyatt Place Example", profile_links: { linkedin: "https://www.linkedin.com/company/hyatt-example" } },
+      { name: "Hampton Inn Example", profile_links: { facebook: "https://www.facebook.com/hamptonexample", instagram: "https://www.instagram.com/hamptonexample/" }, brand_kit_url: "" },
+      { name: "Salt Beachside Bar", profile_links: {}, brand_kit_url: "" },
+      { name: "Hyatt Place Example", profile_links: { linkedin: "https://www.linkedin.com/company/hyatt-example" }, brand_kit_url: "" },
     ]);
+  });
+  it("saves a Canva link on the line as the account's brand kit, not as a profile", () => {
+    expect(parseAccountLines("Courtyard Example | https://www.facebook.com/cy | https://www.canva.com/brand/kABC123 | https://canva.com.evil.test/x")).toEqual([
+      { name: "Courtyard Example", profile_links: { facebook: "https://www.facebook.com/cy" }, brand_kit_url: "https://www.canva.com/brand/kABC123" },
+    ]);
+  });
+  it("reads term lists and money the way people type them", () => {
+    expect(parseTerms(" cheap, Cheap ,\nbest in town,, ")).toEqual(["cheap", "best in town"]);
+    expect(dollarsToCents("$5,650")).toBe(565000);
+    expect(dollarsToCents("199.5")).toBe(19950);
+    expect(dollarsToCents("abc")).toBe(0);
+    expect(formatCents(565000)).toBe("$5,650");
+    expect(formatCents(19950)).toBe("$199.50");
+    expect(termEndLabel("2027-01-01", 12)).toBe("December 2027");
+    expect(termEndLabel(null, 12)).toBe("");
   });
   it("recognizes platforms by host and ignores look-alikes and non-https links", () => {
     expect(platformOf("https://m.facebook.com/x")).toBe("facebook");
@@ -160,6 +180,10 @@ describe("requests", () => {
       { action: "add_accounts", program_id: id, tier: "standard", accounts: [] },
       { action: "plan_month", program_id: id, month: "2027-13" },
       { action: "delete_everything" },
+      { action: "set_onboarding_step", id, step: "made_up_step", done: true },
+      { action: "update_program", id, patch: { media_due_day: 31 } },
+      { action: "update_program", id, patch: { monthly_fee_cents: -1 } },
+      { action: "update_program", id, patch: { agreement_url: "javascript:alert(1)" } },
     ])
       expect(actionSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
   });
@@ -181,6 +205,47 @@ describe("requests", () => {
   });
 });
 
+describe("automation bridge", () => {
+  const bridge = (method: string, secret: string | null, body?: unknown, query = `?program=${id}&month=2027-01`) =>
+    new Request(`${origin}/api/automations/social${method === "GET" ? query : ""}`, {
+      method,
+      headers: { ...(secret === null ? {} : { "x-pos-automation-secret": secret }), ...(body ? { "content-type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  beforeEach(() => {
+    vi.stubEnv("POS_AUTOMATION_SECRET", "s3cret-value");
+    mock.approved.mockResolvedValue({ program: "Test", month: "2027-01", ready: [], held: [] });
+    mock.record.mockResolvedValue({ changed: true });
+  });
+  it("hands approved pieces to a caller with the shared secret, for the asked program and month", async () => {
+    const res = await bridgeGet(bridge("GET", "s3cret-value"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ program: "Test", month: "2027-01", ready: [], held: [] });
+    expect(mock.approved).toHaveBeenCalledWith(id, "2027-01");
+  });
+  it("refuses a missing or wrong secret, an unconfigured bridge and a missing program, and reads nothing", async () => {
+    expect((await bridgeGet(bridge("GET", null))).status).toBe(401);
+    expect((await bridgeGet(bridge("GET", "s3cret-valuX"))).status).toBe(401);
+    expect((await bridgePost(bridge("POST", "", { id, event: "published" }))).status).toBe(401);
+    expect((await bridgeGet(bridge("GET", "s3cret-value", undefined, "?month=2027-01"))).status).toBe(400);
+    vi.stubEnv("POS_AUTOMATION_SECRET", "");
+    expect((await bridgeGet(bridge("GET", ""))).status).toBe(503);
+    expect(mock.approved).not.toHaveBeenCalled();
+    expect(mock.record).not.toHaveBeenCalled();
+  });
+  it("records scheduling and publishing on the live system only, and rejects other events and unsafe links", async () => {
+    const ok = await bridgePost(bridge("POST", "s3cret-value", { id, event: "published", published_url: "https://www.facebook.com/p/1" }));
+    expect(ok.status).toBe(200);
+    expect(mock.record).toHaveBeenCalledWith(id, "published", "https://www.facebook.com/p/1");
+    mock.record.mockClear();
+    expect((await bridgePost(bridge("POST", "s3cret-value", { id, event: "planned" }))).status).toBe(400);
+    expect((await bridgePost(bridge("POST", "s3cret-value", { id, event: "published", published_url: "javascript:alert(1)" }))).status).toBe(400);
+    vi.stubEnv("VERCEL_ENV", "preview");
+    expect((await bridgePost(bridge("POST", "s3cret-value", { id, event: "scheduled" }))).status).toBe(403);
+    expect(mock.record).not.toHaveBeenCalled();
+  });
+});
+
 describe("database", () => {
   let db: PGlite;
   const office = randomUUID();
@@ -194,6 +259,7 @@ describe("database", () => {
       grant select on team_members to authenticated, service_role;
       insert into team_members values ('${office}','Office','admin',true), ('${field}','Field','photographer',true);`);
     await db.exec(readFileSync("supabase/migrations/20261118130000_social_studio.sql", "utf8"));
+    await db.exec(readFileSync("supabase/migrations/20261120160000_social_studio_programs.sql", "utf8"));
   }, 60000);
   afterAll(async () => await db?.close());
   const rows = async (sql: string, args: unknown[] = []) => (await db.query<any>(sql, args)).rows;
@@ -208,6 +274,13 @@ describe("database", () => {
     await expect(rows("insert into social_accounts(program_id,name,platforms) values($1,'Hotel Two','{myspace}')", [program])).rejects.toThrow();
     await expect(rows("insert into social_content_items(account_id,month,kind,slot,pillar) values($1,'2027-01-15','post',2,'flexible')", [account])).rejects.toThrow();
     await expect(rows("insert into social_media_batches(account_id,received_on,source) values($1,'2027-01-05','client_visit')", [account])).rejects.toThrow();
+  });
+  it("stores program terms and rejects values outside what the form allows", async () => {
+    const [{ id: program }] = await rows("insert into social_programs(name,monthly_fee_cents,term_start,term_months,media_due_day,avoid_terms,onboarding) values('Terms Co',565000,'2027-01-01',12,10,'{cheap}','{\"agreement_signed\":\"2026-12-01\"}') returning id");
+    expect((await rows("select monthly_fee_cents, onboarding->>'agreement_signed' as signed from social_programs where id=$1", [program]))[0]).toEqual({ monthly_fee_cents: 565000, signed: "2026-12-01" });
+    await expect(rows("update social_programs set media_due_day=31 where id=$1", [program])).rejects.toThrow();
+    await expect(rows("update social_programs set monthly_fee_cents=-1 where id=$1", [program])).rejects.toThrow();
+    await expect(rows("update social_programs set onboarding='[]' where id=$1", [program])).rejects.toThrow();
   });
   it("lets office staff read, hides everything from field staff and the public, and lets nobody write from the browser", async () => {
     const as = async (role: string, who: string | null, sql: string) => {

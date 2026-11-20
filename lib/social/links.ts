@@ -1,9 +1,10 @@
-export type StudioView = "overview" | "board" | "calendar";
+export type StudioView = "overview" | "board" | "calendar" | "checks";
 
 const PATH: Record<StudioView, string> = {
   overview: "/dashboard/social",
   board: "/dashboard/social/board",
   calendar: "/dashboard/social/calendar",
+  checks: "/dashboard/social/checks",
 };
 
 /** Link to a Social Studio view, keeping the chosen program and month. */

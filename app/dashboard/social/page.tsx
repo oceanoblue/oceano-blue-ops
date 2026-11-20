@@ -4,6 +4,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/ui/StatCard";
 import { StudioFrame } from "@/components/social-studio/StudioFrame";
 import { CopyMediaAsk, NewProgramForm, ProgramSetup } from "@/components/social-studio/ProgramSetup";
+import { OnboardingChecklist, ProgramTerms } from "@/components/social-studio/ProgramTerms";
+import { countIssues, hasError } from "@/lib/social/audit";
 import { accountHref, studioHref } from "@/lib/social/links";
 import { studioPage } from "@/lib/social/page";
 import {
@@ -31,7 +33,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function SocialStudioPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { programs, program, month, workspace, production } = await studioPage(searchParams);
+  const { programs, program, month, workspace, audit, production } = await studioPage(searchParams);
 
   if (!programs)
     return (
@@ -83,14 +85,14 @@ export default async function SocialStudioPage({ searchParams }: { searchParams:
   ].join("\n");
 
   return (
-    <StudioFrame view="overview" programs={programs} program={program} month={month} production={production}>
+    <StudioFrame view="overview" programs={programs} program={program} month={month} production={production} checkErrors={Object.values(audit).filter(hasError).length}>
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-6">
         <StatCard label="Accounts" value={active.length} icon={Users} />
         <StatCard label="Planned" value={`${planned} / ${owed}`} hint={`pieces for ${monthLabel(month)}`} icon={Megaphone} />
         <StatCard label="In production" value={sumOf(totals, IN_PRODUCTION)} icon={Clock} href={studioHref("board", program.id, month)} />
         <StatCard label="With client" value={totals.client_review} icon={Send} href={studioHref("board", program.id, month)} />
         <StatCard label="Scheduled or live" value={done} hint={owed > 0 ? `${Math.round((done / owed) * 100)}% of the month` : undefined} icon={CheckCircle2} accent />
-        <StatCard label="Late" value={late} icon={AlertTriangle} href={studioHref("calendar", program.id, month)} />
+        <StatCard label="To fix" value={countIssues(audit).errors} hint={late > 0 ? `${late} late` : undefined} icon={AlertTriangle} href={studioHref("checks", program.id, month)} />
       </div>
 
       {(shortOnMedia.length > 0 || accessProblems.length > 0 || workspace.requests.length > 0) && (
@@ -123,7 +125,9 @@ export default async function SocialStudioPage({ searchParams }: { searchParams:
         </section>
       )}
 
+      <OnboardingChecklist key={`onboarding-${program.id}`} program={program} />
       <ProgramSetup program={program} month={month} accountCount={active.length} planned={planned} owed={owed} />
+      <ProgramTerms key={`terms-${program.id}`} program={program} accountCount={active.length} />
 
       {TIERS.map((tier) => {
         const group = rows.filter((r) => r.account.tier === tier);
