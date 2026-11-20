@@ -28,7 +28,8 @@ function fakeDb() {
         gte: (c: string, v: string) => (filters.push((r) => r[c] >= v), b),
         update: (p: Row) => ((patch = p), b),
         insert: (row: Row) => {
-          inserted = { id: `new-${(tables[table] ??= []).length + 1}`, status: "draft", updated_at: "t0", ...row };
+          const defaults = table === "social_agreements" ? { status: "draft" } : table === "social_client_notes" ? { status: "open" } : {};
+          inserted = { id: `new-${(tables[table] ??= []).length + 1}`, ...defaults, updated_at: "t0", ...row };
           tables[table].push(inserted);
           return b;
         },
@@ -52,7 +53,8 @@ vi.mock("@/lib/crm/server", async () => ({
 }));
 
 import { CLIENT_SIGNING_CONSENT, COUNTERSIGN_CONSENT } from "./schema";
-import { documentHash, publicAgreement, publicReport, runAction, signAgreement } from "./server";
+import { auditItem } from "./audit";
+import { clientAction, documentHash, listClientNotes, publicAgreement, publicReport, runAction, signAgreement } from "./server";
 
 const client = "11111111-1111-4111-8111-111111111111";
 const actor = "22222222-2222-4222-8222-222222222222";
@@ -187,7 +189,131 @@ describe("the client report link", () => {
     expect(report.accounts[0]).toMatchObject({ media: "out", requests: [{ ask: "Pool photos", due_on: "2027-01-15" }] });
 
     const text = JSON.stringify(report);
-    for (const secret of ["internal: redo this", "password changed", "secret voice", actor, "Draft caption", "review_note", "assignee", "access", "fee", token])
+    // A piece still being made carries no id, so nothing can be sent about it.
+    expect(inProgress.id).toBe("");
+    expect(review.id).toBe("i2");
+    for (const secret of ["internal: redo this", "password changed", "secret voice", actor, "Draft caption", "review_note", "assignee", "access", "fee_cents", "monthly_fee", token])
       expect(text).not.toContain(secret);
+  });
+});
+
+describe("what a client can do from their page", () => {
+  const other = "99999999-9999-4999-8999-999999999999";
+  const ids = {
+    hotel: "44444444-4444-4444-8444-444444444401",
+    paused: "44444444-4444-4444-8444-444444444402",
+    theirs: "44444444-4444-4444-8444-444444444403",
+    review: "55555555-5555-4555-8555-555555555501",
+    review2: "55555555-5555-4555-8555-555555555502",
+    nextMonth: "55555555-5555-4555-8555-555555555503",
+    making: "55555555-5555-4555-8555-555555555504",
+    approved: "55555555-5555-4555-8555-555555555505",
+    live: "55555555-5555-4555-8555-555555555506",
+    foreign: "55555555-5555-4555-8555-555555555507",
+    onPaused: "55555555-5555-4555-8555-555555555508",
+  };
+  const piece = (id: string, status: string, over: Row = {}) => ({ id, account_id: ids.hotel, month: "2027-01-01", kind: "post", slot: 1, title: "Lobby", caption: "Caption", status, scheduled_for: "2027-01-10", assignee: null, design_url: "", client_decision: "", client_note: "", client_reviewer: "", client_reviewed_at: null, ...over });
+  const row = (id: string) => tables.social_content_items.find((r) => r.id === id)!;
+  let token = "";
+
+  beforeEach(async () => {
+    tables.social_programs.push({ id: other, name: "Another Client", onboarding: {}, report_token: "o".repeat(43) });
+    tables.social_accounts = [
+      { id: ids.hotel, program_id: client, name: "Hotel A", is_active: true },
+      { id: ids.paused, program_id: client, name: "Paused Hotel", is_active: false },
+      { id: ids.theirs, program_id: other, name: "Their Hotel", is_active: true },
+    ];
+    tables.social_content_items = [
+      piece(ids.review, "client_review"),
+      piece(ids.review2, "client_review", { slot: 2 }),
+      piece(ids.nextMonth, "client_review", { month: "2027-02-01" }),
+      piece(ids.making, "in_design"),
+      piece(ids.approved, "approved"),
+      piece(ids.live, "published"),
+      piece(ids.foreign, "client_review", { account_id: ids.theirs }),
+      piece(ids.onPaused, "client_review", { account_id: ids.paused }),
+    ];
+    tables.social_client_notes = [];
+    token = ((await runAction(actor, { action: "set_report_link", id: client, enabled: true })) as { token: string }).token;
+  });
+
+  it("approves a piece that is waiting for review, once, and records who said so", async () => {
+    expect(await clientAction(token, { action: "approve", item_id: ids.review, name: "Pat Lee" })).toMatchObject({ approved: 1, notify: null, client: "Test Hotels" });
+    expect(row(ids.review)).toMatchObject({ status: "approved", client_decision: "approved", client_reviewer: "Pat Lee" });
+    await expect(clientAction(token, { action: "approve", item_id: ids.review, name: "Pat Lee" })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("treats another client's piece, a paused sub-account's piece and an unseen piece as not found, and changes nothing", async () => {
+    for (const item_id of [ids.foreign, ids.onPaused, ids.making, "55555555-5555-4555-8555-5555555555ff"]) {
+      await expect(clientAction(token, { action: "approve", item_id, name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
+      await expect(clientAction(token, { action: "request_changes", item_id, name: "Pat Lee", note: "Change it" })).rejects.toMatchObject({ status: 404 });
+    }
+    expect(row(ids.foreign)).toMatchObject({ status: "client_review", client_decision: "" });
+    expect(row(ids.onPaused).status).toBe("client_review");
+    expect(row(ids.making)).toMatchObject({ status: "in_design", client_note: "" });
+    // The other client's link cannot reach this client's pieces either.
+    await expect(clientAction("o".repeat(43), { action: "approve", item_id: ids.review, name: "Mallory" })).rejects.toMatchObject({ status: 404 });
+    expect(row(ids.review).status).toBe("client_review");
+    await expect(clientAction("not-a-link", { action: "approve", item_id: ids.review, name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
+    await expect(clientAction("z".repeat(43), { action: "approve", item_id: ids.review, name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("sends a piece under review back to design when changes are asked for, and tells the office", async () => {
+    const result = await clientAction(token, { action: "request_changes", item_id: ids.review, name: "Pat Lee", note: "Use the pool photo" });
+    expect(result.notify).toEqual({ kind: "changes", by: "Pat Lee", account: "Hotel A", title: "Lobby", text: "Use the pool photo" });
+    expect(row(ids.review)).toMatchObject({ status: "in_design", client_decision: "changes", client_note: "Use the pool photo", client_reviewer: "Pat Lee" });
+    // Sending it back to the client starts a new round and clears the request.
+    await runAction(actor, { action: "update_item", id: ids.review, patch: { status: "client_review" } });
+    expect(row(ids.review)).toMatchObject({ status: "client_review", client_decision: "", client_note: "Use the pool photo" });
+  });
+
+  it("keeps an approved or live piece where it is when a change is asked for, and holds it until the office deals with it", async () => {
+    await clientAction(token, { action: "request_changes", item_id: ids.approved, name: "Pat Lee", note: "Wrong date" });
+    await clientAction(token, { action: "request_changes", item_id: ids.live, name: "Pat Lee", note: "Typo in the caption" });
+    expect(row(ids.approved)).toMatchObject({ status: "approved", client_decision: "changes" });
+    expect(row(ids.live)).toMatchObject({ status: "published", client_decision: "changes" });
+    const issues = auditItem({ ...row(ids.approved), design_url: "https://www.canva.com/d/1" } as never, { id: ids.hotel, platforms: ["facebook"], avoid_terms: [] }, { today: "2027-01-05", programAvoid: [], repeated: false });
+    expect(issues).toContainEqual(expect.objectContaining({ code: "client_changes", severity: "error", message: expect.stringContaining("Wrong date") }));
+    await runAction(actor, { action: "resolve_client_feedback", id: ids.approved });
+    expect(row(ids.approved)).toMatchObject({ status: "approved", client_decision: "" });
+    await expect(runAction(actor, { action: "resolve_client_feedback", id: ids.approved })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("approves everything waiting for one sub-account in the month on screen, and nothing else", async () => {
+    expect((await clientAction(token, { action: "approve_all", account_id: ids.hotel, month: "2027-01", name: "Pat Lee" })).approved).toBe(2);
+    expect([ids.review, ids.review2].map((id) => row(id).status)).toEqual(["approved", "approved"]);
+    expect(row(ids.nextMonth).status).toBe("client_review");
+    expect(row(ids.making).status).toBe("in_design");
+    expect(row(ids.foreign).status).toBe("client_review");
+    await expect(clientAction(token, { action: "approve_all", account_id: ids.theirs, month: "2027-01", name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
+    await expect(clientAction(token, { action: "approve_all", account_id: ids.paused, month: "2027-01", name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
+    expect(row(ids.onPaused).status).toBe("client_review");
+  });
+
+  it("files a note under the client's own account, and the office can mark it done", async () => {
+    const result = await clientAction(token, { action: "note", account_id: ids.hotel, name: "Pat Lee", message: "Live music every Friday" });
+    expect(result.notify).toEqual({ kind: "note", by: "Pat Lee", account: "Hotel A", title: "", text: "Live music every Friday" });
+    await clientAction(token, { action: "note", account_id: null, name: "Pat Lee", message: "A general question" });
+    await expect(clientAction(token, { action: "note", account_id: ids.theirs, name: "Pat Lee", message: "Sneaky" })).rejects.toMatchObject({ status: 404 });
+    expect(tables.social_client_notes.map((n) => [n.program_id, n.account_id, n.message])).toEqual([
+      [client, ids.hotel, "Live music every Friday"],
+      [client, null, "A general question"],
+    ]);
+    expect(await listClientNotes(other)).toEqual([]);
+    const [first] = await listClientNotes(client);
+    await runAction(actor, { action: "resolve_client_note", id: tables.social_client_notes[0].id = "66666666-6666-4666-8666-666666666601" });
+    expect(tables.social_client_notes[0]).toMatchObject({ status: "done", resolved_by: actor });
+    expect((await listClientNotes(client)).map((n) => n.message)).toEqual(["A general question"]);
+    expect(first).toBeDefined();
+  });
+
+  it("shows the client their own answers on the page, and never another client's pieces", async () => {
+    await clientAction(token, { action: "request_changes", item_id: ids.approved, name: "Pat Lee", note: "Wrong date" });
+    const report = (await publicReport(token, "2027-01"))!;
+    expect(report.accounts.map((a) => a.name)).toEqual(["Hotel A"]);
+    const shown = report.accounts[0].pieces.find((p) => p.id === ids.approved)!;
+    expect(shown.feedback).toMatchObject({ decision: "changes", note: "Wrong date", by: "Pat Lee" });
+    expect(JSON.stringify(report)).not.toContain(ids.foreign);
+    expect(JSON.stringify(report)).not.toContain("Their Hotel");
   });
 });

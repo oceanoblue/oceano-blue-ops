@@ -3,19 +3,20 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mock = vi.hoisted(() => ({ sign: vi.fn(), rpc: vi.fn(), send: vi.fn(), digest: vi.fn() }));
+const mock = vi.hoisted(() => ({ sign: vi.fn(), rpc: vi.fn(), send: vi.fn(), digest: vi.fn(), client: vi.fn() }));
 vi.mock("@/lib/crm/server", async () => ({
   ...(await vi.importActual<typeof import("@/lib/crm/server")>("@/lib/crm/server")),
   crmDb: () => ({ rpc: mock.rpc }),
 }));
 vi.mock("@/lib/email/resend", () => ({ sendEmail: mock.send, defaultReplyTo: () => "office@example.test" }));
-vi.mock("./server", () => ({ signAgreement: mock.sign, listPrograms: vi.fn(), loadWorkspace: vi.fn() }));
+vi.mock("./server", () => ({ signAgreement: mock.sign, clientAction: mock.client, listPrograms: vi.fn(), loadWorkspace: vi.fn(), listClientNotes: vi.fn() }));
 
 import { POST as signPost } from "@/app/api/social-public/agreements/[token]/route";
+import { POST as clientPost } from "@/app/api/social-public/report/[token]/route";
 import { CrmError } from "@/lib/crm/server";
 import { digestEmail, digestSection } from "./digest";
 import { accountHref, agreementHref, clientHref, reportHref } from "./links";
-import { actionSchema, agreementBlocks, clientStage, initials, sameBrand, signSchema, signatureTime, STATUSES } from "./schema";
+import { actionSchema, agreementBlocks, clientActionSchema, clientStage, initials, sameBrand, signSchema, signatureTime, STATUSES } from "./schema";
 import type { Account, Item, MediaBatch, MediaRequest, Program } from "./server";
 import { accountRows, clientMonth, healthCounts, platformCounts, rhythm } from "./summary";
 
@@ -43,6 +44,7 @@ const program = (over: Partial<Program> = {}): Program => ({
   avoid_terms: [],
   report_token: null,
   logo_url: "",
+  media_upload_url: "",
   ...over,
 });
 const account = (name: string, over: Partial<Account> = {}): Account => ({
@@ -82,6 +84,10 @@ const item = (a: Account, over: Partial<Item> = {}): Item => ({
   published_url: "",
   review_note: "",
   updated_at: "2027-01-01T00:00:00Z",
+  client_decision: "",
+  client_note: "",
+  client_reviewer: "",
+  client_reviewed_at: null,
   ...over,
 });
 const media = (a: Account, photos: number, videos: number): MediaBatch => ({
@@ -238,6 +244,10 @@ describe("daily digest", () => {
     expect(text("2027-01-19")).not.toContain("not fully planned");
     expect(text("2027-01-20")).toContain("February 2027 is not fully planned: 0 of 6 pieces are on the plan.");
   });
+  it("mentions notes from the client that are waiting", () => {
+    const section = digestSection(program(), { month: "2027-01", data: empty }, { month: "2027-02", data: empty }, "2027-01-12", 2);
+    expect(section!.lines.map((l) => l.text)).toContain("2 notes from the client are waiting for an answer.");
+  });
   it("reminds about onboarding once a week, on Monday, and leaves paused and ended clients alone", () => {
     const onboarding = program({ status: "onboarding", onboarding: { agreement_signed: "2026-12-01" } });
     // 2026-11-23 is a Monday; 2026-11-24 a Tuesday.
@@ -349,6 +359,61 @@ describe("signing page API", () => {
   });
 });
 
+describe("client page API", () => {
+  const act = (body: unknown, from = origin) =>
+    clientPost(
+      new Request(`${origin}/api/social-public/report/${token}`, {
+        method: "POST",
+        headers: { origin: from, "content-type": "application/json", "x-forwarded-for": "203.0.113.9" },
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ token }) },
+    );
+  const approve = { action: "approve", item_id: id, name: "Pat Lee" };
+  beforeEach(() => {
+    mock.rpc.mockResolvedValue({ data: 1, error: null });
+    mock.send.mockResolvedValue({ status: "sent", id: "e1" });
+    mock.client.mockResolvedValue({ client: "Test Hotels", program_id: id, approved: 1, notify: null });
+  });
+
+  it("passes a valid request on with the link's secret, and stays quiet for a plain approval", async () => {
+    const res = await act(approve);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, approved: 1 });
+    expect(mock.client).toHaveBeenCalledWith(token, approve);
+    expect(mock.send).not.toHaveBeenCalled();
+  });
+  it("emails the office when the client asks for a change or sends a note, and survives a mail failure", async () => {
+    mock.client.mockResolvedValue({ client: "Test Hotels", program_id: id, approved: 0, notify: { kind: "changes", by: "Pat <b>Lee</b>", account: "Hotel A", title: "Lobby", text: "Use the pool photo" } });
+    expect((await act({ action: "request_changes", item_id: id, name: "Pat Lee", note: "Use the pool photo" })).status).toBe(200);
+    const mail = mock.send.mock.calls[0][0];
+    expect(mail).toMatchObject({ to: "office@example.test", subject: "Test Hotels asked for a change (Hotel A: Lobby)" });
+    expect(mail.html).toContain("Use the pool photo");
+    expect(mail.html).toContain("Pat &lt;b&gt;Lee&lt;/b&gt;");
+    expect(mail.html).toContain(`/dashboard/social/clients/${id}/checks`);
+    mock.send.mockRejectedValue(new Error("mail down"));
+    expect((await act({ action: "note", account_id: null, name: "Pat Lee", message: "A question" })).status).toBe(200);
+  });
+  it("refuses previews, other sites, bad forms and floods before anything is read or changed", async () => {
+    expect((await act(approve, "https://evil.test")).status).toBe(403);
+    expect((await act({ action: "approve", item_id: id, name: "P" })).status).toBe(400);
+    expect((await act({ action: "request_changes", item_id: id, name: "Pat Lee", note: "" })).status).toBe(400);
+    expect((await act({ action: "delete_everything", name: "Pat Lee" })).status).toBe(400);
+    mock.rpc.mockResolvedValue({ data: 301, error: null });
+    expect((await act(approve)).status).toBe(429);
+    vi.stubEnv("VERCEL_ENV", "preview");
+    expect((await act(approve)).status).toBe(403);
+    expect(mock.client).not.toHaveBeenCalled();
+  });
+  it("accepts only the four things a client may do", () => {
+    expect(clientActionSchema.safeParse({ action: "approve_all", account_id: id, month: "2027-01", name: "Pat Lee" }).success).toBe(true);
+    expect(clientActionSchema.safeParse({ action: "approve_all", account_id: id, month: "2027-13", name: "Pat Lee" }).success).toBe(false);
+    expect(clientActionSchema.safeParse({ action: "note", name: "Pat Lee", message: "Hello there" }).success).toBe(true);
+    for (const action of ["update_item", "set_report_link", "update_program", "plan_month"])
+      expect(clientActionSchema.safeParse({ action, id, item_id: id, account_id: id, name: "Pat Lee", note: "x y z", message: "x y z" }).success).toBe(false);
+  });
+});
+
 describe("database", () => {
   let db: PGlite;
   const office = randomUUID();
@@ -361,7 +426,7 @@ describe("database", () => {
       create table team_members(id uuid primary key, full_name text, role text, is_active boolean);
       grant select on team_members to authenticated, service_role;
       insert into team_members values ('${office}','Office','admin',true), ('${field}','Field','photographer',true);`);
-    for (const file of ["20261118130000_social_studio.sql", "20261120160000_social_studio_programs.sql", "20261120190000_social_studio_clients.sql", "20261120200000_social_studio_logos.sql"])
+    for (const file of ["20261118130000_social_studio.sql", "20261120160000_social_studio_programs.sql", "20261120190000_social_studio_clients.sql", "20261120200000_social_studio_logos.sql", "20261120210000_social_studio_client_side.sql"])
       await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
   }, 60000);
   afterAll(async () => await db?.close());
@@ -396,6 +461,41 @@ describe("database", () => {
     const [sub] = await rows("insert into social_accounts(program_id,name,logo_url) values($1,'Hotel Logo','https://example.test/social-logos/a.png') returning logo_url", [client]);
     expect(sub.logo_url).toBe("https://example.test/social-logos/a.png");
     await expect(rows("update social_programs set logo_url=$2 where id=$1", [client, "x".repeat(501)])).rejects.toThrow();
+  });
+  it("stores the client's answer on a piece and their notes, within what the page can send", async () => {
+    const [{ id: client }] = await rows("insert into social_programs(name,media_upload_url) values('Feedback Co','https://example.test/folder') returning id");
+    const [{ id: account }] = await rows("insert into social_accounts(program_id,name) values($1,'Hotel F') returning id", [client]);
+    const [{ id: item, client_decision }] = await rows("insert into social_content_items(account_id,month,kind,slot,pillar) values($1,'2027-01-01','post',1,'flexible') returning id, client_decision", [account]);
+    expect(client_decision).toBe("");
+    await rows("update social_content_items set client_decision='changes', client_note='Fix it', client_reviewer='Pat', client_reviewed_at=now() where id=$1", [item]);
+    await expect(rows("update social_content_items set client_decision='maybe' where id=$1", [item])).rejects.toThrow();
+    await rows("insert into social_client_notes(program_id,account_id,author,message) values($1,$2,'Pat','Hello')", [client, account]);
+    await expect(rows("insert into social_client_notes(program_id,author,message) values($1,'Pat','')", [client])).rejects.toThrow();
+    await expect(rows("insert into social_client_notes(program_id,author,message,status) values($1,'Pat','Hi','archived')", [client])).rejects.toThrow();
+  });
+  it("shows a signed-in client, a field worker and the public nothing from any Social Studio table", async () => {
+    const outsider = randomUUID();
+    const tables = ["social_programs", "social_accounts", "social_content_items", "social_media_batches", "social_media_requests", "social_agreements", "social_client_notes"];
+    const as = async (role: string, who: string | null, sql: string) => {
+      await db.exec(`begin; set local role ${role}; select set_config('request.jwt.claim.sub','${who ?? ""}',true);`);
+      try {
+        return (await db.query<any>(sql)).rows;
+      } finally {
+        await db.exec("rollback");
+      }
+    };
+    const [{ id: account }] = await rows("select id from social_accounts limit 1");
+    await rows("insert into social_media_batches(account_id,received_on,source,photos) values($1,'2027-01-05','property',3)", [account]);
+    await rows("insert into social_media_requests(account_id,ask) values($1,'Pool photos')", [account]);
+    for (const table of tables) {
+      // Office staff see rows; everyone else signed in sees none; the public is refused outright.
+      expect((await as("authenticated", office, `select count(*)::int as n from ${table}`))[0].n).toBeGreaterThan(0);
+      expect((await as("authenticated", outsider, `select count(*)::int as n from ${table}`))[0].n).toBe(0);
+      expect((await as("authenticated", field, `select count(*)::int as n from ${table}`))[0].n).toBe(0);
+      await expect(as("anon", null, `select count(*) from ${table}`)).rejects.toThrow();
+      await expect(as("authenticated", outsider, `delete from ${table}`)).rejects.toThrow();
+      await expect(as("authenticated", office, `delete from ${table}`)).rejects.toThrow();
+    }
   });
   it("lets office staff read agreements, hides them from field staff and the public, and lets nobody write from the browser", async () => {
     const as = async (role: string, who: string | null, sql: string) => {

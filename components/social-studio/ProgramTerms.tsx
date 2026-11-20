@@ -33,6 +33,7 @@ export function ProgramTerms({ program, accountCount, open = false }: { program:
     term_months: program.term_months ? String(program.term_months) : "",
     media_due_day: program.media_due_day ? String(program.media_due_day) : "",
     agreement_url: program.agreement_url,
+    media_upload_url: program.media_upload_url,
     avoid_terms: program.avoid_terms.join(", "),
     notes: program.notes,
   });
@@ -64,6 +65,7 @@ export function ProgramTerms({ program, accountCount, open = false }: { program:
         term_months: Math.max(0, Math.min(60, Math.round(Number(form.term_months) || 0))),
         media_due_day: day >= 1 && day <= 28 ? day : null,
         agreement_url: form.agreement_url.trim(),
+        media_upload_url: form.media_upload_url.trim(),
         avoid_terms: parseTerms(form.avoid_terms),
         notes: form.notes,
       },
@@ -124,6 +126,10 @@ export function ProgramTerms({ program, accountCount, open = false }: { program:
         <label className="sm:col-span-6">
           <span className="label">Link to an agreement signed outside this system</span>
           <input type="url" className="input" maxLength={500} placeholder="https://" value={form.agreement_url} onChange={set("agreement_url")} />
+        </label>
+        <label className="sm:col-span-6">
+          <span className="label">Where the client sends photos and video (link shown on their page)</span>
+          <input type="url" className="input" maxLength={500} placeholder="https:// for example their shared folder" value={form.media_upload_url} onChange={set("media_upload_url")} />
         </label>
         <label className="sm:col-span-6">
           <span className="label">Words and phrases no caption may use</span>

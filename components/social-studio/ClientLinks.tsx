@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ExternalLink, Link2, RefreshCw } from "lucide-react";
 import { reportHref } from "@/lib/social/links";
-import type { Program } from "@/lib/social/server";
+import type { ClientNote, Program } from "@/lib/social/server";
 import { CopyButton } from "./ProgramSetup";
 import { useSocialAction } from "./useSocialAction";
 
@@ -26,9 +26,9 @@ export function ReportLink({ program, origin }: { program: Pick<Program, "id" | 
     <section className="card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-lg font-semibold text-ocean-950">Client report page</h2>
+          <h2 className="font-display text-lg font-semibold text-ocean-950">The client&apos;s page</h2>
           <p className="mt-0.5 max-w-prose text-sm text-slate-600">
-            A private page for {program.name}: each month by sub-account, what is live, what is waiting on them and the media we still need. It never shows fees, staff notes or check results.
+            A private page for {program.name}: each month by sub-account, where they approve pieces, ask for changes, send notes and see the media we need. It shows only this client, and never fees, staff notes or check results.
           </p>
         </div>
         {!program.report_token && (
@@ -69,6 +69,50 @@ export function ReportLink({ program, origin }: { program: Pick<Program, "id" | 
           </div>
           <p className="text-xs text-slate-500">Anyone with this link can read the report. Send it only to the client.</p>
         </div>
+      )}
+      {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
+    </section>
+  );
+}
+
+/** Notes the client sent from their page, waiting for someone to deal with them. */
+export function ClientNotes({ notes, accountNames, changeRequests, checksHref }: { notes: ClientNote[]; accountNames: Record<string, string>; changeRequests: number; checksHref: string }) {
+  const { run, busy, error } = useSocialAction();
+  return (
+    <section className="card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg font-semibold text-ocean-950">From the client</h2>
+          <p className="mt-0.5 text-sm text-slate-600">
+            {notes.length === 0 && changeRequests === 0
+              ? "No notes or change requests are waiting."
+              : `${notes.length} ${notes.length === 1 ? "note" : "notes"} and ${changeRequests} change ${changeRequests === 1 ? "request" : "requests"} waiting.`}
+          </p>
+        </div>
+        {changeRequests > 0 && (
+          <a href={checksHref} className="btn-secondary">
+            See change requests
+          </a>
+        )}
+      </div>
+      {notes.length > 0 && (
+        <ul className="mt-4 divide-y divide-ink-100">
+          {notes.map((n) => (
+            <li key={n.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="whitespace-pre-line text-sm text-ink-900">{n.message}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {n.author}
+                  {n.account_id && accountNames[n.account_id] && ` · ${accountNames[n.account_id]}`} ·{" "}
+                  {new Date(n.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}
+                </p>
+              </div>
+              <button type="button" className="btn-ghost" disabled={busy} onClick={() => run({ action: "resolve_client_note", id: n.id })}>
+                Mark done
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
       {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
     </section>

@@ -5,7 +5,7 @@ import { AccountList } from "@/components/social-studio/AccountList";
 import { BarList, ChartCard, SegmentedBar, VIZ } from "@/components/social-studio/Charts";
 import { ClientHero } from "@/components/social-studio/ClientHero";
 import { RhythmChart } from "@/components/social-studio/RhythmChart";
-import { ReportLink } from "@/components/social-studio/ClientLinks";
+import { ClientNotes, ReportLink } from "@/components/social-studio/ClientLinks";
 import { CopyMediaAsk, PlanMonth } from "@/components/social-studio/ProgramSetup";
 import { OnboardingChecklist } from "@/components/social-studio/ProgramTerms";
 import { StudioFrame } from "@/components/social-studio/StudioFrame";
@@ -29,7 +29,7 @@ import {
   shortDate,
   termEndLabel,
 } from "@/lib/social/schema";
-import { listAgreements } from "@/lib/social/server";
+import { listAgreements, listClientNotes } from "@/lib/social/server";
 import { healthCounts, platformCounts, rhythm } from "@/lib/social/summary";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +37,8 @@ export const dynamic = "force-dynamic";
 /** One client's dashboard: the month in numbers, what needs attention, what is coming up, and every sub-account. */
 export default async function ClientDashboardPage(props: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { program, month, today, workspace, rows, summary, production } = await clientPage(props.params, props.searchParams);
-  const agreements = await listAgreements(program.id).catch(() => []);
+  const [agreements, notes] = await Promise.all([listAgreements(program.id).catch(() => []), listClientNotes(program.id).catch(() => [])]);
+  const changeRequests = workspace.items.filter((i) => i.client_decision === "changes").length;
   const agreement = agreements.find((a) => a.status !== "void") ?? null;
 
   const names = new Map(workspace.accounts.map((a) => [a.id, a.name]));
@@ -199,6 +200,10 @@ export default async function ClientDashboardPage(props: { params: Promise<{ id:
           )}
         </section>
       </div>
+
+      {(notes.length > 0 || changeRequests > 0 || program.report_token) && (
+        <ClientNotes notes={notes} accountNames={Object.fromEntries(names)} changeRequests={changeRequests} checksHref={clientHref("checks", program.id, month)} />
+      )}
 
       <PlanMonth program={program} month={month} accountCount={summary.accounts} planned={summary.planned} owed={summary.owed} />
       <OnboardingChecklist key={`onboarding-${program.id}`} program={program} />
