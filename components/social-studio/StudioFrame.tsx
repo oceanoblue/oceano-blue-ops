@@ -1,9 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Megaphone } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Megaphone } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { monthLabel, parseMonth, shiftMonth } from "@/lib/social/schema";
-import { SOCIAL_HOME, clientHref, type ClientView } from "@/lib/social/links";
+import { CLIENT_GUIDE_HREF, SOCIAL_HOME, clientHref, type ClientView } from "@/lib/social/links";
 import type { Program } from "@/lib/social/server";
 import { SocialLogo } from "./Logo";
 
@@ -161,22 +161,30 @@ export function StudioFrame({
             </Link>
           ))}
         </nav>
-        {MONTHLY.includes(view) && (
-          <div className="flex items-center gap-1 pb-2">
-            <Link href={clientHref(view, program.id, shiftMonth(month, -1))} className="btn-ghost px-2" aria-label="Previous month">
-              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-            </Link>
-            <span className="min-w-36 text-center font-display text-base font-semibold text-ocean-950">{monthLabel(month)}</span>
-            <Link href={clientHref(view, program.id, shiftMonth(month, 1))} className="btn-ghost px-2" aria-label="Next month">
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-            {month !== thisMonth && (
-              <Link href={clientHref(view, program.id, thisMonth)} className="btn-secondary ml-1">
-                This month
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-2">
+          {/* On every page of a client, so the guide to send them is always one tap away. The dashboard's header carries its own. */}
+          {!hero && (
+            <a href={CLIENT_GUIDE_HREF} target="_blank" rel="noreferrer" className="btn-secondary" title="The guide to send to this client (PDF)">
+              <BookOpen className="h-4 w-4" aria-hidden="true" /> Client guide
+            </a>
+          )}
+          {MONTHLY.includes(view) && (
+            <div className="flex items-center gap-1">
+              <Link href={clientHref(view, program.id, shiftMonth(month, -1))} className="btn-ghost px-2" aria-label="Previous month">
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
               </Link>
-            )}
-          </div>
-        )}
+              <span className="min-w-36 text-center font-display text-base font-semibold text-ocean-950">{monthLabel(month)}</span>
+              <Link href={clientHref(view, program.id, shiftMonth(month, 1))} className="btn-ghost px-2" aria-label="Next month">
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+              {month !== thisMonth && (
+                <Link href={clientHref(view, program.id, thisMonth)} className="btn-secondary ml-1">
+                  This month
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {children}

@@ -1,3 +1,5 @@
+import { BookOpen } from "lucide-react";
+import { CLIENT_GUIDE_HREF } from "@/lib/social/links";
 import { monthLabel } from "@/lib/social/schema";
 import type { Program } from "@/lib/social/server";
 import type { ClientSummary } from "@/lib/social/summary";
@@ -39,7 +41,19 @@ export function ClientHero({ program, summary, month }: { program: Program; summ
               {[program.contact_name && `Contact: ${program.contact_name}`, program.publishing_tool && `Published from ${program.publishing_tool}`].filter(Boolean).join(" · ") ||
                 "Add a contact and publishing tool on the Agreement tab."}
             </p>
-            <span className={`mt-3 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${STATUS_TONE[program.status]}`}>{humanize(program.status)}</span>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${STATUS_TONE[program.status]}`}>{humanize(program.status)}</span>
+              {/* The guide to send to this client, kept at the top so it is easy to find on a phone too. */}
+              <a
+                href={CLIENT_GUIDE_HREF}
+                target="_blank"
+                rel="noreferrer"
+                title="The guide to send to this client (PDF)"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/25 transition hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean-300"
+              >
+                <BookOpen className="h-3.5 w-3.5" aria-hidden="true" /> Client guide
+              </a>
+            </div>
           </div>
         </div>
 
