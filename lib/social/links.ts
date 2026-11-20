@@ -36,3 +36,9 @@ export function agreementHref(token: string): string {
 export function appOrigin(): string {
   return (process.env.NEXT_PUBLIC_APP_URL || "https://app.oceanoblue.net").replace(/\/$/, "");
 }
+
+/**
+ * The client guide: a PDF that shows a client how to use their page and sign their agreement.
+ * It uses sample content only, so the same file is right for every client.
+ */
+export const CLIENT_GUIDE_HREF = "/guides/social-media-client-guide.pdf";

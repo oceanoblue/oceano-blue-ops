@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ChevronRight, ExternalLink, UploadCloud } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, UploadCloud } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
 import { ApproveAll, NoteForm, PieceActions } from "@/components/social/ClientPortal";
 import { Meter, VIZ } from "@/components/social-studio/Charts";
 import { SocialLogo } from "@/components/social-studio/Logo";
-import { reportHref } from "@/lib/social/links";
+import { CLIENT_GUIDE_HREF, reportHref } from "@/lib/social/links";
 import {
   CLIENT_STAGES,
   CLIENT_STAGE_LABEL,
@@ -173,6 +173,11 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
             <li>Approve a piece, or ask for changes and tell us what to change. You can also ask for a change after a piece is approved or live.</li>
             <li>This page is private to {report.client}. Anyone with the link can use it, so please share it only with your team.</li>
           </ul>
+          <p className="px-5 pb-5">
+            <a className="btn-secondary" href={CLIENT_GUIDE_HREF} target="_blank" rel="noreferrer">
+              <BookOpen className="h-4 w-4" aria-hidden="true" /> Open the full guide (PDF)
+            </a>
+          </p>
         </details>
 
         <section>
