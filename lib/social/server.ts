@@ -53,6 +53,8 @@ export type Program = {
   avoid_terms: string[];
   /** The secret in the client's report link, or null when no link is switched on. */
   report_token: string | null;
+  /** Link to the client's logo, or blank. */
+  logo_url: string;
 };
 export type Agreement = {
   id: string;
@@ -90,6 +92,8 @@ export type Account = {
   access_note: string;
   is_active: boolean;
   avoid_terms: string[];
+  /** Link to this sub-account's logo, or blank. */
+  logo_url: string;
 };
 export type Item = {
   id: string;
@@ -129,9 +133,9 @@ export type MediaRequest = {
 export type Member = { id: string; full_name: string };
 
 const PROGRAM =
-  "id,name,contact_name,contact_email,publishing_tool,status,notes,monthly_fee_cents,account_rate_cents,minimum_fee_cents,term_start,term_months,media_due_day,agreement_url,onboarding,avoid_terms,report_token";
+  "id,name,contact_name,contact_email,publishing_tool,status,notes,monthly_fee_cents,account_rate_cents,minimum_fee_cents,term_start,term_months,media_due_day,agreement_url,onboarding,avoid_terms,report_token,logo_url";
 const ACCOUNT =
-  "id,program_id,name,tier,platforms,posts_per_month,reels_per_month,google_posts_per_month,profile_links,brand_kit_url,media_folder_url,voice_notes,access_status,access_note,is_active,avoid_terms";
+  "id,program_id,name,tier,platforms,posts_per_month,reels_per_month,google_posts_per_month,profile_links,brand_kit_url,media_folder_url,voice_notes,access_status,access_note,is_active,avoid_terms,logo_url";
 const ITEM =
   "id,account_id,month,kind,slot,pillar,title,caption,status,scheduled_for,assignee,design_url,published_url,review_note,updated_at";
 const BATCH = "id,account_id,received_on,source,photos,videos,link,note";
@@ -160,6 +164,20 @@ export async function listPrograms(): Promise<Program[]> {
   const { data, error } = await crmDb().from("social_programs").select(PROGRAM).order("created_at");
   if (error) throw unavailable();
   return (data ?? []) as unknown as Program[];
+}
+
+/**
+ * Save the link to a logo that was just uploaded. Returns false when the
+ * client or sub-account no longer exists.
+ */
+export async function saveLogo(target: "client" | "account", id: string, url: string): Promise<boolean> {
+  const { data, error } = await crmDb()
+    .from(target === "client" ? "social_programs" : "social_accounts")
+    .update({ logo_url: url, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id");
+  if (error) throw unavailable();
+  return Boolean(data?.length);
 }
 
 /** One client, or null when it does not exist. */
@@ -376,6 +394,31 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
       const { error } = await db.from("social_programs").update({ onboarding, updated_at: now }).eq("id", a.id);
       if (error) throw unavailable();
       return {};
+    }
+    case "remove_logo": {
+      const { data, error } = await db
+        .from(a.target === "client" ? "social_programs" : "social_accounts")
+        .update({ logo_url: "", updated_at: now })
+        .eq("id", a.id)
+        .select("id");
+      if (error) throw unavailable();
+      if (!data?.length) throw new CrmError(a.target === "client" ? "That client no longer exists." : "That sub-account no longer exists.", 404);
+      return {};
+    }
+    case "share_logo": {
+      const source = await db.from("social_accounts").select("program_id,logo_url").eq("id", a.account_id).maybeSingle();
+      if (source.error) throw unavailable();
+      if (!source.data) throw new CrmError("That sub-account no longer exists.", 404);
+      if (!source.data.logo_url) throw new CrmError("Add a logo to this sub-account first.", 400);
+      // Only sub-accounts of the same client can take the logo.
+      const { data, error } = await db
+        .from("social_accounts")
+        .update({ logo_url: source.data.logo_url, updated_at: now })
+        .eq("program_id", source.data.program_id)
+        .in("id", a.to)
+        .select("id");
+      if (error) throw unavailable();
+      return { updated: data?.length ?? 0 };
     }
     case "set_report_link": {
       // Switching on always makes a new link, so an old one stops working.
@@ -679,10 +722,12 @@ export type PublicPiece = {
 };
 export type PublicReport = {
   client: string;
+  logo_url: string;
   month: string;
   totals: Record<ClientStage, number> & { owed: number };
   accounts: {
     name: string;
+    logo_url: string;
     owed: number;
     media: MediaHealth;
     pieces: PublicPiece[];
@@ -698,7 +743,7 @@ export type PublicReport = {
  */
 export async function publicReport(token: string, month: string): Promise<PublicReport | null> {
   if (!TOKEN_RE.test(token)) return null;
-  const { data, error } = await crmDb().from("social_programs").select("id,name").eq("report_token", token).maybeSingle();
+  const { data, error } = await crmDb().from("social_programs").select("id,name,logo_url").eq("report_token", token).maybeSingle();
   if (error) throw unavailable();
   if (!data) return null;
   const workspace = await loadWorkspace(data.id as string, month);
@@ -726,6 +771,7 @@ export async function publicReport(token: string, month: string): Promise<Public
       totals.owed += quotaTotal(account);
       return {
         name: account.name,
+        logo_url: account.logo_url ?? "",
         owed: quotaTotal(account),
         media: mediaHealth(account, {
           photos: recent.reduce((n, m) => n + m.photos, 0),
@@ -735,5 +781,5 @@ export async function publicReport(token: string, month: string): Promise<Public
         requests: workspace.requests.filter((r) => r.account_id === account.id).map((r) => ({ ask: r.ask, due_on: r.due_on })),
       };
     });
-  return { client: data.name as string, month, totals, accounts };
+  return { client: data.name as string, logo_url: (data.logo_url as string) ?? "", month, totals, accounts };
 }

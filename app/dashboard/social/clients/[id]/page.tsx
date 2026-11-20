@@ -1,7 +1,10 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileSignature, ImageOff, Megaphone, Send, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileSignature, ImageOff, Megaphone, Send, ThumbsUp, XCircle } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { AccountList } from "@/components/social-studio/AccountList";
+import { BarList, ChartCard, SegmentedBar, VIZ } from "@/components/social-studio/Charts";
+import { ClientHero } from "@/components/social-studio/ClientHero";
+import { RhythmChart } from "@/components/social-studio/RhythmChart";
 import { ReportLink } from "@/components/social-studio/ClientLinks";
 import { CopyMediaAsk, PlanMonth } from "@/components/social-studio/ProgramSetup";
 import { OnboardingChecklist } from "@/components/social-studio/ProgramTerms";
@@ -17,14 +20,17 @@ import {
   KIND_LABEL,
   MEDIA_HEALTH_LABEL,
   MEDIA_HEALTH_PILL,
+  STATUSES,
   STATUS_LABEL,
   STATUS_PILL,
+  countByStatus,
   formatCents,
   monthLabel,
   shortDate,
   termEndLabel,
 } from "@/lib/social/schema";
 import { listAgreements } from "@/lib/social/server";
+import { healthCounts, platformCounts, rhythm } from "@/lib/social/summary";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +49,13 @@ export default async function ClientDashboardPage(props: { params: Promise<{ id:
     .sort((a, b) => (a.scheduled_for! < b.scheduled_for! ? -1 : a.scheduled_for! > b.scheduled_for! ? 1 : 0))
     .slice(0, 8);
 
+  const stages = countByStatus(workspace.items);
+  const health = healthCounts(rows);
+  const platforms = platformCounts(rows);
+  const todayDay = today.startsWith(`${month}-`) ? Number(today.slice(8, 10)) : null;
+  const count = (one: string, many: string) => (n: number) => `${n} ${n === 1 ? one : many}`;
+  const subAccounts = count("sub-account", "sub-accounts");
+
   const shortOnMedia = rows.filter((r) => r.health !== "good");
   const needsAttention = rows.filter((r) => r.health !== "good" || r.account.access_status !== "connected" || r.requests.length > 0);
   const ask = [
@@ -56,15 +69,70 @@ export default async function ClientDashboardPage(props: { params: Promise<{ id:
   ].filter(Boolean);
 
   return (
-    <StudioFrame view="dashboard" program={program} month={month} production={production} accountCount={summary.accounts} checkErrors={summary.errors}>
-      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <StatCard label="Sub-accounts" value={summary.accounts} icon={Users} href={clientHref("accounts", program.id, month)} />
+    <StudioFrame
+      view="dashboard"
+      program={program}
+      month={month}
+      production={production}
+      accountCount={summary.accounts}
+      checkErrors={summary.errors}
+      hero={<ClientHero program={program} summary={summary} month={month} />}
+    >
+      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard label="Planned" value={`${summary.planned} / ${summary.owed}`} hint={`pieces for ${monthLabel(month)}`} icon={Megaphone} />
         <StatCard label="In production" value={summary.inProduction} icon={Clock} href={clientHref("board", program.id, month)} />
         <StatCard label="With client" value={summary.withClient} icon={Send} href={clientHref("board", program.id, month)} />
+        <StatCard label="Approved" value={summary.approved} hint={summary.held > 0 ? `${summary.held} held by a check` : "ready to schedule"} icon={ThumbsUp} href={clientHref("board", program.id, month)} />
         <StatCard label="Scheduled or live" value={summary.done} hint={summary.owed > 0 ? `${summary.percentDone}% of the month` : undefined} icon={CheckCircle2} accent />
         <StatCard label="To fix" value={summary.errors} hint={summary.late > 0 ? `${summary.late} late` : undefined} icon={AlertTriangle} href={clientHref("checks", program.id, month)} />
       </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <ChartCard className="xl:col-span-2" title={`${monthLabel(month)} by planned date`} note="How the month's pieces are spread across its days.">
+          {workspace.items.length === 0 ? (
+            <p className="text-sm text-slate-500">Plan the month and its pieces appear here by date.</p>
+          ) : (
+            <RhythmChart days={rhythm(workspace.items, month)} today={todayDay} month={monthLabel(month)} />
+          )}
+        </ChartCard>
+        <ChartCard title="Where every piece is" note="From first plan to live, in order.">
+          {workspace.items.length === 0 ? (
+            <p className="text-sm text-slate-500">Nothing is planned for this month yet.</p>
+          ) : (
+            <BarList unit={count("piece", "pieces")} rows={STATUSES.map((s) => ({ label: STATUS_LABEL[s], value: stages[s] }))} />
+          )}
+        </ChartCard>
+      </div>
+
+      {rows.length > 0 && (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <ChartCard title="Media supply" note="Sub-accounts by how much recent photo and video we hold.">
+            <SegmentedBar
+              name="Media supply"
+              unit={subAccounts}
+              parts={[
+                { label: "Enough", value: health.media.good, color: VIZ.good, icon: <CheckCircle2 className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+                { label: "Running low", value: health.media.low, color: VIZ.warning, darkText: true, icon: <AlertTriangle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+                { label: "Out", value: health.media.out, color: VIZ.critical, icon: <XCircle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+              ]}
+            />
+          </ChartCard>
+          <ChartCard title="Account access" note="Whether we can get into each sub-account's profiles.">
+            <SegmentedBar
+              name="Account access"
+              unit={subAccounts}
+              parts={[
+                { label: "Connected", value: health.access.connected, color: VIZ.good, icon: <CheckCircle2 className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+                { label: "Not confirmed", value: health.access.pending, color: VIZ.warning, darkText: true, icon: <AlertTriangle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+                { label: "Problem", value: health.access.issue, color: VIZ.critical, icon: <XCircle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+              ]}
+            />
+          </ChartCard>
+          <ChartCard className="md:col-span-2 xl:col-span-1" title="Where they post" note="Sub-accounts on each platform.">
+            <BarList unit={subAccounts} rows={platforms} />
+          </ChartCard>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <section className="card p-5">

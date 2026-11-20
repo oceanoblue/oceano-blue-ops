@@ -124,6 +124,30 @@ describe("an agreement from draft to signed by both", () => {
   });
 });
 
+describe("logos", () => {
+  it("shares one sub-account's logo with others of the same client only, and removes a logo", async () => {
+    tables.social_accounts = [
+      { id: "a1", program_id: client, name: "Courtyard One", logo_url: "https://x.test/social-logos/c.png" },
+      { id: "a2", program_id: client, name: "Courtyard Two", logo_url: "" },
+      { id: "a3", program_id: "other-client", name: "Courtyard Elsewhere", logo_url: "" },
+      { id: "a4", program_id: client, name: "No Logo", logo_url: "" },
+    ];
+    const one = "33333333-3333-4333-8333-333333333331";
+    const ids = { a1: one, a2: one.replace(/1$/, "2"), a3: one.replace(/1$/, "3"), a4: one.replace(/1$/, "4") };
+    for (const row of tables.social_accounts) row.id = ids[row.id as keyof typeof ids];
+    expect(await runAction(actor, { action: "share_logo", account_id: ids.a1, to: [ids.a2, ids.a3] })).toEqual({ updated: 1 });
+    expect(tables.social_accounts.map((r) => r.logo_url)).toEqual(["https://x.test/social-logos/c.png", "https://x.test/social-logos/c.png", "", ""]);
+    // A sub-account with no logo has nothing to share.
+    await expect(runAction(actor, { action: "share_logo", account_id: ids.a4, to: [ids.a2] })).rejects.toMatchObject({ status: 400 });
+    await runAction(actor, { action: "remove_logo", target: "account", id: ids.a2 });
+    expect(tables.social_accounts[1].logo_url).toBe("");
+    tables.social_programs[0].logo_url = "https://x.test/social-logos/n.png";
+    await runAction(actor, { action: "remove_logo", target: "client", id: client });
+    expect(tables.social_programs[0].logo_url).toBe("");
+    await expect(runAction(actor, { action: "remove_logo", target: "client", id: ids.a4 })).rejects.toMatchObject({ status: 404 });
+  });
+});
+
 describe("the client report link", () => {
   const account = { id: "a1", program_id: client, name: "Hotel A", tier: "standard", platforms: ["facebook"], posts_per_month: 2, reels_per_month: 1, google_posts_per_month: 0, is_active: true, access_status: "issue", access_note: "password changed", voice_notes: "secret voice" };
   const piece = (over: Row) => ({ account_id: "a1", month: "2027-01-01", kind: "post", slot: 1, pillar: "flexible", title: "Lobby", caption: "Draft caption", status: "planned", scheduled_for: "2027-01-10", assignee: actor, design_url: "https://www.canva.com/d/1", published_url: "", review_note: "internal: redo this", ...over });
