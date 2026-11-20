@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { crmActor } from "@/lib/crm/server";
-import { parseMonth } from "./schema";
+import { auditMonth, type Issue } from "./audit";
+import { parseMonth, todayKey } from "./schema";
 import { listPrograms, loadWorkspace, type Program, type Workspace } from "./server";
 
 export type StudioPage = {
@@ -8,6 +9,8 @@ export type StudioPage = {
   program: Program | null;
   month: string;
   workspace: Workspace | null;
+  /** Automatic check results for the month, by piece id. Pieces with no issues are absent. */
+  audit: Record<string, Issue[]>;
   production: boolean;
 };
 
@@ -29,9 +32,10 @@ export async function studioPage(
   const month = parseMonth(params.month);
   const production = process.env.VERCEL_ENV === "production";
   const programs = await listPrograms().catch(() => null);
-  if (!programs) return { programs: null, program: null, month, workspace: null, production };
+  if (!programs) return { programs: null, program: null, month, workspace: null, audit: {}, production };
   const program =
     programs.find((p) => p.id === params.program) ?? programs.find((p) => p.status !== "ended") ?? programs[0] ?? null;
   const workspace = program ? await loadWorkspace(program.id, month).catch(() => null) : null;
-  return { programs: program && !workspace ? null : programs, program, month, workspace, production };
+  const audit = program && workspace ? auditMonth(workspace.items, workspace.accounts, program.avoid_terms, todayKey()) : {};
+  return { programs: program && !workspace ? null : programs, program, month, workspace, audit, production };
 }

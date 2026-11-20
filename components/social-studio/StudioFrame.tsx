@@ -10,6 +10,7 @@ const VIEWS: { id: StudioView; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "board", label: "Production board" },
   { id: "calendar", label: "Calendar" },
+  { id: "checks", label: "Checks" },
 ];
 
 /** Shared top of every Social Studio page: title, program switcher, view tabs and month. */
@@ -19,6 +20,7 @@ export function StudioFrame({
   program,
   month,
   production,
+  checkErrors = 0,
   children,
 }: {
   view: StudioView;
@@ -26,6 +28,8 @@ export function StudioFrame({
   program: Program | null;
   month: string;
   production: boolean;
+  /** Pieces with a failed check this month, shown on the Checks tab. */
+  checkErrors?: number;
   children: ReactNode;
 }) {
   const thisMonth = parseMonth(null);
@@ -78,6 +82,9 @@ export function StudioFrame({
                 }`}
               >
                 {v.label}
+                {v.id === "checks" && checkErrors > 0 && (
+                  <span className="ml-1.5 rounded-full bg-rose-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700">{checkErrors}</span>
+                )}
               </Link>
             ))}
           </nav>

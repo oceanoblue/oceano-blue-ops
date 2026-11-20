@@ -12,6 +12,7 @@ import {
   shortDate,
 } from "@/lib/social/schema";
 import type { Account, Item, Member } from "@/lib/social/server";
+import { hasError, type Issue } from "@/lib/social/audit";
 import { ItemEditor } from "./ItemEditor";
 import { useItemFilters } from "./ItemFilters";
 
@@ -25,12 +26,14 @@ export function CalendarGrid({
   accounts,
   team,
   today,
+  audit = {},
 }: {
   month: string;
   items: Item[];
   accounts: Account[];
   team: Member[];
   today: string;
+  audit?: Record<string, Issue[]>;
 }) {
   const { visible, controls } = useItemFilters(items, accounts, team);
   const [open, setOpen] = useState<string | null>(null);
@@ -58,7 +61,7 @@ export function CalendarGrid({
       onClick={() => setOpen(item.id)}
       title={`${accountOf.get(item.account_id)?.name ?? ""}: ${STATUS_LABEL[item.status]}`}
       className={`flex w-full items-center gap-1.5 truncate rounded-md px-1.5 py-1 text-left text-[11px] font-medium ${STATUS_PILL[item.status]} ${
-        isLate(item, today) ? "ring-1 ring-rose-400" : ""
+        isLate(item, today) || hasError(audit[item.id]) ? "ring-1 ring-rose-400" : ""
       } hover:brightness-95 focus-visible:outline-2 focus-visible:outline-ocean-600`}
     >
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_BAR[item.status]}`} aria-hidden="true" />
@@ -144,6 +147,7 @@ export function CalendarGrid({
           accountName={accountOf.get(editing.account_id)?.name ?? "Account"}
           brandKitUrl={accountOf.get(editing.account_id)?.brand_kit_url}
           team={team}
+          issues={audit[editing.id]}
           onClose={() => setOpen(null)}
         />
       )}

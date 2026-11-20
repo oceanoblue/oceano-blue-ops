@@ -30,6 +30,8 @@ import {
   type Tier,
 } from "@/lib/social/schema";
 import type { Account, Item, MediaBatch, MediaRequest, Member } from "@/lib/social/server";
+import type { Issue } from "@/lib/social/audit";
+import { parseTerms } from "@/lib/social/schema";
 import { ItemEditor } from "./ItemEditor";
 import { useSocialAction } from "./useSocialAction";
 
@@ -40,7 +42,7 @@ const Out = ({ href, children }: { href: string; children: React.ReactNode }) =>
 );
 
 /** The month's pieces for one account. */
-export function AccountItems({ items, account, team, today }: { items: Item[]; account: Account; team: Member[]; today: string }) {
+export function AccountItems({ items, account, team, today, audit = {} }: { items: Item[]; account: Account; team: Member[]; today: string; audit?: Record<string, Issue[]> }) {
   const [open, setOpen] = useState<string | null>(null);
   const editing = open ? items.find((i) => i.id === open) : undefined;
   const nameOf = new Map(team.map((m) => [m.id, m.full_name]));
@@ -59,13 +61,18 @@ export function AccountItems({ items, account, team, today }: { items: Item[]; a
                   {KIND_LABEL[item.kind]} · {PILLAR_LABEL[item.pillar]} · {item.assignee ? nameOf.get(item.assignee) ?? "Assigned" : "Not assigned"}
                 </span>
               </span>
-              <span className={`pill justify-self-start ${STATUS_PILL[item.status]}`}>{STATUS_LABEL[item.status]}</span>
+              <span className="flex items-center gap-1 justify-self-start">
+                {audit[item.id] && (
+                  <span className={`pill ${audit[item.id].some((i) => i.severity === "error") ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>{audit[item.id].length} {audit[item.id].length === 1 ? "check" : "checks"}</span>
+                )}
+                <span className={`pill ${STATUS_PILL[item.status]}`}>{STATUS_LABEL[item.status]}</span>
+              </span>
             </button>
           </li>
         ))}
         {items.length === 0 && <li className="px-5 py-8 text-center text-sm text-slate-500">Nothing planned for this month yet. Plan the month from the overview.</li>}
       </ul>
-      {editing && <ItemEditor key={editing.id} item={editing} accountName={account.name} brandKitUrl={account.brand_kit_url} team={team} onClose={() => setOpen(null)} />}
+      {editing && <ItemEditor key={editing.id} item={editing} accountName={account.name} brandKitUrl={account.brand_kit_url} team={team} issues={audit[editing.id]} onClose={() => setOpen(null)} />}
     </>
   );
 }
@@ -88,6 +95,7 @@ export function AccountProfile({ account }: { account: Account }) {
     access_status: account.access_status,
     access_note: account.access_note,
     is_active: account.is_active,
+    avoid_terms: account.avoid_terms.join(", "),
   });
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setSaved(false);
@@ -108,7 +116,7 @@ export function AccountProfile({ account }: { account: Account }) {
     const profile_links = Object.fromEntries(
       form.platforms.map((p) => [p, (form.profile_links[p] ?? "").trim()] as const).filter(([, v]) => v),
     );
-    if (await run({ action: "update_account", id: account.id, patch: { ...form, profile_links } })) setSaved(true);
+    if (await run({ action: "update_account", id: account.id, patch: { ...form, profile_links, avoid_terms: parseTerms(form.avoid_terms) } })) setSaved(true);
   }
 
   return (
@@ -163,6 +171,10 @@ export function AccountProfile({ account }: { account: Account }) {
       <label className="sm:col-span-6">
         <span className="label">Voice and style notes</span>
         <textarea className="input min-h-24" maxLength={4000} value={form.voice_notes} onChange={(e) => set("voice_notes", e.target.value)} placeholder="Tone, hashtags, what to avoid, flag brand rules" />
+      </label>
+      <label className="sm:col-span-6">
+        <span className="label">Words and phrases to avoid</span>
+        <input className="input" value={form.avoid_terms} onChange={(e) => set("avoid_terms", e.target.value)} placeholder="Separate with commas. Captions that use one are flagged." />
       </label>
       <label className="sm:col-span-2">
         <span className="label">Account access</span>

@@ -259,6 +259,61 @@ export function isLate(item: { status: Status; scheduled_for: string | null }, t
 }
 
 // ---------------------------------------------------------------------------
+// Program terms and onboarding
+// ---------------------------------------------------------------------------
+
+/** The steps every new program goes through, in order. */
+export const ONBOARDING_STEPS = [
+  "agreement_signed",
+  "first_invoice",
+  "accounts_loaded",
+  "brand_kits",
+  "publishing_tool",
+  "account_access",
+  "brand_rules",
+  "media_received",
+  "style_approved",
+  "first_month_planned",
+  "first_month_scheduled",
+  "reporting_ready",
+] as const;
+export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
+export const ONBOARDING_LABEL: Record<OnboardingStep, string> = {
+  agreement_signed: "Agreement signed",
+  first_invoice: "First invoice sent",
+  accounts_loaded: "Accounts loaded with profile links",
+  brand_kits: "Canva brand kits linked and opened",
+  publishing_tool: "Publishing tool set up and profiles connected",
+  account_access: "Access confirmed for every account",
+  brand_rules: "Brand and music rules received",
+  media_received: "Starting photos and video received",
+  style_approved: "Style and templates approved by the client",
+  first_month_planned: "First month planned",
+  first_month_scheduled: "First month scheduled",
+  reporting_ready: "Monthly report set up",
+};
+export type Onboarding = Partial<Record<OnboardingStep, string>>;
+
+/** "$5,650" for 565000 cents; cents are dropped when zero. */
+export function formatCents(cents: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+  }).format(cents / 100);
+}
+/** Dollars typed into a form, as cents. Blank or invalid is zero. */
+export function dollarsToCents(value: string): number {
+  const n = Number(String(value).replace(/[$,\s]/g, ""));
+  return Number.isFinite(n) && n > 0 ? Math.min(100000000, Math.round(n * 100)) : 0;
+}
+/** The last month of a term that starts on `start` and runs `months`, as "March 2028". */
+export function termEndLabel(start: string | null, months: number): string {
+  if (!start || months < 1) return "";
+  return monthLabel(shiftMonth(start.slice(0, 7), months - 1));
+}
+
+// ---------------------------------------------------------------------------
 // Requests the office can make
 // ---------------------------------------------------------------------------
 
@@ -287,6 +342,10 @@ const date = z
 const count = (max: number) => z.number().int().min(0).max(max);
 const some = (v: Record<string, unknown>) => Object.keys(v).length > 0;
 
+/** Words or phrases captions must not use. */
+const terms = z.array(text(60).min(1)).max(40);
+const cents = z.number().int().min(0).max(100000000);
+
 export const profileLinks = z.partialRecord(z.enum(PLATFORMS), link);
 export type ProfileLinks = z.infer<typeof profileLinks>;
 
@@ -305,6 +364,7 @@ export const accountPatch = z
     access_status: z.enum(ACCESS_STATUSES),
     access_note: text(500),
     is_active: z.boolean(),
+    avoid_terms: terms,
   })
   .partial()
   .refine(some, "Nothing to change");
@@ -343,6 +403,14 @@ export const actionSchema = z.discriminatedUnion("action", [
         publishing_tool: text(80),
         status: z.enum(PROGRAM_STATUSES),
         notes: text(4000),
+        monthly_fee_cents: cents,
+        account_rate_cents: cents,
+        minimum_fee_cents: cents,
+        term_start: date.nullable(),
+        term_months: count(60),
+        media_due_day: z.number().int().min(1).max(28).nullable(),
+        agreement_url: link,
+        avoid_terms: terms,
       })
       .partial()
       .refine(some, "Nothing to change"),
@@ -352,7 +420,7 @@ export const actionSchema = z.discriminatedUnion("action", [
     program_id: id,
     tier: z.enum(TIERS),
     accounts: z
-      .array(z.object({ name: text(160).min(1), profile_links: profileLinks.default({}) }))
+      .array(z.object({ name: text(160).min(1), profile_links: profileLinks.default({}), brand_kit_url: link.default("") }))
       .min(1)
       .max(60),
   }),
@@ -371,6 +439,8 @@ export const actionSchema = z.discriminatedUnion("action", [
   }).refine((v) => v.photos + v.videos > 0, "Enter how many photos or videos arrived"),
   z.object({ action: z.literal("add_request"), account_id: id, ask: text(500).min(1), due_on: date.nullable().default(null) }),
   z.object({ action: z.literal("update_request"), id, status: z.enum(REQUEST_STATUSES) }),
+  z.object({ action: z.literal("set_onboarding_step"), id, step: z.enum(ONBOARDING_STEPS), done: z.boolean() }),
+  z.object({ action: z.literal("draft_caption"), id }),
 ]);
 export type SocialAction = z.infer<typeof actionSchema>;
 
@@ -394,18 +464,47 @@ export function platformOf(url: string): Platform | null {
   }
 }
 
+/** A link into Canva (a brand kit, folder or design). */
+export function isCanvaLink(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && /(^|\.)canva\.com$/.test(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/** Terms typed as a comma or line separated list: trimmed, de-duplicated, at most 40. */
+export function parseTerms(value: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value.split(/[,\n]/)) {
+    const term = raw.trim().replace(/\s+/g, " ").slice(0, 60);
+    if (!term || seen.has(term.toLowerCase())) continue;
+    seen.add(term.toLowerCase());
+    out.push(term);
+  }
+  return out.slice(0, 40);
+}
+
 /**
  * Accounts pasted one per line. A line is the account name, optionally
- * followed by its profile links (separated by spaces, commas, tabs or "|"),
+ * followed by its profile links and Canva brand kit link (separated by
+ * spaces, commas, tabs or "|"),
  * so a client's account list can be pasted straight from a spreadsheet.
  * Blank lines and repeated names are dropped.
  */
-export function parseAccountLines(value: string): { name: string; profile_links: ProfileLinks }[] {
+export function parseAccountLines(value: string): { name: string; profile_links: ProfileLinks; brand_kit_url: string }[] {
   const seen = new Set<string>();
-  const accounts: { name: string; profile_links: ProfileLinks }[] = [];
+  const accounts: { name: string; profile_links: ProfileLinks; brand_kit_url: string }[] = [];
   for (const line of value.split(/\r?\n/)) {
     const profile_links: ProfileLinks = {};
+    let brand_kit_url = "";
     const rest = line.replace(/https:\/\/[^\s,|]+/g, (url) => {
+      if (isCanvaLink(url)) {
+        brand_kit_url ||= url.slice(0, 500);
+        return " ";
+      }
       const platform = platformOf(url);
       if (platform && !profile_links[platform]) profile_links[platform] = url.slice(0, 500);
       return " ";
@@ -414,7 +513,7 @@ export function parseAccountLines(value: string): { name: string; profile_links:
     const key = name.toLowerCase();
     if (!name || seen.has(key)) continue;
     seen.add(key);
-    accounts.push({ name: name.slice(0, 160), profile_links });
+    accounts.push({ name: name.slice(0, 160), profile_links, brand_kit_url });
   }
   return accounts;
 }

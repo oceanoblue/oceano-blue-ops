@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink, Sparkles, X } from "lucide-react";
+import type { Issue } from "@/lib/social/audit";
 import {
   KIND_LABEL,
   PILLARS,
@@ -43,16 +44,20 @@ export function ItemEditor({
   accountName,
   brandKitUrl,
   team,
+  issues = [],
   onClose,
 }: {
   item: Item;
   accountName: string;
   brandKitUrl?: string;
   team: Member[];
+  /** Failed checks for the saved version of this piece. */
+  issues?: Issue[];
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(item));
   const { run, busy, error } = useSocialAction();
+  const drafting = useSocialAction();
   const titleId = useId();
   const firstField = useRef<HTMLInputElement>(null);
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
@@ -63,6 +68,11 @@ export function ItemEditor({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  async function draftCaption() {
+    const result = await drafting.run({ action: "draft_caption", id: item.id });
+    if (result && typeof result.caption === "string") set("caption", result.caption);
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -101,6 +111,16 @@ export function ItemEditor({
         </header>
 
         <div className="grid gap-4 overflow-y-auto px-5 py-5 sm:grid-cols-2">
+          {issues.length > 0 && (
+            <ul className="space-y-1 rounded-lg bg-ink-50 p-3 text-sm sm:col-span-2" aria-label="Checks">
+              {issues.map((issue) => (
+                <li key={issue.code} className={`flex gap-2 ${issue.severity === "error" ? "text-rose-700" : "text-amber-800"}`}>
+                  <span className="font-semibold">{issue.severity === "error" ? "Fix:" : "Check:"}</span>
+                  {issue.message}
+                </li>
+              ))}
+            </ul>
+          )}
           <label className="sm:col-span-2">
             <span className="label">Working title</span>
             <input ref={firstField} className="input" maxLength={200} value={draft.title} onChange={(e) => set("title", e.target.value)} placeholder="What this piece is about" />
@@ -140,6 +160,13 @@ export function ItemEditor({
             </span>
             <textarea className="input min-h-36" maxLength={5000} value={draft.caption} onChange={(e) => set("caption", e.target.value)} />
           </label>
+          <div className="-mt-2 flex flex-wrap items-center gap-3 sm:col-span-2">
+            <button type="button" className="btn-secondary" disabled={drafting.busy} onClick={draftCaption}>
+              <Sparkles className="h-4 w-4" aria-hidden="true" /> {drafting.busy ? "Writing..." : draft.caption ? "Redraft with AI" : "Draft with AI"}
+            </button>
+            <p className="text-xs text-slate-500">Writes from the working title and the account&apos;s voice notes. Nothing is saved until you press Save.</p>
+            <p role="alert" className="w-full text-sm text-rose-700">{drafting.error}</p>
+          </div>
           <label className="sm:col-span-2">
             <span className="label flex items-center justify-between gap-3">
               Canva design link

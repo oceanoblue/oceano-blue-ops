@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { crmActor } from "@/lib/crm/server";
 import { AccountItems, AccountProfile, MediaLog, MediaRequests } from "@/components/social-studio/AccountPanel";
+import { auditMonth } from "@/lib/social/audit";
 import { accountHref, studioHref } from "@/lib/social/links";
 import { loadAccount, mediaWindowStart } from "@/lib/social/server";
 import {
@@ -46,6 +47,7 @@ export default async function AccountPage(props: {
     videos: recent.reduce((n, m) => n + m.videos, 0),
   });
   const counts = countByStatus(items);
+  const audit = auditMonth(items, [account], program.avoid_terms, today);
   const links = account.platforms.filter((p) => account.profile_links[p]);
 
   return (
@@ -91,7 +93,7 @@ export default async function AccountPage(props: {
               <h2 className="font-display text-lg font-semibold text-ocean-950">Content for {monthLabel(month)}</h2>
               <span className="text-sm text-slate-500">{sumOf(counts, DONE)} of {quotaTotal(account)} scheduled or live</span>
             </header>
-            <AccountItems items={items} account={account} team={team} today={today} />
+            <AccountItems items={items} account={account} team={team} today={today} audit={audit} />
           </section>
           <section className="card overflow-hidden">
             <header className="border-b border-ink-100 px-5 py-3">
