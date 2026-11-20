@@ -74,7 +74,10 @@ export default async function ClientAccountsPage(props: { params: Promise<{ id: 
                   <tr key={account.id} className="hover:bg-ink-50/70">
                     <th scope="row" className="px-5 py-2.5 text-left font-semibold">
                       <div className="flex items-center gap-3">
-                        <LogoUploader key={account.id} target="account" id={account.id} name={account.name} url={account.logo_url} size="md" showActions={false} {...brandOf(account)} />
+                        {/* A fixed slot, so the names line up whether a logo is square or wide. */}
+                        <div className="flex w-28 shrink-0">
+                          <LogoUploader key={account.id} target="account" id={account.id} name={account.name} url={account.logo_url} size="md" showActions={false} {...brandOf(account)} />
+                        </div>
                         <Link href={accountHref(account.id, month)} className="text-ocean-800 hover:underline">
                           {account.name}
                         </Link>
