@@ -21,12 +21,6 @@ const STATUS_TONE: Record<Program["status"], string> = {
  * one number that says how the month is going.
  */
 export function ClientHero({ program, summary, month }: { program: Program; summary: ClientSummary; month: string }) {
-  const facts = [
-    { label: "Sub-accounts", value: String(summary.accounts) },
-    { label: "Pieces this month", value: String(summary.owed) },
-    { label: "With the client", value: String(summary.withClient) },
-    { label: "To fix", value: String(summary.errors) },
-  ];
   return (
     <header className="relative overflow-hidden rounded-2xl bg-ink-950 text-white shadow-lift">
       <div aria-hidden="true" className="pointer-events-none absolute -right-32 -top-48 h-[30rem] w-[30rem] rounded-full bg-ocean-600/30 blur-3xl" />
@@ -57,7 +51,7 @@ export function ClientHero({ program, summary, month }: { program: Program; summ
           </div>
         </div>
 
-        <div className="min-w-0">
+        {summary.owed > 0 && <div className="min-w-0">
           <p className="text-sm text-ink-200">{monthLabel(month)}</p>
           <p className="mt-1 flex flex-wrap items-baseline gap-x-3">
             <span className="text-5xl font-bold leading-none tracking-tight sm:text-6xl">{summary.percentDone}%</span>
@@ -77,20 +71,12 @@ export function ClientHero({ program, summary, month }: { program: Program; summ
             <p className="mt-2 text-xs text-ink-300">
               {summary.planned === 0
                 ? "Nothing is planned for this month yet."
-                : `${Math.max(0, summary.planned - summary.done)} more in production${summary.owed > summary.planned ? `, ${summary.owed - summary.planned} not planned yet` : ""}`}
+                : `${Math.max(0, summary.planned - summary.done)} more in production${summary.missing > 0 ? `, ${summary.missing} required slots still open` : ""}`}
             </p>
           </div>
-        </div>
+        </div>}
       </div>
 
-      <dl className="relative grid grid-cols-2 border-t border-white/10 sm:grid-cols-4">
-        {facts.map((f, i) => (
-          <div key={f.label} className={`px-6 py-4 sm:px-8 ${i % 2 === 1 ? "border-l border-white/10" : ""} ${i >= 2 ? "border-t border-white/10 sm:border-t-0" : ""} ${i === 2 ? "sm:border-l" : ""}`}>
-            <dt className="font-mono text-[10px] font-medium uppercase tracking-wider text-ink-300">{f.label}</dt>
-            <dd className="mt-1 text-2xl font-bold">{f.value}</dd>
-          </div>
-        ))}
-      </dl>
     </header>
   );
 }

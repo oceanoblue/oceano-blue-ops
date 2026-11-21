@@ -84,8 +84,8 @@ export function digestSection(
       names: unique(overdue.map((r) => names.get(r.account_id) ?? "Sub-account")),
     });
 
-  if (day >= 20 && later.summary.owed > 0 && later.summary.planned < later.summary.owed)
-    lines.push({ text: `${monthLabel(next.month)} is not fully planned: ${later.summary.planned} of ${later.summary.owed} pieces are on the plan.`, names: [] });
+  if (day >= 20 && later.summary.owed > 0 && later.summary.missing > 0)
+    lines.push({ text: `${monthLabel(next.month)} is not fully planned: ${later.summary.owed - later.summary.missing} of ${later.summary.owed} pieces are on the plan.`, names: [] });
 
   return lines.length > 0 ? { client: program.name, clientId: program.id, lines } : null;
 }

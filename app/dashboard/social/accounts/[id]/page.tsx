@@ -1,3 +1,6 @@
+import { ReuseCreative } from "@/components/social-studio/ReuseCreative";
+import { ChannelConnections } from "@/components/social-studio/ChannelConnections";
+import { noQuota } from "@/lib/social/planning";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
@@ -37,14 +40,15 @@ export default async function AccountPage(props: {
   }
   const { id } = await props.params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const month = parseMonth((await props.searchParams).month);
+  const query = await props.searchParams;
+  const month = parseMonth(query.month);
   const detail = await loadAccount(id, month).catch(() => null);
   if (!detail) notFound();
   const { account, program, items, media, requests, team } = detail;
   const today = todayKey();
   const windowStart = mediaWindowStart(today);
   const recent = media.filter((m) => m.received_on >= windowStart);
-  const health = mediaHealth(account, {
+  const health = mediaHealth(detail.entitlement ?? noQuota, {
     photos: recent.reduce((n, m) => n + m.photos, 0),
     videos: recent.reduce((n, m) => n + m.videos, 0),
   });
@@ -96,12 +100,14 @@ export default async function AccountPage(props: {
         </div>
       </div>
 
+      <ReuseCreative items={items}/>
+      <ChannelConnections id={account.id} platforms={account.platforms} profileLinks={account.profile_links} notice={typeof query.connection === "string" ? query.connection.slice(0,240) : undefined} />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="space-y-6">
           <section className="card overflow-hidden">
             <header className="flex items-baseline justify-between gap-3 border-b border-ink-100 px-5 py-3">
               <h2 className="font-display text-lg font-semibold text-ocean-950">Content for {monthLabel(month)}</h2>
-              <span className="text-sm text-slate-500">{sumOf(counts, DONE)} of {quotaTotal(account)} scheduled or live</span>
+              <span className="text-sm text-slate-500">{sumOf(counts, DONE)} of {quotaTotal(detail.entitlement ?? noQuota)} scheduled or live</span>
             </header>
             <AccountItems items={items} account={account} team={team} today={today} audit={audit} />
           </section>

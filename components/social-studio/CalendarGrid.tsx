@@ -35,7 +35,7 @@ export function CalendarGrid({
   today: string;
   audit?: Record<string, Issue[]>;
 }) {
-  const { visible, controls } = useItemFilters(items, accounts, team);
+  const { visible, controls } = useItemFilters(items, accounts, team, audit);
   const [open, setOpen] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const accountOf = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
@@ -66,7 +66,7 @@ export function CalendarGrid({
     >
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_BAR[item.status]}`} aria-hidden="true" />
       <span className="truncate">
-        {accountOf.get(item.account_id)?.name ?? "Account"}
+        {item.title || accountOf.get(item.account_id)?.name || "Untitled"}
         <span className="opacity-70"> · {KIND_LABEL[item.kind]}</span>
       </span>
     </button>
@@ -135,7 +135,7 @@ export function CalendarGrid({
 
       {unscheduled.length > 0 && (
         <section className="card p-4">
-          <h2 className="mb-2 text-sm font-semibold text-ink-900">No publish date in this month ({unscheduled.length})</h2>
+          <h2 className="mb-2 text-sm font-semibold text-ink-900">No publish date ({unscheduled.length})</h2>
           <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-4">{unscheduled.map(chip)}</div>
         </section>
       )}

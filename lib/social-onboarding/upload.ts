@@ -21,7 +21,7 @@ export async function uploadSigned(
   if (file.size <= RESUMABLE_BYTES) {
     const { error } = await createClient()
       .storage.from(signed.bucket)
-      .uploadToSignedUrl(signed.path, signed.token, file, { contentType, upsert: true });
+      .uploadToSignedUrl(signed.path, signed.token, file, { contentType, upsert: false });
     if (error) throw new Error(error.message);
     onProgress(1);
     return;
@@ -34,7 +34,7 @@ export async function uploadSigned(
       retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
       headers: {
         "x-signature": signed.token,
-        "x-upsert": "true",
+        "x-upsert": "false",
         apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
       },
       uploadDataDuringCreation: true,

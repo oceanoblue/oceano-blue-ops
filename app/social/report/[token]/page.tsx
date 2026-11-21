@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, UploadCloud } from "lucide-react";
@@ -59,11 +60,12 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
 
   const readOnly = process.env.VERCEL_ENV !== "production";
   const { totals } = report;
-  const delivered = totals.live + totals.scheduled;
+  const delivered = totals.fulfilled;
+  const officeLed = report.approval_mode === "office";
   const planned = CLIENT_STAGES.reduce((n, s) => n + totals[s], 0);
   const needs = report.accounts.filter((a) => a.media !== "good" || a.requests.length > 0);
   // A piece's journey in order, lightest to darkest: the darker the bar, the closer to live.
-  const tiles = CLIENT_STAGES.map((stage, i) => ({ stage, label: CLIENT_STAGE_LABEL[stage], value: totals[stage], color: VIZ.ramp[i] }));
+  const tiles = CLIENT_STAGES.map((stage, i) => ({ stage, label: officeLed && stage === "for_review" ? "Office review" : CLIENT_STAGE_LABEL[stage], value: totals[stage], color: VIZ.ramp[i] }));
   const percent = totals.owed > 0 ? Math.min(100, Math.round((delivered / totals.owed) * 100)) : 0;
 
   return (
@@ -126,7 +128,7 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
           </dl>
         </section>
 
-        {totals.for_review > 0 && (
+        {!officeLed && totals.for_review > 0 && (
           <p className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
             <strong>
               {totals.for_review} {totals.for_review === 1 ? "piece is" : "pieces are"} ready for your review.
@@ -168,9 +170,9 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
           <summary className="cursor-pointer p-5 text-base font-semibold text-ink-900">How this page works</summary>
           <ul className="list-disc space-y-1.5 px-10 pb-5 text-sm leading-relaxed text-slate-700">
             <li>Use the arrows at the top to move between months.</li>
-            <li>Every piece is one of: in progress, ready for your review, approved, scheduled or live.</li>
-            <li>You see the caption and design once a piece is ready for your review. Before that you see its topic and date.</li>
-            <li>Approve a piece, or ask for changes and tell us what to change. You can also ask for a change after a piece is approved or live.</li>
+            <li>Follow each piece from production through publication.</li>
+            <li>You can see the caption and final creative once a piece reaches review.</li>
+            <li>{officeLed ? "Oceano authorizes publishing. Flag a concern on a piece or send the team a note." : "Approve a piece or tell us what to change. You can also flag a concern after approval."}</li>
             <li>This page is private to {report.client}. Anyone with the link can use it, so please share it only with your team.</li>
           </ul>
           <p className="px-5 pb-5">
@@ -183,8 +185,9 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
         <section>
           <h2 className="font-display text-2xl text-ocean-950">By account</h2>
           <div className="mt-4 space-y-3">
-            {report.accounts.map((a) => {
+            {report.accounts.slice().sort((a, b) => officeLed ? 0 : count(b.pieces, "for_review") - count(a.pieces, "for_review")).map((a) => {
               const review = count(a.pieces, "for_review");
+              const reviewable = a.pieces.filter(p => p.stage === "for_review" && !!p.creative_url);
               const line = [
                 count(a.pieces, "live") > 0 && `${count(a.pieces, "live")} live`,
                 count(a.pieces, "scheduled") > 0 && `${count(a.pieces, "scheduled")} scheduled`,
@@ -201,23 +204,29 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
                         <span className="mt-0.5 block text-sm text-slate-600">{a.pieces.length === 0 ? "Nothing on the calendar yet" : line.join(" · ") || `${a.pieces.length} pieces`}</span>
                       </span>
                     </span>
-                    {review > 0 && <span className={`pill ${CLIENT_STAGE_PILL.for_review}`}>{review} ready for your review</span>}
+                    {review > 0 && <span className={`pill ${CLIENT_STAGE_PILL.for_review}`}>{review} {officeLed ? "in office review" : "ready for your review"}</span>}
                   </summary>
-                  {review > 1 && (
+                  {report.approval_mode === "batch" && reviewable.length > 1 && (
                     <div className="flex border-t border-ink-100 px-5 py-3">
-                      <ApproveAll token={token} accountId={a.id} month={month} count={review} readOnly={readOnly} />
+                      <ApproveAll token={token} accountId={a.id} month={month} items={reviewable.map(({ id, revision, date, title }) => ({ id, revision, date, title }))} readOnly={readOnly} />
                     </div>
                   )}
                   {a.pieces.length > 0 && (
                     <ul className="divide-y divide-ink-100 border-t border-ink-100">
-                      {a.pieces.map((p, i) => (
+                      {a.pieces.slice().sort((a, b) => Number(b.stage === "for_review") - Number(a.stage === "for_review")).map((p, i) => (
                         <li key={p.id || i} className="grid gap-2 px-5 py-3 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-start">
                           <span className="text-sm tabular-nums text-slate-500">{shortDate(p.date)}</span>
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-ink-900">
                               {p.title || KIND_LABEL[p.kind]} <span className="font-normal text-slate-500">· {KIND_LABEL[p.kind]}</span>
                             </span>
+                            {p.id && <span className="mt-1 block text-sm text-slate-600">Revision {p.revision}
+                              {p.publish_time && ` · ${p.publish_time} ${p.timezone}`}
+                              {p.destinations.map(d => <span key={d.platform}> · {d.url ? <a className="capitalize underline" href={d.url} target="_blank" rel="noreferrer">{d.platform}</a> : d.platform}</span>)}</span>}
                             {p.caption && <span className="mt-1 block whitespace-pre-line text-sm leading-relaxed text-slate-700">{p.caption}</span>}
+                            {p.creative_url && (p.creative_type.startsWith("video/") ?
+                              <video className="mt-3 max-h-80 w-auto rounded-lg" preload="none" controls src={`${p.creative_url}&token=${encodeURIComponent(token)}`} aria-label="Video for this revision" /> :
+                              <Image unoptimized width={960} height={640} className="mt-3 h-auto max-h-80 w-auto rounded-lg object-contain" loading="lazy" src={`${p.creative_url}&token=${encodeURIComponent(token)}`} alt={p.title || "Creative for this revision"} />)}
                             {(p.design_url || p.published_url) && (
                               <span className="mt-1.5 flex flex-wrap gap-4">
                                 {p.published_url && (
@@ -240,9 +249,9 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
                                 {p.feedback.decision === "changes" && p.feedback.note && <span className="mt-1 block whitespace-pre-line text-slate-600">&ldquo;{p.feedback.note}&rdquo;</span>}
                               </span>
                             )}
-                            {p.id && <PieceActions key={`${p.id}-${p.stage}`} token={token} itemId={p.id} canApprove={p.stage === "for_review"} readOnly={readOnly} />}
+                            {p.id && <PieceActions key={`${p.id}-${p.revision}-${p.stage}`} token={token} itemId={p.id} revision={p.revision} canApprove={!officeLed && !!p.creative_url && p.stage === "for_review"} readOnly={readOnly} />}
                           </span>
-                          <span className={`pill justify-self-start sm:justify-self-end ${CLIENT_STAGE_PILL[p.stage]}`}>{CLIENT_STAGE_LABEL[p.stage]}</span>
+                          <span className={`pill justify-self-start sm:justify-self-end ${CLIENT_STAGE_PILL[p.stage]}`}>{officeLed && p.stage === "for_review" ? "Office review" : CLIENT_STAGE_LABEL[p.stage]}</span>
                         </li>
                       ))}
                     </ul>
@@ -274,6 +283,26 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
                 </li>
               ))}
             </ul>
+          </section>
+        )}
+
+        {report.reporting_mode === "client_managed" && (
+          <section className="card p-5">
+            <h2 className="font-display text-xl">Performance reporting</h2>
+            <p className="mt-2 text-sm">Your team manages channel analytics in your publishing platform. This page tracks content production and delivery.</p>
+          </section>
+        )}
+        {report.reporting_mode === "agency_report" && (
+          <section className="card p-5">
+            <h2 className="font-display text-xl">Performance report for {monthLabel(month)}</h2>
+            {report.performance_report ? (
+              <>
+                <p className="mt-2 text-sm text-slate-600">
+                  {report.performance_report.source} · Updated {shortDate(report.performance_report.updated_at.slice(0, 10))}
+                </p>
+                <a href={report.performance_report.report_url} target="_blank" rel="noreferrer" className="btn-secondary mt-3">Open performance report</a>
+              </>
+            ) : <p className="mt-2 text-sm">The monthly performance report has not been added yet.</p>}
           </section>
         )}
 

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Megaphone, Users } from "lucide-react";
+import { inquiryOfficeConfig } from "@/lib/crm/inquiry-server";
+import { defaultReplyTo, isEmailConfigured } from "@/lib/email/resend";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/ui/StatCard";
 import { Meter } from "@/components/social-studio/Charts";
@@ -42,6 +44,9 @@ export default async function SocialClientsPage({ searchParams }: { searchParams
       </SocialHomeFrame>
     );
 
+  const intakeMail = inquiryOfficeConfig();
+  const socialMail = process.env.SOCIAL_ALERT_EMAIL || defaultReplyTo();
+  const mailReady = isEmailConfigured();
   const live = clients.filter((c) => c.program.status !== "ended");
   const total = (pick: (c: ClientCard) => number) => live.reduce((n, c) => n + pick(c), 0);
   const owed = total((c) => c.summary.owed);
@@ -131,6 +136,20 @@ export default async function SocialClientsPage({ searchParams }: { searchParams
           );
         })}
       </ul>
+
+      <details className="card p-5">
+        <summary className="cursor-pointer text-sm font-semibold text-ocean-800">Office notifications and publishing</summary>
+        <dl className="mt-4 space-y-3 text-sm">
+          <div><dt className="font-semibold">New intake notifications</dt>
+            <dd>{mailReady && intakeMail.enabled ? intakeMail.recipient : "Email delivery is off."}</dd></div>
+          <div><dt className="font-semibold">Signatures, feedback and daily alerts</dt>
+            <dd>{mailReady ? socialMail : "Email delivery is off."}</dd></div>
+          <div><dt className="font-semibold">Publishing handoff</dt>
+            <dd>{production && process.env.SOCIAL_PUBLISHING_ENABLED === "true"
+              ? "Enabled for clients whose publishing switch is on."
+              : "Test mode only. Content stays in Ops."}</dd></div>
+        </dl>
+      </details>
 
       <section className="card">
         <details className="p-5">

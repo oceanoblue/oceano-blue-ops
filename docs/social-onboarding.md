@@ -15,19 +15,20 @@ Sending saves the answers first, then uploads the files one at a time with progr
 
 `/dashboard/crm/social-onboarding` (admin and coordinator) lists each intake with the answers, where the client is on access for each platform, and the files grouped by type. Files download through five-minute signed links. "Copy client link" copies the public page address. If `CRM_INQUIRY_ALERTS_ENABLED=1` and `CRM_INQUIRY_ALERT_TO` are set (the same settings the inquiry inbox uses), the office also gets an email for each new intake.
 
-Intakes are not linked to CRM contacts or projects yet.
+The office can link an intake to an existing Social Studio client or create one from the submission. Linking applies the client’s requested approval workflow. The client’s Agreement tab links back to the original answers and verified files.
 
 ## Deployment
 
-Apply `20261113140000_social_onboarding.sql` before deploying the code. It adds two tables (`social_onboarding_submissions`, `social_onboarding_files`) and a private `social-onboarding` storage bucket. No existing data changes.
+Apply the Social Studio and approval workflow migrations together with `20261121120000_social_intake_workflow.sql` before deploying the code. The intake uses a private `social-onboarding` storage bucket.
 
 Like the other public forms, sending and uploading only work in production. Preview deployments show the page read-only.
 
 ## Limits and safeguards
 
-- Up to 40 files per client, 2 GB per file, 10 GB per client. Larger libraries go in the folder link field.
+- Up to 40 files per submission, 2 GB per file and 10 GB per submission, reserved atomically. Larger libraries go in the folder link field.
 - File types are allowlisted by extension (images, video, PDF and office documents, design files, fonts, ZIP). The list is in `lib/social-onboarding/schema.ts`.
 - The bucket is private with no browser policies. Uploads use one-time signed upload URLs issued by the server for a path the server chooses; files over 6 MB use resumable uploads so a dropped connection resumes.
+- Storage verifies each completed file’s byte count. The office downloads a private copy to which no upload ticket has been issued. Daily maintenance removes unconfirmed and abandoned objects older than 48 hours.
 - A client can only add files to their own intake, for 24 hours after sending, using a secret their browser holds.
 - Same-origin JSON only, a honeypot field, per-address rate limits, and a daily ceiling on upload requests across all clients.
 

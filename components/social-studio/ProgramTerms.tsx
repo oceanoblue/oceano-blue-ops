@@ -26,6 +26,8 @@ export function ProgramTerms({ program, accountCount, open = false }: { program:
     contact_name: program.contact_name,
     contact_email: program.contact_email,
     publishing_tool: program.publishing_tool,
+    approval_mode: program.approval_mode ?? "individual",
+    publishing_enabled: program.publishing_enabled ? "on" : "off",
     monthly_fee: dollars(program.monthly_fee_cents),
     account_rate: dollars(program.account_rate_cents),
     minimum_fee: dollars(program.minimum_fee_cents),
@@ -37,7 +39,7 @@ export function ProgramTerms({ program, accountCount, open = false }: { program:
     avoid_terms: program.avoid_terms.join(", "),
     notes: program.notes,
   });
-  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setSaved(false);
     setForm((f) => ({ ...f, [key]: e.target.value }));
   };
@@ -58,6 +60,8 @@ export function ProgramTerms({ program, accountCount, open = false }: { program:
         contact_name: form.contact_name,
         contact_email: form.contact_email,
         publishing_tool: form.publishing_tool,
+        approval_mode: form.approval_mode,
+        publishing_enabled: form.publishing_enabled === "on",
         monthly_fee_cents: dollarsToCents(form.monthly_fee),
         account_rate_cents: dollarsToCents(form.account_rate),
         minimum_fee_cents: dollarsToCents(form.minimum_fee),
@@ -122,6 +126,21 @@ export function ProgramTerms({ program, accountCount, open = false }: { program:
         <label className="sm:col-span-2">
           <span className="label">Publishing tool</span>
           <input className="input" maxLength={80} value={form.publishing_tool} onChange={set("publishing_tool")} />
+        </label>
+        <label className="sm:col-span-6">
+          <span className="label">Publisher handoff</span>
+          <select className="input" value={form.publishing_enabled} onChange={set("publishing_enabled")}>
+            <option value="off">Test only</option>
+            <option value="on">Allow the configured publishing worker to claim authorized posts</option>
+          </select>
+        </label>
+        <label className="sm:col-span-6">
+          <span className="label">Who authorizes publishing?</span>
+          <select className="input" value={form.approval_mode} onChange={set("approval_mode")}>
+            <option value="office">Oceano staff authorizes. Client follows progress and flags concerns.</option>
+            <option value="individual">Client approves each piece individually.</option>
+            <option value="batch">Client may approve a displayed group for one account.</option>
+          </select>
         </label>
         <label className="sm:col-span-6">
           <span className="label">Link to an agreement signed outside this system</span>

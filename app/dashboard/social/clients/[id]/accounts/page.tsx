@@ -31,11 +31,12 @@ export default async function ClientAccountsPage(props: { params: Promise<{ id: 
     return { brand, mates: others.filter((o) => !o.logo_url).map((o) => ({ id: o.id, name: o.name })) };
   };
   const ordered = TIERS.flatMap((tier) => rows.filter((r) => r.account.tier === tier));
+  const monthlyScopes = new Map(workspace.entitlements.map(s => [s.account_id, s]));
   const totals = rows.reduce(
     (t, r) => ({
-      posts: t.posts + r.account.posts_per_month,
-      reels: t.reels + r.account.reels_per_month,
-      google: t.google + r.account.google_posts_per_month,
+      posts: t.posts + (monthlyScopes.get(r.account.id)?.posts_per_month ?? 0),
+      reels: t.reels + (monthlyScopes.get(r.account.id)?.reels_per_month ?? 0),
+      google: t.google + (monthlyScopes.get(r.account.id)?.google_posts_per_month ?? 0),
     }),
     { posts: 0, reels: 0, google: 0 },
   );
@@ -85,9 +86,9 @@ export default async function ClientAccountsPage(props: { params: Promise<{ id: 
                     </th>
                     <td className="px-3 py-2.5 text-slate-600">{TIER_LABEL[account.tier]}</td>
                     <td className="px-3 py-2.5 text-slate-600">{account.platforms.map((p) => PLATFORM_LABEL[p]).join(", ") || "Not set"}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{account.posts_per_month}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{account.reels_per_month}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{account.google_posts_per_month}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{monthlyScopes.get(account.id)?.posts_per_month ?? 0}{!!account.post_weekdays?.length && <small className="block">{account.post_weekdays.length}/week</small>}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{monthlyScopes.get(account.id)?.reels_per_month ?? 0}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{monthlyScopes.get(account.id)?.google_posts_per_month ?? 0}</td>
                     <td className="px-3 py-2.5">
                       <span className={`pill whitespace-nowrap ${ACCESS_PILL[account.access_status]}`}>{ACCESS_LABEL[account.access_status]}</span>
                     </td>

@@ -8,8 +8,30 @@ type Row = Record<string, any>;
 const tables: Record<string, Row[]> = {};
 function fakeDb() {
   return {
+    // Route tests delegate atomicity and concurrency to the PostgreSQL suite.
+    rpc(name: string, args: Row) {
+      if (name === "social_month_scope") {
+        const accounts = tables.social_accounts ?? [];
+        return {order: () => ({range:(from:number,to:number) => ({data:accounts.filter(a => a.program_id===args.p_program && a.is_active)
+        .map(a => ({...a,account_id:a.id})).slice(from,to+1),error:null})})};
+      }
+      if (name !== "social_review_items") throw new Error(`Unexpected RPC ${name}`);
+      const rows = args.p_items.map((x: Row) => tables.social_content_items.find(r => r.id === x.id && r.account_id === args.p_account && r.month === args.p_month));
+      if (rows.some((r: Row) => !r)) return { error: { code: "P0002", message: "Unavailable." } };
+      for (const r of rows) {
+        if ((args.p_event === "approved" && r.status !== "client_review") || (args.p_event === "handled" && r.client_decision !== "changes"))
+          return { error: { code: "P0001", message: "Refresh the piece." } };
+      }
+      for (const r of rows) {
+        if (args.p_event === "approved") Object.assign(r, { status: "approved", client_decision: "approved", client_reviewer: args.p_name });
+        if (args.p_event === "changes") Object.assign(r, { status: r.status === "client_review" ? "in_design" : r.status, client_decision: "changes", client_note: args.p_note, client_reviewer: args.p_name });
+        if (args.p_event === "handled") Object.assign(r, { status: r.status === "approved" ? "client_review" : r.status, client_decision: "" });
+      }
+      return { data: rows.length, error: null };
+    },
     from(table: string) {
       const filters: ((r: Row) => boolean)[] = [];
+      let range: [number,number] | null = null;
       let patch: Row | null = null;
       let inserted: Row | null = null;
       const match = () => (tables[table] ??= []).filter((r) => filters.every((f) => f(r)));
@@ -17,14 +39,16 @@ function fakeDb() {
         if (inserted) return { data: [inserted], error: null };
         const rows = match();
         if (patch) rows.forEach((r) => Object.assign(r, patch));
-        return { data: rows.map((r) => ({ ...r })), error: null };
+        return { data: (range ? rows.slice(range[0], range[1]+1) : rows).map((r) => ({ ...r })), error: null };
       };
       const b: any = {
         select: () => b,
+        range: (from:number,to:number) => ((range=[from,to]),b),
         order: () => b,
         limit: () => b,
-        eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), b),
+        eq: (c: string, v: unknown) => (filters.push((r) => c==="social_accounts.program_id" ? tables.social_accounts?.some(a=>a.id===r.account_id && a.program_id===v) : r[c] === v), b),
         in: (c: string, v: unknown[]) => (filters.push((r) => v.includes(r[c])), b),
+        lte: (c: string, v: string) => (filters.push((r) => r[c] <= v), b),
         gte: (c: string, v: string) => (filters.push((r) => r[c] >= v), b),
         update: (p: Row) => ((patch = p), b),
         insert: (row: Row) => {
@@ -107,8 +131,7 @@ describe("an agreement from draft to signed by both", () => {
 
     await runAction(actor, { action: "countersign_agreement", id: id as string, signer_name: "Gus R", signer_title: "Founder", consent: true });
     expect(agreement()).toMatchObject({ status: "signed", counter_name: "Gus R", counter_consent: COUNTERSIGN_CONSENT, countersigned_by: actor });
-    // The onboarding step is ticked for the client.
-    expect(tables.social_programs[0].onboarding.agreement_signed).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // The database checklist trigger is exercised in the PostgreSQL-backed intake workflow suite.
 
     // A fully signed agreement cannot be cancelled, and its link shows both signatures.
     await expect(runAction(actor, { action: "void_agreement", id: id as string })).rejects.toMatchObject({ status: 409 });
@@ -179,7 +202,7 @@ describe("the client report link", () => {
     tables.social_media_requests = [{ id: "r1", account_id: "a1", ask: "Pool photos", due_on: "2027-01-15", status: "sent", created_at: "2027-01-01" }];
 
     const report = (await publicReport(token, "2027-01"))!;
-    expect(report.totals).toEqual({ owed: 3, in_progress: 1, for_review: 1, approved: 0, scheduled: 0, live: 1 });
+    expect(report.totals).toEqual({ owed: 3, fulfilled: 1, in_progress: 1, for_review: 1, approved: 0, scheduled: 0, live: 1 });
     expect(report.accounts.map((a) => a.name)).toEqual(["Hotel A"]);
     const [inProgress, review, live] = report.accounts[0].pieces;
     // A piece still being made shows its title and date only.
@@ -238,55 +261,61 @@ describe("what a client can do from their page", () => {
   });
 
   it("approves a piece that is waiting for review, once, and records who said so", async () => {
-    expect(await clientAction(token, { action: "approve", item_id: ids.review, name: "Pat Lee" })).toMatchObject({ approved: 1, notify: null, client: "Test Hotels" });
+    expect(await clientAction(token, { action: "approve", revision: 1, item_id: ids.review, name: "Pat Lee" })).toMatchObject({ approved: 1, notify: null, client: "Test Hotels" });
     expect(row(ids.review)).toMatchObject({ status: "approved", client_decision: "approved", client_reviewer: "Pat Lee" });
-    await expect(clientAction(token, { action: "approve", item_id: ids.review, name: "Pat Lee" })).rejects.toMatchObject({ status: 409 });
+    await expect(clientAction(token, { action: "approve", revision: 1, item_id: ids.review, name: "Pat Lee" })).rejects.toMatchObject({ status: 409 });
   });
 
   it("treats another client's piece, a paused sub-account's piece and an unseen piece as not found, and changes nothing", async () => {
     for (const item_id of [ids.foreign, ids.onPaused, ids.making, "55555555-5555-4555-8555-5555555555ff"]) {
-      await expect(clientAction(token, { action: "approve", item_id, name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
-      await expect(clientAction(token, { action: "request_changes", item_id, name: "Pat Lee", note: "Change it" })).rejects.toMatchObject({ status: 404 });
+      await expect(clientAction(token, { action: "approve", revision: 1, item_id, name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
+      await expect(clientAction(token, { action: "request_changes", revision: 1, item_id, name: "Pat Lee", note: "Change it" })).rejects.toMatchObject({ status: 404 });
     }
     expect(row(ids.foreign)).toMatchObject({ status: "client_review", client_decision: "" });
     expect(row(ids.onPaused).status).toBe("client_review");
     expect(row(ids.making)).toMatchObject({ status: "in_design", client_note: "" });
     // The other client's link cannot reach this client's pieces either.
-    await expect(clientAction("o".repeat(43), { action: "approve", item_id: ids.review, name: "Mallory" })).rejects.toMatchObject({ status: 404 });
+    await expect(clientAction("o".repeat(43), { action: "approve", revision: 1, item_id: ids.review, name: "Mallory" })).rejects.toMatchObject({ status: 404 });
     expect(row(ids.review).status).toBe("client_review");
-    await expect(clientAction("not-a-link", { action: "approve", item_id: ids.review, name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
-    await expect(clientAction("z".repeat(43), { action: "approve", item_id: ids.review, name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
+    await expect(clientAction("not-a-link", { action: "approve", revision: 1, item_id: ids.review, name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
+    await expect(clientAction("z".repeat(43), { action: "approve", revision: 1, item_id: ids.review, name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
   });
 
   it("sends a piece under review back to design when changes are asked for, and tells the office", async () => {
-    const result = await clientAction(token, { action: "request_changes", item_id: ids.review, name: "Pat Lee", note: "Use the pool photo" });
+    const result = await clientAction(token, { action: "request_changes", revision: 1, item_id: ids.review, name: "Pat Lee", note: "Use the pool photo" });
     expect(result.notify).toEqual({ kind: "changes", by: "Pat Lee", account: "Hotel A", title: "Lobby", text: "Use the pool photo" });
     expect(row(ids.review)).toMatchObject({ status: "in_design", client_decision: "changes", client_note: "Use the pool photo", client_reviewer: "Pat Lee" });
-    // Sending it back to the client starts a new round and clears the request.
+    const report = await publicReport(token, "2027-01");
+    const receipt = report?.accounts[0].pieces.find(piece => piece.feedback?.note === "Use the pool photo");
+    expect(receipt).toMatchObject({
+      stage: "in_progress", feedback: { decision: "changes", by: "Pat Lee", note: "Use the pool photo" },
+      id: "", caption: "", creative_url: "", design_url: "", destinations: [],
+    });
+    // The open client concern remains visible when the office returns the piece for review.
     await runAction(actor, { action: "update_item", id: ids.review, patch: { status: "client_review" } });
-    expect(row(ids.review)).toMatchObject({ status: "client_review", client_decision: "", client_note: "Use the pool photo" });
+    expect(row(ids.review)).toMatchObject({ status: "client_review", client_decision: "changes", client_note: "Use the pool photo" });
   });
 
   it("keeps an approved or live piece where it is when a change is asked for, and holds it until the office deals with it", async () => {
-    await clientAction(token, { action: "request_changes", item_id: ids.approved, name: "Pat Lee", note: "Wrong date" });
-    await clientAction(token, { action: "request_changes", item_id: ids.live, name: "Pat Lee", note: "Typo in the caption" });
+    await clientAction(token, { action: "request_changes", revision: 1, item_id: ids.approved, name: "Pat Lee", note: "Wrong date" });
+    await clientAction(token, { action: "request_changes", revision: 1, item_id: ids.live, name: "Pat Lee", note: "Typo in the caption" });
     expect(row(ids.approved)).toMatchObject({ status: "approved", client_decision: "changes" });
     expect(row(ids.live)).toMatchObject({ status: "published", client_decision: "changes" });
     const issues = auditItem({ ...row(ids.approved), design_url: "https://www.canva.com/d/1" } as never, { id: ids.hotel, platforms: ["facebook"], avoid_terms: [] }, { today: "2027-01-05", programAvoid: [], repeated: false });
     expect(issues).toContainEqual(expect.objectContaining({ code: "client_changes", severity: "error", message: expect.stringContaining("Wrong date") }));
-    await runAction(actor, { action: "resolve_client_feedback", id: ids.approved });
-    expect(row(ids.approved)).toMatchObject({ status: "approved", client_decision: "" });
-    await expect(runAction(actor, { action: "resolve_client_feedback", id: ids.approved })).rejects.toMatchObject({ status: 409 });
+    await runAction(actor, { action: "resolve_client_feedback", revision: 1, id: ids.approved });
+    expect(row(ids.approved)).toMatchObject({ status: "client_review", client_decision: "" });
+    await expect(runAction(actor, { action: "resolve_client_feedback", revision: 1, id: ids.approved })).rejects.toMatchObject({ status: 409 });
   });
 
   it("approves everything waiting for one sub-account in the month on screen, and nothing else", async () => {
-    expect((await clientAction(token, { action: "approve_all", account_id: ids.hotel, month: "2027-01", name: "Pat Lee" })).approved).toBe(2);
+    expect((await clientAction(token, { action: "approve_all", items: [ids.review, ids.review2].map(id => ({ id, revision: 1 })), account_id: ids.hotel, month: "2027-01", name: "Pat Lee" })).approved).toBe(2);
     expect([ids.review, ids.review2].map((id) => row(id).status)).toEqual(["approved", "approved"]);
     expect(row(ids.nextMonth).status).toBe("client_review");
     expect(row(ids.making).status).toBe("in_design");
     expect(row(ids.foreign).status).toBe("client_review");
-    await expect(clientAction(token, { action: "approve_all", account_id: ids.theirs, month: "2027-01", name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
-    await expect(clientAction(token, { action: "approve_all", account_id: ids.paused, month: "2027-01", name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
+    await expect(clientAction(token, { action: "approve_all", items: [ids.review, ids.review2].map(id => ({ id, revision: 1 })), account_id: ids.theirs, month: "2027-01", name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
+    await expect(clientAction(token, { action: "approve_all", items: [ids.review, ids.review2].map(id => ({ id, revision: 1 })), account_id: ids.paused, month: "2027-01", name: "Pat Lee" })).rejects.toMatchObject({ status: 404 });
     expect(row(ids.onPaused).status).toBe("client_review");
   });
 
@@ -308,7 +337,7 @@ describe("what a client can do from their page", () => {
   });
 
   it("shows the client their own answers on the page, and never another client's pieces", async () => {
-    await clientAction(token, { action: "request_changes", item_id: ids.approved, name: "Pat Lee", note: "Wrong date" });
+    await clientAction(token, { action: "request_changes", revision: 1, item_id: ids.approved, name: "Pat Lee", note: "Wrong date" });
     const report = (await publicReport(token, "2027-01"))!;
     expect(report.accounts.map((a) => a.name)).toEqual(["Hotel A"]);
     const shown = report.accounts[0].pieces.find((p) => p.id === ids.approved)!;

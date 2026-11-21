@@ -22,9 +22,9 @@ const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
 
 /** The month's pieces as columns, one per production stage. */
-export function Board({ items, accounts, team, today, audit = {} }: { items: Item[]; accounts: Account[]; team: Member[]; today: string; audit?: Record<string, Issue[]> }) {
-  const { visible, controls } = useItemFilters(items, accounts, team);
-  const [open, setOpen] = useState<string | null>(null);
+export function Board({ initialItem, items, accounts, team, today, audit = {} }: { initialItem?: string; items: Item[]; accounts: Account[]; team: Member[]; today: string; audit?: Record<string, Issue[]> }) {
+  const { visible, controls } = useItemFilters(items, accounts, team, audit);
+  const [open, setOpen] = useState<string | null>(initialItem ?? null);
   const { run, busy, error } = useSocialAction();
   const accountOf = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
   const nameOf = useMemo(() => new Map(team.map((m) => [m.id, m.full_name])), [team]);
@@ -39,7 +39,7 @@ export function Board({ items, accounts, team, today, audit = {} }: { items: Ite
     <div className="space-y-4">
       {controls}
       <p role="alert" className="min-h-5 text-sm text-rose-700">{error}</p>
-      <div className="grid grid-flow-col auto-cols-[minmax(15rem,1fr)] gap-3 overflow-x-auto pb-4">
+      <div className="grid grid-cols-1 gap-3 pb-4 md:grid-flow-col md:auto-cols-[minmax(15rem,1fr)] md:grid-cols-none md:overflow-x-auto">
         {STATUSES.map((status, index) => {
           const list = columns.get(status) ?? [];
           const next = STATUSES[index + 1];
@@ -91,10 +91,10 @@ export function Board({ items, accounts, team, today, audit = {} }: { items: Ite
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => run({ action: "update_item", id: item.id, patch: { status: next } })}
+                            onClick={() => ["approved", "scheduled", "published"].includes(next) ? setOpen(item.id) : run({ action: "update_item", id: item.id, patch: { status: next } })}
                             className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-ocean-700 hover:bg-ocean-50 disabled:opacity-50"
                           >
-                            {STATUS_LABEL[next]} <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                            {["approved", "scheduled", "published"].includes(next) ? "Review & delivery" : STATUS_LABEL[next]} <ArrowRight className="h-3 w-3" aria-hidden="true" />
                           </button>
                         )}
                       </div>
