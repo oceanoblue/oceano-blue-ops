@@ -2,7 +2,7 @@ import { z } from "zod";
 import { CrmError, crmDb } from "@/lib/crm/server";
 import { auditMonth } from "./audit";
 import { listPrograms, loadWorkspace, type Account, type Item } from "./server";
-import { PLATFORMS, todayKey, type Platform } from "./schema";
+import { PLATFORMS, publishTiming, todayKey, zonedInstant, type Platform } from "./schema";
 import { workflowError } from "./review";
 
 const uuid = z.string().uuid();
@@ -32,7 +32,9 @@ async function queue(programId: string, month: string) {
     records.push(...rows.data as DestinationState[]);
   }
   const scopes = new Map(workspace.entitlements.map(row => [row.account_id, row]));
-  const candidates: { id: string; revision: number; platform: Platform }[] = [];
+  /** publish_at is the exact moment. due means send it now; stale means its time passed over a day ago. */
+  const candidates: { id: string; revision: number; platform: Platform; publish_at: string; due: boolean; stale: boolean }[] = [];
+  const now = new Date();
   const held: { id: string; platform?: Platform; issues: string[] }[] = [];
   for (const item of items) {
     const account = accounts.get(item.account_id);
@@ -53,7 +55,8 @@ async function queue(programId: string, month: string) {
       if (!account.provider_destinations?.[platform]?.trim()) { held.push({ id: item.id, platform, issues: ["Provider profile ID missing."] }); continue; }
       const conflict = records.find(row => row.item_id === item.id && row.platform === platform && row.state !== "failed");
       if (conflict) { held.push({ id: item.id, platform, issues: [`Delivery is ${conflict.state}. Check its provider receipt.`] }); continue; }
-      candidates.push({ id: item.id, platform, revision: item.review_revision! });
+      const at = zonedInstant(item.scheduled_for, item.publish_time, account.publishing_timezone);
+      candidates.push({ id: item.id, platform, revision: item.review_revision!, publish_at: at ? at.toISOString() : "", ...publishTiming(at, now) });
     }
   }
   return { program, candidates, held, items, accounts };
