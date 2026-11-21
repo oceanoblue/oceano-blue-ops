@@ -224,11 +224,13 @@ export function ItemEditor({
             <input type="url" className="input" maxLength={500} value={draft.design_url} onChange={(e) => set("design_url", e.target.value)} placeholder="https://www.canva.com/design/..." />
           </label>
           <CreativeReview item={item} onSaved={onClose} disabled={dirty} />
-          <DeliveryHistory item={item} close={onClose} disabled={dirty} />
-          <label className="sm:col-span-2">
-            <span className="label">Live post link</span>
-            <input type="url" className="input" maxLength={500} value={draft.published_url} onChange={(e) => set("published_url", e.target.value)} placeholder="https://" />
-          </label>
+          <DeliveryHistory item={item} issues={issues} close={onClose} disabled={dirty} />
+          {(item.status === "published" || draft.published_url) && (
+            <label className="sm:col-span-2">
+              <span className="label">Live post link</span>
+              <input type="url" className="input" maxLength={500} value={draft.published_url} onChange={(e) => set("published_url", e.target.value)} placeholder="https://" />
+            </label>
+          )}
           <label className="sm:col-span-2">
             <span className="label">Review notes</span>
             <textarea className="input min-h-20" maxLength={2000} value={draft.review_note} onChange={(e) => set("review_note", e.target.value)} placeholder="Changes asked for by our team or the client" />

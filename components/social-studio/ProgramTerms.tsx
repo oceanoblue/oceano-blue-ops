@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import {
+  APPROVAL_MODE_LABEL,
   ONBOARDING_LABEL,
   ONBOARDING_STEPS,
   dollarsToCents,
@@ -11,6 +12,7 @@ import {
   shortDate,
   termEndLabel,
   monthLabel,
+  type ApprovalMode,
 } from "@/lib/social/schema";
 import type { Program } from "@/lib/social/server";
 import { useSocialAction } from "./useSocialAction";
@@ -128,19 +130,24 @@ export function ProgramTerms({ program, accountCount, open = false }: { program:
           <input className="input" maxLength={80} value={form.publishing_tool} onChange={set("publishing_tool")} />
         </label>
         <label className="sm:col-span-6">
-          <span className="label">Publisher handoff</span>
+          <span className="label">How posts get published</span>
           <select className="input" value={form.publishing_enabled} onChange={set("publishing_enabled")}>
-            <option value="off">Test only</option>
-            <option value="on">Allow the configured publishing worker to claim authorized posts</option>
+            <option value="off">By hand. We schedule them in the publishing tool and mark them here.</option>
+            <option value="on">Automatically, through the connected publisher.</option>
           </select>
         </label>
         <label className="sm:col-span-6">
-          <span className="label">Who authorizes publishing?</span>
+          <span className="label">Who approves posts</span>
           <select className="input" value={form.approval_mode} onChange={set("approval_mode")}>
-            <option value="office">Oceano staff authorizes. Client follows progress and flags concerns.</option>
-            <option value="individual">Client approves each piece individually.</option>
-            <option value="batch">Client may approve a displayed group for one account.</option>
+            {(Object.keys(APPROVAL_MODE_LABEL) as ApprovalMode[]).map((mode) => (
+              <option key={mode} value={mode}>{APPROVAL_MODE_LABEL[mode]}</option>
+            ))}
           </select>
+          <span className="mt-1 block text-xs text-slate-500">
+            {form.approval_mode === "office"
+              ? "Nothing waits on the client. We authorize each post, and they can still flag a concern from their page."
+              : "A post has to be approved on the client's page before it can be scheduled, and it needs its final image or video attached."}
+          </span>
         </label>
         <label className="sm:col-span-6">
           <span className="label">Link to an agreement signed outside this system</span>

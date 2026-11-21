@@ -48,6 +48,7 @@ export default async function SocialClientsPage({ searchParams }: { searchParams
   const socialMail = process.env.SOCIAL_ALERT_EMAIL || defaultReplyTo();
   const mailReady = isEmailConfigured();
   const live = clients.filter((c) => c.program.status !== "ended");
+  const ended = clients.filter((c) => c.program.status === "ended");
   const total = (pick: (c: ClientCard) => number) => live.reduce((n, c) => n + pick(c), 0);
   const owed = total((c) => c.summary.owed);
   const done = total((c) => c.summary.done);
@@ -62,80 +63,34 @@ export default async function SocialClientsPage({ searchParams }: { searchParams
       </div>
 
       <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {clients.map(({ program, summary }) => {
-          const flags = [
-            summary.late > 0 && { text: `${summary.late} late`, tone: "bg-rose-100 text-rose-800" },
-            program.status === "onboarding" && summary.onboardingDone < summary.onboardingTotal && { text: `Onboarding ${summary.onboardingDone} of ${summary.onboardingTotal}`, tone: "bg-slate-100 text-slate-700" },
-            summary.outOfMedia + summary.lowOnMedia > 0 && { text: `${summary.outOfMedia + summary.lowOnMedia} short on media`, tone: "bg-amber-100 text-amber-800" },
-            summary.accessProblems > 0 && { text: `${summary.accessProblems} access not confirmed`, tone: "bg-amber-100 text-amber-800" },
-            summary.withClient > 0 && { text: `${summary.withClient} with the client`, tone: "bg-sky-100 text-sky-800" },
-          ].filter((f): f is { text: string; tone: string } => Boolean(f));
-          return (
-            <li key={program.id}>
-              <Link href={clientHref("dashboard", program.id, month)} className="card card-interactive block overflow-hidden">
-                <div className="relative bg-ink-950 p-5 text-white">
-                  <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-32 h-64 w-64 rounded-full bg-ocean-600/30 blur-3xl" />
-                  <div className="relative flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-4">
-                      <SocialLogo name={program.name} url={program.logo_url} size="lg" />
-                      <div className="min-w-0">
-                        <h2 className="font-display text-xl font-semibold leading-snug sm:text-2xl">{program.name}</h2>
-                        <p className="mt-0.5 text-sm text-ink-200">
-                          {[program.contact_name, program.monthly_fee_cents > 0 && `${formatCents(program.monthly_fee_cents)} a month`].filter(Boolean).join(" · ") || "Social media client"}
-                        </p>
-                      </div>
-                    </div>
-                    <ClientStatusPill status={program.status} />
-                  </div>
-                </div>
-
-                <div className="p-5">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-                    <span className="font-medium text-ink-900">{monthLabel(month)}</span>
-                    <span className="text-slate-600">
-                      <span className="font-semibold tabular-nums text-ink-900">
-                        {summary.done} of {summary.owed}
-                      </span>{" "}
-                      scheduled or live
-                    </span>
-                  </div>
-                  <div className="mt-2">
-                    <Meter
-                      thick
-                      done={summary.done}
-                      inProgress={Math.max(0, summary.planned - summary.done)}
-                      total={summary.owed}
-                      label={`${summary.done} of ${summary.owed} pieces scheduled or live, ${Math.max(0, summary.planned - summary.done)} in production`}
-                    />
-                  </div>
-
-                  <dl className="mt-4 grid grid-cols-3 divide-x divide-ink-100 rounded-xl bg-ink-50/70 ring-1 ring-ink-100">
-                    {[
-                      { label: "Sub-accounts", value: summary.accounts },
-                      { label: "In production", value: Math.max(0, summary.planned - summary.done) },
-                      { label: "To fix", value: summary.errors },
-                    ].map((f) => (
-                      <div key={f.label} className="px-3 py-2.5">
-                        <dt className="font-mono text-[10px] font-medium uppercase tracking-wider text-slate-500">{f.label}</dt>
-                        <dd className="mt-0.5 text-xl font-bold text-ocean-950">{f.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {flags.length === 0 ? <span className="pill bg-emerald-100 text-emerald-800">Nothing needs attention</span> : flags.map((f) => <span key={f.text} className={`pill ${f.tone}`}>{f.text}</span>)}
-                    </div>
-                    <span className="inline-flex items-center gap-1 text-sm font-semibold text-ocean-700">
-                      Open dashboard <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            </li>
-          );
-        })}
+        {live.map((client) => (
+          <ClientTile key={client.program.id} client={client} month={month} />
+        ))}
       </ul>
+      {live.length === 0 && <p className="card p-5 text-sm text-slate-600">No active clients right now. Past clients are listed below.</p>}
+
+      {ended.length > 0 && (
+        <details className="card p-5">
+          <summary className="cursor-pointer text-sm font-semibold text-ocean-800">
+            Past clients ({ended.length})
+          </summary>
+          <ul className="mt-3 divide-y divide-ink-100">
+            {ended.map(({ program }) => (
+              <li key={program.id}>
+                <Link href={clientHref("dashboard", program.id, month)} className="flex items-center justify-between gap-3 py-2.5 text-sm hover:text-ocean-700">
+                  <span className="flex min-w-0 items-center gap-3">
+                    <SocialLogo name={program.name} url={program.logo_url} size="sm" />
+                    <span className="truncate font-medium text-ink-900">{program.name}</span>
+                  </span>
+                  <span className="inline-flex shrink-0 items-center gap-1 text-slate-500">
+                    Ended <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       <details className="card p-5">
         <summary className="cursor-pointer text-sm font-semibold text-ocean-800">Office notifications and publishing</summary>
@@ -160,5 +115,80 @@ export default async function SocialClientsPage({ searchParams }: { searchParams
         </details>
       </section>
     </SocialHomeFrame>
+  );
+}
+
+/** One client on the Social Media front page. */
+function ClientTile({ client: { program, summary }, month }: { client: ClientCard; month: string }) {
+  const flags = [
+    summary.late > 0 && { text: `${summary.late} late`, tone: "bg-rose-100 text-rose-800" },
+    program.status === "onboarding" && summary.onboardingDone < summary.onboardingTotal && { text: `Onboarding ${summary.onboardingDone} of ${summary.onboardingTotal}`, tone: "bg-slate-100 text-slate-700" },
+    summary.outOfMedia + summary.lowOnMedia > 0 && { text: `${summary.outOfMedia + summary.lowOnMedia} short on media`, tone: "bg-amber-100 text-amber-800" },
+    summary.accessProblems > 0 && { text: `${summary.accessProblems} access not confirmed`, tone: "bg-amber-100 text-amber-800" },
+    program.approval_mode !== "office" && summary.withClient > 0 && { text: `${summary.withClient} with the client`, tone: "bg-sky-100 text-sky-800" },
+  ].filter((f): f is { text: string; tone: string } => Boolean(f));
+  return (
+    <li>
+      <Link href={clientHref("dashboard", program.id, month)} className="card card-interactive block overflow-hidden">
+        <div className="relative bg-ink-950 p-5 text-white">
+          <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-32 h-64 w-64 rounded-full bg-ocean-600/30 blur-3xl" />
+          <div className="relative flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-4">
+              <SocialLogo name={program.name} url={program.logo_url} size="lg" />
+              <div className="min-w-0">
+                <h2 className="font-display text-xl font-semibold leading-snug sm:text-2xl">{program.name}</h2>
+                <p className="mt-0.5 text-sm text-ink-200">
+                  {[program.contact_name, program.monthly_fee_cents > 0 && `${formatCents(program.monthly_fee_cents)} a month`, program.approval_mode === "office" && "We decide what to post"].filter(Boolean).join(" · ") || "Social media client"}
+                </p>
+              </div>
+            </div>
+            <ClientStatusPill status={program.status} />
+          </div>
+        </div>
+
+        <div className="p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+            <span className="font-medium text-ink-900">{monthLabel(month)}</span>
+            <span className="text-slate-600">
+              <span className="font-semibold tabular-nums text-ink-900">
+                {summary.done} of {summary.owed}
+              </span>{" "}
+              scheduled or live
+            </span>
+          </div>
+          <div className="mt-2">
+            <Meter
+              thick
+              done={summary.done}
+              inProgress={Math.max(0, summary.planned - summary.done)}
+              total={summary.owed}
+              label={`${summary.done} of ${summary.owed} pieces scheduled or live, ${Math.max(0, summary.planned - summary.done)} in production`}
+            />
+          </div>
+
+          <dl className="mt-4 grid grid-cols-3 divide-x divide-ink-100 rounded-xl bg-ink-50/70 ring-1 ring-ink-100">
+            {[
+              { label: "Sub-accounts", value: summary.accounts },
+              { label: "In production", value: Math.max(0, summary.planned - summary.done) },
+              { label: "To fix", value: summary.errors },
+            ].map((f) => (
+              <div key={f.label} className="px-3 py-2.5">
+                <dt className="font-mono text-[10px] font-medium uppercase tracking-wider text-slate-500">{f.label}</dt>
+                <dd className="mt-0.5 text-xl font-bold text-ocean-950">{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1.5">
+              {flags.length === 0 ? <span className="pill bg-emerald-100 text-emerald-800">Nothing needs attention</span> : flags.map((f) => <span key={f.text} className={`pill ${f.tone}`}>{f.text}</span>)}
+            </div>
+            <span className="inline-flex items-center gap-1 text-sm font-semibold text-ocean-700">
+              Open dashboard <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </span>
+          </div>
+        </div>
+      </Link>
+    </li>
   );
 }
