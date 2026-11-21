@@ -73,10 +73,11 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
   const { totals } = report;
   const delivered = totals.fulfilled;
   const officeLed = report.approval_mode === "office";
+  const stageLabel = (stage: ClientStage) => (officeLed && stage === "for_review" ? FINAL_CHECK : CLIENT_STAGE_LABEL[stage]);
   const planned = CLIENT_STAGES.reduce((n, s) => n + totals[s], 0);
   const needs = report.accounts.filter((a) => a.media !== "good" || a.requests.length > 0);
   // A piece's journey in order, lightest to darkest: the darker the bar, the closer to live.
-  const tiles = CLIENT_STAGES.map((stage, i) => ({ stage, label: officeLed && stage === "for_review" ? FINAL_CHECK : CLIENT_STAGE_LABEL[stage], value: totals[stage], color: VIZ.ramp[i] }));
+  const tiles = CLIENT_STAGES.map((stage, i) => ({ stage, label: stageLabel(stage), value: totals[stage], color: VIZ.ramp[i] }));
   const percent = totals.owed > 0 ? Math.min(100, Math.round((delivered / totals.owed) * 100)) : 0;
 
   return (
@@ -254,6 +255,10 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
                             )}
                           </span>
                           <span className="min-w-0">
+                            {/* On a phone the stage sits above the title, where it is seen first. */}
+                            <span className="mb-1.5 block sm:hidden">
+                              <span className={`pill ${CLIENT_STAGE_PILL[p.stage]}`}>{stageLabel(p.stage)}</span>
+                            </span>
                             <span className="block text-sm font-medium text-ink-900">
                               {p.title || KIND_LABEL[p.kind]} <span className="font-normal text-slate-500">· {KIND_LABEL[p.kind]}</span>
                             </span>
@@ -311,7 +316,9 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
                             )}
                             {p.id && <PieceActions key={`${p.id}-${p.revision}-${p.stage}`} token={token} itemId={p.id} revision={p.revision} canApprove={!officeLed && !!p.creative_url && p.stage === "for_review"} readOnly={readOnly} />}
                           </span>
-                          <span className={`pill col-start-2 justify-self-start sm:col-start-3 sm:row-start-1 sm:justify-self-end ${CLIENT_STAGE_PILL[p.stage]}`}>{officeLed && p.stage === "for_review" ? FINAL_CHECK : CLIENT_STAGE_LABEL[p.stage]}</span>
+                          <span className="hidden justify-self-end sm:col-start-3 sm:row-start-1 sm:block">
+                            <span className={`pill ${CLIENT_STAGE_PILL[p.stage]}`}>{stageLabel(p.stage)}</span>
+                          </span>
                         </li>
                         );
                       })}
