@@ -45,7 +45,10 @@ export function RespondControl({
         body: JSON.stringify({ orderId, round, response: kind, note: noteText?.trim() || undefined }),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.error || `Failed (${r.status})`);
+      if (!r.ok) {
+        if (teamAssignment && r.status === 409) router.refresh();
+        throw new Error(d.error || `Failed (${r.status})`);
+      }
       setDeclining(false);
       setReason('');
       router.refresh();
