@@ -253,6 +253,39 @@ export function publishTimeLabel(time: string | null | undefined, zone: string |
   return clock ? [clock, zoneLabel(zone)].filter(Boolean).join(" ") : "";
 }
 
+/**
+ * The moment a local date and time happen in a timezone ("2027-01-08", "10:00",
+ * "America/New_York" is 15:00 UTC). Null when any part is missing or unusable.
+ */
+export function zonedInstant(date: string | null | undefined, time: string | null | undefined, zone: string | null | undefined): Date | null {
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date ?? "");
+  const t = /^(\d{2}):(\d{2})/.exec(time ?? "");
+  if (!d || !t || !zone) return null;
+  const wall = Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]), Number(t[1]), Number(t[2]));
+  let format: Intl.DateTimeFormat;
+  try {
+    format = new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  } catch {
+    return null;
+  }
+  // How far the zone's clock is ahead of UTC at a given moment.
+  const offset = (at: number) => {
+    const p = Object.fromEntries(format.formatToParts(new Date(at)).map((x) => [x.type, Number(x.value)]));
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - at;
+  };
+  let at = wall - offset(wall);
+  // Once more, in case the first guess landed on the other side of a clock change.
+  at = wall - offset(at);
+  return new Date(at);
+}
+/** A post is sent when its time has come, and for a day after. Older than that, a person decides. */
+export const PUBLISH_WINDOW_MS = 24 * 60 * 60 * 1000;
+export function publishTiming(at: Date | null, now: Date): { due: boolean; stale: boolean } {
+  if (!at) return { due: false, stale: false };
+  const late = now.getTime() - at.getTime();
+  return { due: late >= 0 && late <= PUBLISH_WINDOW_MS, stale: late > PUBLISH_WINDOW_MS };
+}
+
 /** "Jan 14" for a YYYY-MM-DD date. */
 export function shortDate(date: string | null): string {
   if (!date) return "No date";
