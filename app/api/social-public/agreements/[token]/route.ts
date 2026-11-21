@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { CrmError, crmDb, crmError, readJson } from "@/lib/crm/server";
 import { defaultReplyTo, sendEmail } from "@/lib/email/resend";
+import { captureError } from "@/lib/observability/report";
 import { clientIp, windowBucket } from "@/lib/security/rate-limit";
 import { agreementSignedEmail } from "@/lib/social/digest";
 import { appOrigin, clientHref } from "@/lib/social/links";
@@ -32,7 +33,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
 
     // Tell the office. The signature is already saved, so a failed email never fails the request.
     try {
-      await sendEmail({
+      const email = await sendEmail({
+        idempotencyKey: `social-agreement/${createHash("sha256").update(token).digest("hex")}`,
         to: process.env.SOCIAL_ALERT_EMAIL || defaultReplyTo(),
         ...agreementSignedEmail({
           client: signed.client,
@@ -41,8 +43,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
           url: `${appOrigin()}${clientHref("agreement", signed.program_id)}`,
         }),
       });
+      if (email.status !== "sent") captureError("social.signature_notification", new Error(email.status), { program_id: signed.program_id });
     } catch {
-      // Nothing to do: the agreement page shows the signature either way.
+      captureError("social.signature_notification", new Error("Delivery unavailable"), { program_id: signed.program_id });
     }
     return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {

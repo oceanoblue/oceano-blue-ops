@@ -12,7 +12,7 @@ import { useSocialAction } from "./useSocialAction";
  * or switch it off. Anyone holding the link can read the report, so a new
  * link is the way to cut off an old one.
  */
-export function ReportLink({ program, origin }: { program: Pick<Program, "id" | "name" | "report_token">; origin: string }) {
+export function ReportLink({ program, origin }: { program: Pick<Program, "id" | "name" | "report_token" | "approval_mode">; origin: string }) {
   const { run, busy, error } = useSocialAction();
   const [confirming, setConfirming] = useState<"replace" | "off" | null>(null);
   const url = program.report_token ? `${origin}${reportHref(program.report_token)}` : "";
@@ -28,7 +28,8 @@ export function ReportLink({ program, origin }: { program: Pick<Program, "id" | 
         <div>
           <h2 className="font-display text-lg font-semibold text-ocean-950">The client&apos;s page</h2>
           <p className="mt-0.5 max-w-prose text-sm text-slate-600">
-            A private page for {program.name}: each month by sub-account, where they approve pieces, ask for changes, send notes and see the media we need. It shows only this client, and never fees, staff notes or check results.
+            {program.name} can follow monthly progress by sub-account, flag a concern and see media requests.
+            {program.approval_mode === "office" ? " Your office handles routine approvals." : " The client can also approve content here."}
           </p>
         </div>
         {!program.report_token && (

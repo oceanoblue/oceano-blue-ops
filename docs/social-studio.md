@@ -272,30 +272,25 @@ The bridge at `/api/automations/social` requires the existing `x-pos-automation-
 
 Callbacks for the old whole-piece protocol return conflict. Callbacks for known deliveries still work when live handoff is disabled, so actual provider outcomes can be reconciled safely. Updating an already scheduled creative requires reconciliation at the publishing provider.
 
-## Canva and publishing
+## Canva and creative files
 
-The Canva design link opens a working file. Attach the exported image or video to the piece so the reviewer sees the exact file that will be delivered. Each attachment creates an immutable version. Each account stores its
-Canva brand kit link and each piece stores its Canva design link, so the design
-is one click from the card. Posts are published from the client's publishing
-tool (for example Statusbrew); mark a piece Scheduled when it is loaded there
-and Published when it is live. Direct connections (creating Canva designs from
-here, or publishing to Facebook and Instagram from here) need each service's
-developer access and are not part of this version.
+Each property can link its Canva brand kit. Each piece can link its working design. Attach an exported image or video in the editor for approval and delivery. On the property page, staff can see where a creative was used this month and reuse it on another editable draft for the same property.
+
+## Connect Facebook and Instagram for read-only verification
+
+Set `SOCIAL_META_APP_ID` and `SOCIAL_META_APP_SECRET` in production and configure the existing `GOOGLE_TOKEN_ENCRYPTION_KEY`. Register the exact production callback `https://app.oceanoblue.net/api/social/connections/meta/callback` with the Meta app. The app must be approved for the requested permissions when connecting businesses outside its app roles.
+
+An office user opens the property's Meta connections section and authorizes the Page and linked Instagram professional account. Ops matches the provider's profiles against the saved property links and shows the verification date. This flow requests `pages_show_list`, `pages_read_engagement` and `instagram_basic`. Grant publishing access and configure destination IDs separately in the client's publishing tool.
+
+## Reporting by client
+
+Set reporting responsibility under the client's Agreement tab. Progress is available per property. For client-managed analytics, the client uses their publishing tool for results. For agency-managed analytics, the office can attach the month's HTTPS report link and source. Supply a link intended for that client to open.
 
 ## Deployment
 
-Apply the Social Studio migrations in chronological order, including `20261121111000_social_review_delivery.sql` after `20261121110000_social_monthly_scope.sql`. The original migrations are
-`20261118130000_social_studio.sql`,
-`20261120160000_social_studio_programs.sql`,
-`20261120190000_social_studio_clients.sql`,
-`20261120200000_social_studio_logos.sql`,
-`20261120210000_social_studio_client_side.sql` and
-`20261121110000_social_monthly_scope.sql`, in that order, before deploying the code. The first adds five
-tables (`social_programs`, `social_accounts`, `social_content_items`,
-`social_media_batches`, `social_media_requests`); the second adds program terms,
-onboarding and avoid-term columns; the third adds the client report link and
-the `social_agreements` table; the fourth adds the logo links; the fifth adds client answers on pieces, client
-notes and the media link. No existing data changes.
+Apply the Social Studio migrations in filename order before deploying the application. The monthly scope migration records each account's current scope and recovers prior-month quantities only when there are saved plan entries for the month.
+
+Keep `SOCIAL_PUBLISHING_ENABLED=false` during setup and internal testing. A production test claim checks a destination without reserving it or transmitting content. Before enabling a client for delivery, confirm provider authorization, mapped destination IDs, the property timezone, the publisher's deduplication behavior and its scheduled and published receipts.
 
 Like the rest of the office pages, changes are saved from production only.
 Preview deployments show the pages read-only. Access is admin and coordinator.

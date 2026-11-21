@@ -285,6 +285,12 @@ describe("what a client can do from their page", () => {
     const result = await clientAction(token, { action: "request_changes", revision: 1, item_id: ids.review, name: "Pat Lee", note: "Use the pool photo" });
     expect(result.notify).toEqual({ kind: "changes", by: "Pat Lee", account: "Hotel A", title: "Lobby", text: "Use the pool photo" });
     expect(row(ids.review)).toMatchObject({ status: "in_design", client_decision: "changes", client_note: "Use the pool photo", client_reviewer: "Pat Lee" });
+    const report = await publicReport(token, "2027-01");
+    const receipt = report?.accounts[0].pieces.find(piece => piece.feedback?.note === "Use the pool photo");
+    expect(receipt).toMatchObject({
+      stage: "in_progress", feedback: { decision: "changes", by: "Pat Lee", note: "Use the pool photo" },
+      id: "", caption: "", creative_url: "", design_url: "", destinations: [],
+    });
     // The open client concern remains visible when the office returns the piece for review.
     await runAction(actor, { action: "update_item", id: ids.review, patch: { status: "client_review" } });
     expect(row(ids.review)).toMatchObject({ status: "client_review", client_decision: "changes", client_note: "Use the pool photo" });

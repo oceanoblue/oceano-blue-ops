@@ -1,4 +1,4 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { crmDb, CrmError } from "@/lib/crm/server";
 import { encryptedToken, encryptionConfigured, openToken, sealToken } from "@/lib/google-calendar/token-encryption";
 
@@ -16,11 +16,13 @@ export function metaConfigured() {
   return Boolean(process.env.SOCIAL_META_APP_ID && process.env.SOCIAL_META_APP_SECRET && encryptionConfigured());
 }
 
-export function beginMeta(actor: string, account: string, callback: string) {
+export function beginMeta(actor: string, account: string, callback: string, platforms: string[] = ["facebook","instagram"]) {
   const nonce = randomBytes(32).toString("base64url");
   const saved = sealToken(JSON.stringify({ actor, account, nonce, until: Date.now()+600_000 }), "social-meta-state", "access");
   const query = new URLSearchParams({client_id: process.env.SOCIAL_META_APP_ID!, redirect_uri: callback,
-    response_type:"code", state:nonce, scope:scopes.join(",")});
+    response_type:"code", state:nonce, scope:scopes.filter(s=>s!=="instagram_basic" || platforms.includes("instagram")).join(",")});
+  const configuration = process.env.SOCIAL_META_LOGIN_CONFIG_ID;
+  if (configuration) query.set("config_id", configuration);
   return {saved, url:`https://www.facebook.com/${graphVersion}/dialog/oauth?${query}`};
 }
 
@@ -40,6 +42,10 @@ function handle(raw: string | undefined, platform: Platform) {
     const host = u.hostname.toLowerCase().replace(/^(www\.|m\.)/, "");
     if (u.protocol !== "https:" || host !== platform + ".com") return "";
     if (platform === "facebook" && u.pathname === "/profile.php") return u.searchParams.get("id") || "";
+    if (platform === "facebook") {
+      const pageId = /^\/(?:people|pages)\/[^/]+\/(\d+)\/?$/i.exec(u.pathname)?.[1];
+      if (pageId) return pageId;
+    }
     return /^\/([a-z\d._-]+)\/?$/i.exec(u.pathname)?.[1].toLowerCase() || "";
   } catch { return ""; }
 }
@@ -63,11 +69,20 @@ export function matchPages(pages: Page[], links: ProfileLinks, platforms: string
   return out;
 }
 async function graph(path: string, token?: string, form?: URLSearchParams) {
-  const res = await fetch(authority+path, { method: form ? "POST" : "GET", cache:"no-store",
+  const url = new URL(authority+path);
+  if (token) url.searchParams.set("appsecret_proof",createHmac("sha256",process.env.SOCIAL_META_APP_SECRET!).update(token).digest("hex"));
+  const res = await fetch(url, { method: form ? "POST" : "GET", cache:"no-store",
     signal:AbortSignal.timeout(15000), headers:token ? {Authorization:`Bearer ${token}`} : {}, body:form });
   if (!res.ok) throw new CrmError("Meta could not verify access. Check your business permissions and try again.",409);
   return res.json();
 }
+/** A Business Login configuration or an earlier consent can grant additional scopes. */
+export function allowsReadOnlyToken(grants: {permission:string;status:string}[]) {
+  const allowed = new Set([...scopes, "public_profile"]);
+  const granted = grants.filter(g => g.status === "granted").map(g => g.permission);
+  return granted.includes("pages_show_list") && granted.every(p => allowed.has(p));
+}
+
 export async function connectMeta(actor: string, account: string, code: string, callback: string) {
   const db=crmDb();
   const {data,error}=await db.from("social_accounts").select("profile_links,platforms,is_active").eq("id",account).single();
@@ -77,11 +92,17 @@ export async function connectMeta(actor: string, account: string, code: string, 
   if (!initial.access_token) throw new CrmError("Meta authorization was incomplete.",409);
   const extended = await graph("/oauth/access_token",undefined,new URLSearchParams({...auth,grant_type:"fb_exchange_token",fb_exchange_token:initial.access_token}));
   if (!extended.access_token) throw new CrmError("Meta did not grant continued access.",409);
+  const permissions = await graph("/me/permissions?limit=100",extended.access_token);
+  if (permissions.paging?.next || !Array.isArray(permissions.data) || !allowsReadOnlyToken(permissions.data)) {
+    throw new CrmError("The token must be limited to this read-only connection. Check the Meta app’s login configuration and consent.",409);
+  }
+  const fields = ["id","name","link","access_token"];
+  if (data.platforms?.includes("instagram") && data.profile_links?.instagram) fields.push("instagram_business_account{id,username}");
   const matches: Connection[]=[];
   let after="";
   const cursors=new Set<string>();
   do {
-    const params=new URLSearchParams({fields:"id,name,link,access_token,instagram_business_account{id,username}",limit:"100"});
+    const params=new URLSearchParams({fields:fields.join(","),limit:"100"});
     if(after) params.set("after",after);
     const result=await graph("/me/accounts?"+params,extended.access_token);
     matches.push(...matchPages(result.data ?? [], data.profile_links||{}, data.platforms||[]));
@@ -91,9 +112,10 @@ export async function connectMeta(actor: string, account: string, code: string, 
   } while(after);
   if(!matches.length) throw new CrmError("No managed profile matched this sub-account. Check the profile links and the Pages selected at Meta.",409);
   if(new Set(matches.map(m=>m.platform)).size!==matches.length) throw new CrmError("More than one profile matched a platform. Review the profile links.",409);
-  const rows=matches.map(m=>({account_id:account,platform:m.platform,remote_id:m.remote_id,label:m.label,
+  const rows=matches.map(m=>({account_id:account,platform:m.platform,remote_id:m.remote_id,label:m.label,verified_profile_url:data.profile_links[m.platform],
     encrypted_page_token:sealToken(m.pageToken,`social:${account}:${m.platform}`,"access"),connected_by:actor,verified_at:new Date().toISOString()}));
   const {error:saveError}=await db.from("social_channel_connections").upsert(rows,{onConflict:"account_id,platform"});
+  if (saveError?.code === "P0001") throw new CrmError(saveError.message,409);
   if (saveError) throw new CrmError("The connection could not be saved. Check whether this profile belongs to a different sub-account.",409);
   return matches.length;
 }

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { CrmError, crmDb, crmError, readJson } from "@/lib/crm/server";
 import { defaultReplyTo, sendEmail } from "@/lib/email/resend";
+import { captureError } from "@/lib/observability/report";
 import { clientIp, windowBucket } from "@/lib/security/rate-limit";
 import { clientFeedbackEmail } from "@/lib/social/digest";
 import { appOrigin, clientHref } from "@/lib/social/links";
@@ -38,7 +39,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     // already saved, so a failed email never fails the request.
     if (result.notify) {
       try {
-        await sendEmail({
+        const email = await sendEmail({
           to: process.env.SOCIAL_ALERT_EMAIL || defaultReplyTo(),
           ...clientFeedbackEmail({
             client: result.client,
@@ -46,8 +47,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
             url: `${appOrigin()}${clientHref(result.notify.kind === "changes" ? "checks" : "dashboard", result.program_id)}`,
           }),
         });
+        if (email.status !== "sent") captureError("social.feedback_notification", new Error(email.status), { program_id: result.program_id });
       } catch {
-        // Nothing to do: the request shows on the client's dashboard either way.
+        captureError("social.feedback_notification", new Error("Delivery unavailable"), { program_id: result.program_id });
       }
     }
     return Response.json({ ok: true, approved: result.approved }, { headers: { "Cache-Control": "no-store" } });

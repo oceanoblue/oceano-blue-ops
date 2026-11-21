@@ -101,7 +101,7 @@ export default async function AccountPage(props: {
       </div>
 
       <ReuseCreative items={items}/>
-      <ChannelConnections id={account.id} platforms={account.platforms} notice={typeof query.connection === "string" ? query.connection.slice(0,240) : undefined} />
+      <ChannelConnections id={account.id} platforms={account.platforms} profileLinks={account.profile_links} notice={typeof query.connection === "string" ? query.connection.slice(0,240) : undefined} />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="space-y-6">
           <section className="card overflow-hidden">

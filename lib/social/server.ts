@@ -750,6 +750,7 @@ export async function publicReport(token: string, month: string): Promise<Public
           const stage = clientStage(i.status);
           totals[stage] += 1;
           const visible = stage !== "in_progress";
+          const openRequest = i.status === "in_design" && i.client_decision === "changes";
           return {
             id: visible ? i.id : "",
             revision: i.review_revision ?? 1,
@@ -767,7 +768,7 @@ export async function publicReport(token: string, month: string): Promise<Public
             caption: visible ? i.caption : "",
             design_url: visible ? i.design_url : "",
             published_url: stage === "live" ? i.published_url : "",
-            feedback: visible && i.client_decision ? { decision: i.client_decision, note: i.client_note ?? "", by: i.client_reviewer ?? "", at: i.client_reviewed_at ?? null } : null,
+            feedback: (visible || openRequest) && i.client_decision ? { decision: i.client_decision, note: i.client_note ?? "", by: i.client_reviewer ?? "", at: i.client_reviewed_at ?? null } : null,
           };
         });
       totals.owed += quotaTotal(quota);

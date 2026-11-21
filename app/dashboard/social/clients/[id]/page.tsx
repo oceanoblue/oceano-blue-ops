@@ -71,7 +71,7 @@ export default async function ClientDashboardPage(props: { params: Promise<{ id:
   ].filter(Boolean);
 
   const termState = contractMonthState(month, program);
-  const officeLed = (program as typeof program & {approval_mode?: string}).approval_mode === "office";
+  const officeLed = program.approval_mode === "office";
   const firstMonth = program.term_start?.slice(0, 7);
   return (
     <StudioFrame

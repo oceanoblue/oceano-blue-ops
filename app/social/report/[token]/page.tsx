@@ -286,6 +286,26 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
           </section>
         )}
 
+        {report.reporting_mode === "client_managed" && (
+          <section className="card p-5">
+            <h2 className="font-display text-xl">Performance reporting</h2>
+            <p className="mt-2 text-sm">Your team manages channel analytics in your publishing platform. This page tracks content production and delivery.</p>
+          </section>
+        )}
+        {report.reporting_mode === "agency_report" && (
+          <section className="card p-5">
+            <h2 className="font-display text-xl">Performance report for {monthLabel(month)}</h2>
+            {report.performance_report ? (
+              <>
+                <p className="mt-2 text-sm text-slate-600">
+                  {report.performance_report.source} · Updated {shortDate(report.performance_report.updated_at.slice(0, 10))}
+                </p>
+                <a href={report.performance_report.report_url} target="_blank" rel="noreferrer" className="btn-secondary mt-3">Open performance report</a>
+              </>
+            ) : <p className="mt-2 text-sm">The monthly performance report has not been added yet.</p>}
+          </section>
+        )}
+
         <footer className="border-t border-ink-200 pt-6 text-sm text-slate-500">
           <p>This page is private to {report.client}. Please do not forward the link outside your team.</p>
           <p className="mt-1">
@@ -296,8 +316,6 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
             · 843-505-8586
           </p>
         </footer>
-        {report.reporting_mode === "client_managed" && <section className="card p-5"><h2 className="font-display text-xl">Performance reporting</h2><p className="mt-2 text-sm">Your team manages channel analytics in your publishing platform. This page tracks content production and delivery.</p></section>}
-        {report.reporting_mode === "agency_report" && <section className="card p-5"><h2 className="font-display text-xl">Performance report for {monthLabel(month)}</h2>{report.performance_report ? <a href={report.performance_report.report_url} target="_blank" rel="noreferrer" className="btn-secondary mt-3">Open report · {report.performance_report.source}</a> : <p className="mt-2 text-sm">The monthly performance report has not been added yet.</p>}</section>}
       </main>
     </div>
   );
