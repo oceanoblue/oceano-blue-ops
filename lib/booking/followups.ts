@@ -32,7 +32,9 @@ export async function deliverFollowup(job: Followup): Promise<void> {
       const automatic = b.automatically_confirmed === true;
       if(order.assignment_round!==b.assignment_round || order.contractor_id!==b.contractor_id || (b.photographer_id && order.photographer_id!==b.photographer_id))return;
       if(automatic ? order.assignment_state!=='confirmed' || order.assignment_confirmation_mode!=='automatic' : order.assignment_state!=='awaiting_response' || !order.assignment_due_at || Date.parse(order.assignment_due_at)<=Date.now())return;
-      const portalUrl = order.contractor_id ? `${base}/field/shoots/${job.order_id}` : `${base}/field/assignments/${job.order_id}`;
+      const portalUrl = order.contractor_id
+        ? `${base}/field/shoots/${job.order_id}`
+        : `${base}/field/assignments/${job.order_id}?round=${order.assignment_round}`;
       let respondUrl = portalUrl;
       if(order.contractor_id) {
         const token=signRespondToken(job.order_id,order.contractor_id,respondTokenExpiry(b.scheduled_at),order.assignment_round);

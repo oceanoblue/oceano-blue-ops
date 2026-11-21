@@ -72,12 +72,16 @@ it('notifies an automatically confirmed photographer without requesting acceptan
   readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'rerouting',assignment_confirmation_mode:'automatic',assignment_round:1,contractor_id:'contractor'}});
   vi.mocked(sendEmail).mockClear();await deliverFollowup(event);expect(sendEmail).not.toHaveBeenCalled();
 });
-it('sends internal staff requests to their authenticated assignment page',async()=>{
-  const event=job();event.kind='assignment_email';event.payload.assignment_round=1;event.payload.contractor_id=null as any;event.payload.photographer_id='internal';
-  readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'awaiting_response',assignment_round:1,contractor_id:null,photographer_id:'internal',assignment_due_at:new Date(Date.now()+3600000).toISOString()}});
+it('binds internal email response, shoot details, and SMS links to the offered round',async()=>{
+  const event=job();event.kind='assignment_email';event.payload.assignment_round=3;event.payload.contractor_id=null as any;event.payload.photographer_id='internal';
+  readOrder.mockResolvedValue({data:{status:'booked',assignment_state:'awaiting_response',assignment_round:3,contractor_id:null,photographer_id:'internal',assignment_due_at:new Date(Date.now()+3600000).toISOString()}});
   vi.mocked(sendEmail).mockResolvedValue({status:'sent',id:'sent'} as any);
+  vi.mocked(sendSms).mockResolvedValue({status:'sent',id:'sms'});
   await deliverFollowup(event);
-  expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({html:expect.stringContaining('/field/assignments/order1')}));
+  const html = vi.mocked(sendEmail).mock.calls[0][0].html;
+  expect(html.match(/\/field\/assignments\/order1\?round=3"/g)).toHaveLength(2);
+  await deliverFollowup({...event,kind:'assignment_sms'});
+  expect(vi.mocked(sendSms).mock.calls[0][0].text).toMatch(/\/field\/assignments\/order1\?round=3$/);
 });
 
 it('labels a split-crew photographer request without implying responsibility for video',async()=>{
