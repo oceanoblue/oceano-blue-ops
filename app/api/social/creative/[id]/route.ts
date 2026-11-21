@@ -12,28 +12,19 @@ const upload = z.discriminatedUnion("action", [
 ]);
 type Context = { params: Promise<{ id: string }> };
 
+/** Office staff open the saved file for a piece. A client's page uses /api/social-public/creative instead. */
 export async function GET(req: Request, { params }: Context) {
   try {
+    await crmActor();
     const query = new URL(req.url).searchParams;
-    const token = query.get("token");
-    if (token === null) await crmActor();
-    else if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new CrmError("Creative unavailable.", 404);
     const id = z.string().uuid().parse((await params).id);
     const db = crmDb();
     const { data: item, error } = await db.from("social_content_items")
-      .select("creative_path,review_revision,status,account_id").eq("id", id).maybeSingle();
+      .select("creative_path,review_revision").eq("id", id).maybeSingle();
     if (error) workflowError(error);
-    if (!item?.creative_path || String(item.review_revision) !== query.get("revision")) throw new CrmError("Creative unavailable.", 404);
-    if (token !== null) {
-      if (!["client_review", "approved", "scheduled", "published"].includes(item.status)) throw new CrmError("Creative unavailable.", 404);
-      const { data: account, error: aErr } = await db.from("social_accounts").select("program_id").eq("id", item.account_id).eq("is_active", true).maybeSingle();
-      if (aErr) workflowError(aErr);
-      if (!account) throw new CrmError("Creative unavailable.", 404);
-      const { data: program, error: pErr } = await db.from("social_programs").select("id").eq("id", account.program_id)
-        .eq("report_token", token).in("status", ["active", "onboarding"]).maybeSingle();
-      if (pErr) workflowError(pErr);
-      if (!program) throw new CrmError("Creative unavailable.", 404);
-    }
+    // With no revision asked for, open the current one: a card or a list does not know the number.
+    const wanted = query.get("revision");
+    if (!item?.creative_path || (wanted !== null && String(item.review_revision) !== wanted)) throw new CrmError("Creative unavailable.", 404);
     const signed = await db.storage.from(BUCKET).createSignedUrl(item.creative_path, 900);
     if (!signed.data) throw new CrmError("Creative temporarily unavailable.", 503);
     return new Response(null, { status: 302, headers: { Location: signed.data.signedUrl, "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" } });

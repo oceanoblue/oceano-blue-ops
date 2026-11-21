@@ -1,13 +1,17 @@
 import { monthlyResult, type MonthlyResult, type ReportingMode } from "./reporting";
 import { readSocialPages } from "./db-pages";
 import { fulfilledQuota, noQuota, supplyAsOf, type MonthScope } from "./planning";
-import { reviewContext, reviewItems } from "./review";
+import { reviewContext, reviewItems, workflowError } from "./review";
+import { auditMonth, hasError } from "./audit";
+import { clientCreativeHref } from "./links";
 import { createHash, randomBytes } from "node:crypto";
 import { crmDb, CrmError } from "@/lib/crm/server";
 import { generateText, providerConfigured } from "@/lib/operations/providers";
 import { parseSettings } from "@/lib/operations/settings";
 import { CAPTION_LIMIT } from "./audit";
 import {
+  AUTHORIZABLE,
+  readyToAuthorize,
   COUNTERSIGN_CONSENT,
   agreementPlaceholderCount,
   CLIENT_SIGNING_CONSENT,
@@ -179,6 +183,8 @@ const BATCH = "id,account_id,received_on,source,photos,videos,link,note";
 const REQUEST = "id,account_id,ask,due_on,status,created_at";
 const AGREEMENT =
   "id,program_id,title,body,status,token,document_hash,sent_at,client_name,client_title,client_email,client_signed_at,counter_name,counter_title,countersigned_at,created_at,updated_at";
+/** The name recorded when the office authorizes or records publishing. */
+const OFFICE_NAME = "Oceano Blue Media team";
 /** The shape of the secrets in report and signing links. */
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const newToken = () => randomBytes(32).toString("base64url");
@@ -430,9 +436,40 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
     case "authorize_piece": {
       const context = await reviewContext(a.id);
       await reviewItems({ program: context.program_id, account: context.account_id, month: context.month,
-        items: [{ id: a.id, revision: a.revision }], role: "office", actor, name: "Oceano team", token: null,
+        items: [{ id: a.id, revision: a.revision }], role: "office", actor, name: OFFICE_NAME, token: null,
         event: a.action === "authorize_piece" ? "approved" : "handled", note: "" });
       return {};
+    }
+    case "authorize_ready": {
+      const program = await getProgram(a.program_id);
+      if (!program) throw new CrmError("That client no longer exists.", 404);
+      if (program.approval_mode !== "office") throw new CrmError("This client approves its own posts, so the office cannot authorize them.", 409);
+      const workspace = await loadWorkspace(a.program_id, a.month);
+      const audit = auditMonth(workspace.items, workspace.accounts, program.avoid_terms, todayKey());
+      // The page may name the pieces on screen; either way, only this client's own pieces for the month are touched.
+      const only = a.ids ? new Set(a.ids) : null;
+      const candidates = workspace.items.filter((i) => (!only || only.has(i.id)) && AUTHORIZABLE.includes(i.status));
+      const ready = candidates.filter((i) => readyToAuthorize(i) && !hasError(audit[i.id] ?? []));
+      let authorized = 0;
+      let failed = 0;
+      // One piece per request, a few at a time: each is checked and recorded on its own.
+      for (let from = 0; from < ready.length; from += 6) {
+        const results = await Promise.allSettled(
+          ready.slice(from, from + 6).map((i) =>
+            reviewItems({ program: a.program_id, account: i.account_id, month: i.month, items: [{ id: i.id, revision: i.review_revision ?? 1 }],
+              role: "office", actor, name: OFFICE_NAME, token: null, event: "approved", note: "" }),
+          ),
+        );
+        for (const r of results) r.status === "fulfilled" ? (authorized += 1) : (failed += 1);
+      }
+      return { authorized, skipped: candidates.length - ready.length + failed };
+    }
+    case "mark_delivered": {
+      const { data, error } = await db.rpc("social_mark_delivered", {
+        p_program: a.program_id, p_items: a.items, p_event: a.event, p_url: a.published_url, p_actor: actor, p_name: OFFICE_NAME,
+      });
+      if (error) workflowError(error);
+      return { marked: Number(data) };
     }
     case "resolve_client_note": {
       const { data, error } = await db
@@ -759,7 +796,7 @@ export async function publicReport(token: string, month: string): Promise<Public
             destinations: visible ? (account.platforms ?? []).filter(p => (i.kind === "google_post") === (p === "google")).map(platform => ({
               platform, url: account.profile_links?.[platform] ?? "",
             })) : [],
-            creative_url: visible && i.creative_path ? `/api/social/creative/${i.id}?revision=${i.review_revision}` : "",
+            creative_url: visible && i.creative_path ? clientCreativeHref(i.id, i.review_revision ?? 1) : "",
             creative_type: visible ? i.creative_type ?? "" : "",
             kind: i.kind,
             title: i.title,

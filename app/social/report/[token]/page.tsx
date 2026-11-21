@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, UploadCloud } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, ShieldCheck, UploadCloud } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
 import { ApproveAll, NoteForm, PieceActions } from "@/components/social/ClientPortal";
 import { Meter, VIZ } from "@/components/social-studio/Charts";
@@ -13,8 +12,10 @@ import {
   CLIENT_STAGE_LABEL,
   CLIENT_STAGE_PILL,
   KIND_LABEL,
+  PLATFORM_LABEL,
   monthLabel,
   parseMonth,
+  publishTimeLabel,
   shiftMonth,
   shortDate,
   type ClientStage,
@@ -27,6 +28,16 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
   referrer: "no-referrer",
 };
+
+/** What an office-led client sees in place of "ready for your review". */
+const FINAL_CHECK = "Final check";
+/** "JAN" and "8" for the date tile beside a piece. */
+function dateParts(date: string | null): { month: string; day: string } | null {
+  if (!date) return null;
+  const [y, m, d] = date.split("-").map(Number);
+  const at = new Date(Date.UTC(y, m - 1, d));
+  return { month: new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(at), day: String(d) };
+}
 
 const count = (pieces: PublicReport["accounts"][number]["pieces"], stage: ClientStage) => pieces.filter((p) => p.stage === stage).length;
 
@@ -65,7 +76,7 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
   const planned = CLIENT_STAGES.reduce((n, s) => n + totals[s], 0);
   const needs = report.accounts.filter((a) => a.media !== "good" || a.requests.length > 0);
   // A piece's journey in order, lightest to darkest: the darker the bar, the closer to live.
-  const tiles = CLIENT_STAGES.map((stage, i) => ({ stage, label: officeLed && stage === "for_review" ? "Office review" : CLIENT_STAGE_LABEL[stage], value: totals[stage], color: VIZ.ramp[i] }));
+  const tiles = CLIENT_STAGES.map((stage, i) => ({ stage, label: officeLed && stage === "for_review" ? FINAL_CHECK : CLIENT_STAGE_LABEL[stage], value: totals[stage], color: VIZ.ramp[i] }));
   const percent = totals.owed > 0 ? Math.min(100, Math.round((delivered / totals.owed) * 100)) : 0;
 
   return (
@@ -128,6 +139,15 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
           </dl>
         </section>
 
+        {officeLed && (
+          <p className="flex items-start gap-3 rounded-2xl bg-white p-4 text-sm leading-relaxed text-slate-700 shadow-soft ring-1 ring-ink-100">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-ocean-600" aria-hidden="true" />
+            <span>
+              <strong className="text-ink-900">Nothing here needs your approval.</strong> Oceano Blue Media plans, reviews and publishes your posts for you. If anything looks off, open the post below and choose &ldquo;Ask for a change&rdquo;, or send us a note.
+            </span>
+          </p>
+        )}
+
         {!officeLed && totals.for_review > 0 && (
           <p className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
             <strong>
@@ -171,8 +191,8 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
           <ul className="list-disc space-y-1.5 px-10 pb-5 text-sm leading-relaxed text-slate-700">
             <li>Use the arrows at the top to move between months.</li>
             <li>Follow each piece from production through publication.</li>
-            <li>You can see the caption and final creative once a piece reaches review.</li>
-            <li>{officeLed ? "Oceano authorizes publishing. Flag a concern on a piece or send the team a note." : "Approve a piece or tell us what to change. You can also flag a concern after approval."}</li>
+            <li>{officeLed ? "You can see the caption, and the image or video when one is attached, once a piece is approved." : "You can see the caption and the final image or video once a piece reaches review."}</li>
+            <li>{officeLed ? "Oceano Blue Media reviews and publishes each piece for you. Ask for a change on any piece, or send the team a note, at any time." : "Approve a piece or tell us what to change. You can also flag a concern after approval."}</li>
             <li>This page is private to {report.client}. Anyone with the link can use it, so please share it only with your team.</li>
           </ul>
           <p className="px-5 pb-5">
@@ -204,7 +224,7 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
                         <span className="mt-0.5 block text-sm text-slate-600">{a.pieces.length === 0 ? "Nothing on the calendar yet" : line.join(" · ") || `${a.pieces.length} pieces`}</span>
                       </span>
                     </span>
-                    {review > 0 && <span className={`pill ${CLIENT_STAGE_PILL.for_review}`}>{review} {officeLed ? "in office review" : "ready for your review"}</span>}
+                    {review > 0 && <span className={`pill ${CLIENT_STAGE_PILL.for_review}`}>{review} {officeLed ? "in final check" : "ready for your review"}</span>}
                   </summary>
                   {report.approval_mode === "batch" && reviewable.length > 1 && (
                     <div className="flex border-t border-ink-100 px-5 py-3">
@@ -213,20 +233,60 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
                   )}
                   {a.pieces.length > 0 && (
                     <ul className="divide-y divide-ink-100 border-t border-ink-100">
-                      {a.pieces.slice().sort((a, b) => Number(b.stage === "for_review") - Number(a.stage === "for_review")).map((p, i) => (
-                        <li key={p.id || i} className="grid gap-2 px-5 py-3 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-start">
-                          <span className="text-sm tabular-nums text-slate-500">{shortDate(p.date)}</span>
+                      {a.pieces.slice().sort((a, b) => Number(b.stage === "for_review") - Number(a.stage === "for_review")).map((p, i) => {
+                        const day = dateParts(p.date);
+                        const media = p.creative_url ? `${p.creative_url}&token=${encodeURIComponent(token)}` : "";
+                        // Big while it waits on the client's decision, compact once it is settled.
+                        const large = !officeLed && p.stage === "for_review";
+                        const meta = [
+                          publishTimeLabel(p.publish_time, p.timezone) && `Posts at ${publishTimeLabel(p.publish_time, p.timezone)}`,
+                        ].filter(Boolean);
+                        return (
+                        <li key={p.id || i} className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-4 gap-y-2 px-5 py-4 sm:grid-cols-[3.25rem_minmax(0,1fr)_auto] sm:items-start">
+                          <span className="flex h-[3.25rem] w-[3.25rem] flex-col items-center justify-center rounded-xl bg-ink-50 ring-1 ring-ink-100" aria-label={day ? shortDate(p.date) : "No date yet"}>
+                            {day ? (
+                              <>
+                                <span aria-hidden="true" className="font-mono text-[10px] font-semibold uppercase tracking-wider text-ocean-700">{day.month}</span>
+                                <span aria-hidden="true" className="text-lg font-bold leading-none text-ink-900">{day.day}</span>
+                              </>
+                            ) : (
+                              <span aria-hidden="true" className="font-mono text-[10px] font-semibold uppercase tracking-wider text-slate-400">TBD</span>
+                            )}
+                          </span>
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-ink-900">
                               {p.title || KIND_LABEL[p.kind]} <span className="font-normal text-slate-500">· {KIND_LABEL[p.kind]}</span>
                             </span>
-                            {p.id && <span className="mt-1 block text-sm text-slate-600">Revision {p.revision}
-                              {p.publish_time && ` · ${p.publish_time} ${p.timezone}`}
-                              {p.destinations.map(d => <span key={d.platform}> · {d.url ? <a className="capitalize underline" href={d.url} target="_blank" rel="noreferrer">{d.platform}</a> : d.platform}</span>)}</span>}
-                            {p.caption && <span className="mt-1 block whitespace-pre-line text-sm leading-relaxed text-slate-700">{p.caption}</span>}
-                            {p.creative_url && (p.creative_type.startsWith("video/") ?
-                              <video className="mt-3 max-h-80 w-auto rounded-lg" preload="none" controls src={`${p.creative_url}&token=${encodeURIComponent(token)}`} aria-label="Video for this revision" /> :
-                              <Image unoptimized width={960} height={640} className="mt-3 h-auto max-h-80 w-auto rounded-lg object-contain" loading="lazy" src={`${p.creative_url}&token=${encodeURIComponent(token)}`} alt={p.title || "Creative for this revision"} />)}
+                            {p.id && (meta.length > 0 || p.destinations.length > 0) && (
+                              <span className="mt-0.5 block text-sm text-slate-500">
+                                {meta.join(" · ")}
+                                {p.destinations.map((d, n) => (
+                                  <span key={d.platform}>
+                                    {(n > 0 || meta.length > 0) && " · "}
+                                    {d.url ? <a className="underline" href={d.url} target="_blank" rel="noreferrer">{PLATFORM_LABEL[d.platform]}</a> : PLATFORM_LABEL[d.platform]}
+                                  </span>
+                                ))}
+                              </span>
+                            )}
+                            <span className={media && !large ? "mt-2 flex items-start gap-3" : "block"}>
+                              {media && !large && (p.creative_type.startsWith("video/") ? (
+                                <video className="h-28 w-24 shrink-0 rounded-lg bg-ink-100 object-cover ring-1 ring-ink-100" preload="metadata" controls playsInline src={media} aria-label="Video for this post" />
+                              ) : (
+                                <a href={media} target="_blank" rel="noreferrer" className="block shrink-0 overflow-hidden rounded-lg bg-ink-100 ring-1 ring-ink-100" aria-label="Open the image full size">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img className="h-28 w-24 object-cover" loading="lazy" decoding="async" src={media} alt={p.title || "Image for this post"} />
+                                </a>
+                              ))}
+                              {p.caption && <span className={`block min-w-0 whitespace-pre-line text-sm leading-relaxed text-slate-700 ${media && !large ? "" : "mt-1"}`}>{p.caption}</span>}
+                            </span>
+                            {media && large && (p.creative_type.startsWith("video/") ? (
+                              <video className="mt-3 max-h-96 w-auto max-w-full rounded-xl bg-ink-100 ring-1 ring-ink-100" preload="metadata" controls playsInline src={media} aria-label="Video for this post" />
+                            ) : (
+                              <a href={media} target="_blank" rel="noreferrer" className="mt-3 inline-block overflow-hidden rounded-xl bg-ink-100 ring-1 ring-ink-100" aria-label="Open the image full size">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img className="block h-auto max-h-96 w-auto max-w-full" loading="lazy" decoding="async" src={media} alt={p.title || "Image for this post"} />
+                              </a>
+                            ))}
                             {(p.design_url || p.published_url) && (
                               <span className="mt-1.5 flex flex-wrap gap-4">
                                 {p.published_url && (
@@ -251,9 +311,10 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
                             )}
                             {p.id && <PieceActions key={`${p.id}-${p.revision}-${p.stage}`} token={token} itemId={p.id} revision={p.revision} canApprove={!officeLed && !!p.creative_url && p.stage === "for_review"} readOnly={readOnly} />}
                           </span>
-                          <span className={`pill justify-self-start sm:justify-self-end ${CLIENT_STAGE_PILL[p.stage]}`}>{officeLed && p.stage === "for_review" ? "Office review" : CLIENT_STAGE_LABEL[p.stage]}</span>
+                          <span className={`pill col-start-2 justify-self-start sm:col-start-3 sm:row-start-1 sm:justify-self-end ${CLIENT_STAGE_PILL[p.stage]}`}>{officeLed && p.stage === "for_review" ? FINAL_CHECK : CLIENT_STAGE_LABEL[p.stage]}</span>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </details>

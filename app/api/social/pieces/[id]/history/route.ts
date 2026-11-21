@@ -17,6 +17,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (program.error) workflowError(program.error);
     if (reviews.error) workflowError(reviews.error);
     if (deliveries.error) workflowError(deliveries.error);
-    return Response.json({ ...program.data, reviews: reviews.data, deliveries: deliveries.data }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ program_id: item.program_id, ...program.data, reviews: reviews.data, deliveries: deliveries.data }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) { return crmError(e); }
 }

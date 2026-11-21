@@ -25,7 +25,15 @@ export default async function ClientBoardPage(props: { params: Promise<{ id: str
           />
         </div>
       ) : (
-        <Board initialItem={initialItem} items={workspace.items} accounts={workspace.accounts} team={workspace.team} today={today} audit={audit} />
+        <Board
+          initialItem={initialItem}
+          items={workspace.items}
+          accounts={workspace.accounts}
+          team={workspace.team}
+          today={today}
+          audit={audit}
+          client={{ id: program.id, month, approval_mode: program.approval_mode ?? "individual", publishing_enabled: !!program.publishing_enabled }}
+        />
       )}
     </StudioFrame>
   );

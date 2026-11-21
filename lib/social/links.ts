@@ -42,3 +42,12 @@ export function appOrigin(): string {
  * It uses sample content only, so the same file is right for every client.
  */
 export const CLIENT_GUIDE_HREF = "/guides/social-media-client-guide.pdf";
+
+/**
+ * Where a client's page loads the image or video for a piece. It lives under
+ * /api/social-public, which is open without signing in and checks the client's
+ * own link itself. The page adds `&token=<the client's link secret>`.
+ */
+export const clientCreativeHref = (itemId: string, revision: number) => `/api/social-public/creative/${itemId}?revision=${revision}`;
+/** The same file for signed-in office staff. */
+export const officeCreativeHref = (itemId: string, revision: number) => `/api/social/creative/${itemId}?revision=${revision}`;

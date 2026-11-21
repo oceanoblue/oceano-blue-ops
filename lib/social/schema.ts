@@ -101,6 +101,21 @@ export const PROGRAM_STATUSES = ["prospect", "onboarding", "active", "paused", "
 export type ProgramStatus = (typeof PROGRAM_STATUSES)[number];
 export const APPROVAL_MODES = ["office", "individual", "batch"] as const;
 export type ApprovalMode = (typeof APPROVAL_MODES)[number];
+/** How we describe each choice to the office. */
+export const APPROVAL_MODE_LABEL: Record<ApprovalMode, string> = {
+  office: "We decide what to post. The client follows along.",
+  individual: "The client approves each post.",
+  batch: "The client approves posts in batches.",
+};
+/** What the office can record for a client whose posts are scheduled by hand. */
+export const DELIVERY_MARKS = ["scheduled", "published", "reopened"] as const;
+export type DeliveryMark = (typeof DELIVERY_MARKS)[number];
+/** Stages from which the office can authorize a piece. */
+export const AUTHORIZABLE: readonly Status[] = ["internal_review", "client_review"];
+/** True when a piece has what authorization needs: words and a date, and no open client request. */
+export function readyToAuthorize(item: { status: Status; caption: string; scheduled_for: string | null; client_decision?: string | null }): boolean {
+  return AUTHORIZABLE.includes(item.status) && item.caption.trim() !== "" && !!item.scheduled_for && item.client_decision !== "changes";
+}
 export const ACCESS_STATUSES = ["pending", "connected", "issue"] as const;
 export type AccessStatus = (typeof ACCESS_STATUSES)[number];
 export const ACCESS_LABEL: Record<AccessStatus, string> = {
@@ -210,6 +225,34 @@ export function monthLabel(month: string): string {
   const [y, m] = month.split("-").map(Number);
   return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, 1)));
 }
+/** "10:00 AM" for a stored "10:00" or "10:00:00" time. Blank when there is none. */
+export function clockLabel(time: string | null | undefined): string {
+  const m = /^(\d{2}):(\d{2})/.exec(time ?? "");
+  if (!m) return "";
+  const h = Number(m[1]);
+  return `${h % 12 === 0 ? 12 : h % 12}:${m[2]} ${h < 12 ? "AM" : "PM"}`;
+}
+const ZONE_NAMES: Record<string, string> = {
+  "America/New_York": "Eastern",
+  "America/Detroit": "Eastern",
+  "America/Chicago": "Central",
+  "America/Denver": "Mountain",
+  "America/Phoenix": "Arizona",
+  "America/Los_Angeles": "Pacific",
+  "America/Anchorage": "Alaska",
+  "Pacific/Honolulu": "Hawaii",
+};
+/** "Eastern" for "America/New_York". Other zones read as their city: "Europe/Prague" is "Prague time". */
+export function zoneLabel(zone: string | null | undefined): string {
+  if (!zone) return "";
+  return ZONE_NAMES[zone] ?? `${(zone.split("/").pop() ?? zone).replace(/_/g, " ")} time`;
+}
+/** "10:00 AM Eastern", for a client or a card. Blank when no time is set. */
+export function publishTimeLabel(time: string | null | undefined, zone: string | null | undefined): string {
+  const clock = clockLabel(time);
+  return clock ? [clock, zoneLabel(zone)].filter(Boolean).join(" ") : "";
+}
+
 /** "Jan 14" for a YYYY-MM-DD date. */
 export function shortDate(date: string | null): string {
   if (!date) return "No date";
@@ -534,6 +577,21 @@ export const actionSchema = z.discriminatedUnion("action", [
   /** The office has dealt with a client's change request on a piece. */
   z.object({ action: z.literal("resolve_client_feedback"), id, revision: z.number().int().positive() }),
   z.object({ action: z.literal("authorize_piece"), id, revision: z.number().int().positive() }),
+  // Office-led clients: authorize every piece that is ready, for a month or one sub-account.
+  z.object({ action: z.literal("authorize_ready"), program_id: id, month, ids: z.array(id).max(600).optional() }),
+  // Clients published by hand: record that authorized pieces were scheduled or went live, or reopen them.
+  z.object({
+    action: z.literal("mark_delivered"),
+    program_id: id,
+    event: z.enum(DELIVERY_MARKS),
+    items: z.array(z.object({ id, revision: z.number().int().positive() })).min(1).max(300),
+    published_url: z
+      .string()
+      .trim()
+      .max(500)
+      .refine((v) => v === "" || /^https:\/\/\S+$/.test(v), "Use a link that starts with https://")
+      .default(""),
+  }),
   /** The office has dealt with a note the client sent. */
   z.object({ action: z.literal("resolve_client_note"), id }),
   z.object({ action: z.literal("remove_logo"), target: z.enum(LOGO_TARGETS), id }),
