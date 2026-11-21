@@ -4,6 +4,7 @@ import { BrandLogo } from "@/components/ui/BrandLogo";
 import { AgreementSign } from "@/components/social/AgreementSign";
 import { agreementBlocks, signatureTime } from "@/lib/social/schema";
 import { publicAgreement, type PublicAgreement } from "@/lib/social/server";
+import { OFFICE_PHONE } from "@/lib/social-onboarding/schema";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -107,7 +108,7 @@ export default async function SocialAgreementPage({ params }: { params: Promise<
           <a className="underline" href="mailto:info@oceanoblue.net">
             info@oceanoblue.net
           </a>{" "}
-          · 843-505-8586
+          · {OFFICE_PHONE}
         </footer>
       </main>
     </div>

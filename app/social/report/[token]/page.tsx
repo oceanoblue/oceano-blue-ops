@@ -21,6 +21,7 @@ import {
   type ClientStage,
 } from "@/lib/social/schema";
 import { publicReport, type PublicReport } from "@/lib/social/server";
+import { OFFICE_PHONE } from "@/lib/social-onboarding/schema";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -381,7 +382,7 @@ export default async function SocialReportPage(props: { params: Promise<{ token:
             <a className="underline" href="mailto:info@oceanoblue.net">
               info@oceanoblue.net
             </a>{" "}
-            · 843-505-8586
+            · {OFFICE_PHONE}
           </p>
         </footer>
       </main>
