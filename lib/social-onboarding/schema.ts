@@ -8,7 +8,8 @@ import { z } from "zod";
 
 /** The address clients invite to their accounts. Shown on the public page. */
 export const ACCESS_EMAIL = "info@oceanoblue.net";
-export const OFFICE_PHONE = "843-505-8586";
+/** The business line clients call or text. Never a personal number. */
+export const OFFICE_PHONE = "843-202-4747";
 
 export const SOCIAL_BUCKET = "social-onboarding";
 export const MAX_FILES = 40;
