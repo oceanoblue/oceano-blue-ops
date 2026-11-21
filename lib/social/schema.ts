@@ -99,6 +99,8 @@ export const IN_PRODUCTION: readonly Status[] = ["needs_media", "in_design", "in
 
 export const PROGRAM_STATUSES = ["prospect", "onboarding", "active", "paused", "ended"] as const;
 export type ProgramStatus = (typeof PROGRAM_STATUSES)[number];
+export const APPROVAL_MODES = ["office", "individual", "batch"] as const;
+export type ApprovalMode = (typeof APPROVAL_MODES)[number];
 export const ACCESS_STATUSES = ["pending", "connected", "issue"] as const;
 export type AccessStatus = (typeof ACCESS_STATUSES)[number];
 export const ACCESS_LABEL: Record<AccessStatus, string> = {
@@ -402,9 +404,13 @@ export const accountPatch = z
   .object({
     name: text(160).min(1),
     profile_links: profileLinks,
+    publishing_timezone: text(100).refine((v) => { try { if (v) new Intl.DateTimeFormat("en", { timeZone: v }); return true; } catch { return false; } }, "Enter an IANA timezone, such as America/New_York."),
+    provider_destinations: z.partialRecord(z.enum(PLATFORMS), text(200)),
     tier: z.enum(TIERS),
     platforms: z.array(z.enum(PLATFORMS)).max(PLATFORMS.length),
     posts_per_month: count(60),
+    post_weekdays: z.array(z.number().int().min(0).max(6)).max(7)
+      .refine(days => new Set(days).size === days.length, "Choose each weekday once"),
     reels_per_month: count(20),
     google_posts_per_month: count(20),
     brand_kit_url: link,
@@ -425,6 +431,7 @@ export const itemPatch = z
     pillar: z.enum(PILLARS),
     status: z.enum(STATUSES),
     scheduled_for: date.nullable(),
+    publish_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
     assignee: id.nullable(),
     design_url: link,
     published_url: link,
@@ -457,6 +464,11 @@ export function sameBrand<T extends { id: string; name: string }>(of: T, all: T[
   return { brand, others: all.filter((a) => a.id !== of.id && a.name.trim().split(/\s+/)[0]?.toLowerCase() === brand.toLowerCase()) };
 }
 
+/** Count the fill-in fields the agreement editor highlights before a draft is locked. */
+export function agreementPlaceholderCount(title: string, body: string): number {
+  return ((title + "\n" + body).match(/\[[^\]\n]{1,200}\]/g) ?? []).length;
+}
+
 /** Agreement text. Line breaks are kept; lines starting with "# " or "## " are headings. */
 const agreementBody = z.string().max(120000).refine((v) => v.trim().length > 0, "Add the agreement text");
 
@@ -477,6 +489,8 @@ export const actionSchema = z.discriminatedUnion("action", [
         contact_name: text(160),
         contact_email: z.union([z.literal(""), z.string().trim().email().max(254)]),
         publishing_tool: text(80),
+        approval_mode: z.enum(APPROVAL_MODES),
+        publishing_enabled: z.boolean(),
         status: z.enum(PROGRAM_STATUSES),
         notes: text(4000),
         monthly_fee_cents: cents,
@@ -518,7 +532,8 @@ export const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("update_request"), id, status: z.enum(REQUEST_STATUSES) }),
   z.object({ action: z.literal("set_onboarding_step"), id, step: z.enum(ONBOARDING_STEPS), done: z.boolean() }),
   /** The office has dealt with a client's change request on a piece. */
-  z.object({ action: z.literal("resolve_client_feedback"), id }),
+  z.object({ action: z.literal("resolve_client_feedback"), id, revision: z.number().int().positive() }),
+  z.object({ action: z.literal("authorize_piece"), id, revision: z.number().int().positive() }),
   /** The office has dealt with a note the client sent. */
   z.object({ action: z.literal("resolve_client_note"), id }),
   z.object({ action: z.literal("remove_logo"), target: z.enum(LOGO_TARGETS), id }),
@@ -536,7 +551,7 @@ export const actionSchema = z.discriminatedUnion("action", [
     signer_title: text(120).default(""),
     consent: z.literal(true),
   }),
-  z.object({ action: z.literal("draft_caption"), id }),
+  z.object({ action: z.literal("draft_caption"), id, context: z.object({title:text(200),pillar:z.enum(PILLARS),scheduled_for:date.nullable()}).optional() }),
 ]);
 export type SocialAction = z.infer<typeof actionSchema>;
 
@@ -565,11 +580,14 @@ const personName = text(120).min(2, "Type your name");
  * What a client can send from their private page: an answer on one piece, an
  * approval of everything waiting for one sub-account, or a note to the team.
  */
+const revision = z.number().int().positive();
+const displayedItems = z.array(z.object({ id, revision })).min(1).max(150)
+  .refine((items) => new Set(items.map((item) => item.id)).size === items.length, "Each piece must appear once.");
 export const clientActionSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("approve"), item_id: id, name: personName }),
-  z.object({ action: z.literal("request_changes"), item_id: id, name: personName, note: text(2000).min(3, "Tell us what to change") }),
+  z.object({ action: z.literal("approve"), item_id: id, revision, name: personName }),
+  z.object({ action: z.literal("request_changes"), item_id: id, revision, name: personName, note: text(2000).min(3, "Tell us what to change") }),
   /** Approve everything waiting for one sub-account in the month the client is looking at. */
-  z.object({ action: z.literal("approve_all"), account_id: id, month, name: personName }),
+  z.object({ action: z.literal("approve_all"), account_id: id, month, items: displayedItems, name: personName }),
   z.object({ action: z.literal("note"), account_id: id.nullable().default(null), name: personName, message: text(2000).min(3, "Write your note") }),
 ]);
 export type ClientAction = z.infer<typeof clientActionSchema>;

@@ -1,3 +1,4 @@
+import { contractMonthState } from "@/lib/social/planning";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock, FileSignature, ImageOff, Megaphone, Send, ThumbsUp, XCircle } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
@@ -69,6 +70,9 @@ export default async function ClientDashboardPage(props: { params: Promise<{ id:
     program.term_start && program.term_months > 0 && `${monthLabel(program.term_start.slice(0, 7))} to ${termEndLabel(program.term_start, program.term_months)}`,
   ].filter(Boolean);
 
+  const termState = contractMonthState(month, program);
+  const officeLed = (program as typeof program & {approval_mode?: string}).approval_mode === "office";
+  const firstMonth = program.term_start?.slice(0, 7);
   return (
     <StudioFrame
       view="dashboard"
@@ -79,61 +83,27 @@ export default async function ClientDashboardPage(props: { params: Promise<{ id:
       checkErrors={summary.errors}
       hero={<ClientHero program={program} summary={summary} month={month} />}
     >
+      {summary.owed === 0 && termState === "before" && firstMonth ? (
+        <section className="card flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <h2 className="font-display text-xl font-semibold">Production starts in {monthLabel(firstMonth)}</h2>
+            <p className="mt-1 text-sm text-slate-600">No deliverables are due in {monthLabel(month)}. You can prepare access and media now.</p>
+          </div>
+          <Link className="btn-primary" href={clientHref("dashboard",program.id,firstMonth)}>Open {monthLabel(firstMonth)} plan</Link>
+        </section>
+      ) : (
+        <PlanMonth program={program} month={month} accountCount={summary.accounts} missing={summary.missing} owed={summary.owed}/>
+      )}
+      {summary.owed === 0 && <OnboardingChecklist key={program.id} program={program} />}
+      {workspace.entitlements.some(row => row.from_legacy_plan) && <p className="text-sm text-slate-600">For this historical month, the quantities shown come from the saved production plan.</p>}
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Planned" value={`${summary.planned} / ${summary.owed}`} hint={`pieces for ${monthLabel(month)}`} icon={Megaphone} />
+        <StatCard label="Planned" value={`${summary.owed-summary.missing} / ${summary.owed}`} hint={`pieces for ${monthLabel(month)}`} icon={Megaphone} />
         <StatCard label="In production" value={summary.inProduction} icon={Clock} href={clientHref("board", program.id, month)} />
-        <StatCard label="With client" value={summary.withClient} icon={Send} href={clientHref("board", program.id, month)} />
+        <StatCard label={officeLed ? "Office review" : "With client"} value={officeLed ? stages.internal_review : summary.withClient} icon={Send} href={clientHref("board", program.id, month)} />
         <StatCard label="Approved" value={summary.approved} hint={summary.held > 0 ? `${summary.held} held by a check` : "ready to schedule"} icon={ThumbsUp} href={clientHref("board", program.id, month)} />
         <StatCard label="Scheduled or live" value={summary.done} hint={summary.owed > 0 ? `${summary.percentDone}% of the month` : undefined} icon={CheckCircle2} accent />
         <StatCard label="To fix" value={summary.errors} hint={summary.late > 0 ? `${summary.late} late` : undefined} icon={AlertTriangle} href={clientHref("checks", program.id, month)} />
       </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <ChartCard className="xl:col-span-2" title={`${monthLabel(month)} by planned date`} note="How the month's pieces are spread across its days.">
-          {workspace.items.length === 0 ? (
-            <p className="text-sm text-slate-500">Plan the month and its pieces appear here by date.</p>
-          ) : (
-            <RhythmChart days={rhythm(workspace.items, month)} today={todayDay} month={monthLabel(month)} />
-          )}
-        </ChartCard>
-        <ChartCard title="Where every piece is" note="From first plan to live, in order.">
-          {workspace.items.length === 0 ? (
-            <p className="text-sm text-slate-500">Nothing is planned for this month yet.</p>
-          ) : (
-            <BarList unit={count("piece", "pieces")} rows={STATUSES.map((s) => ({ label: STATUS_LABEL[s], value: stages[s] }))} />
-          )}
-        </ChartCard>
-      </div>
-
-      {rows.length > 0 && (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-          <ChartCard title="Media supply" note="Sub-accounts by how much recent photo and video we hold.">
-            <SegmentedBar
-              name="Media supply"
-              unit={subAccounts}
-              parts={[
-                { label: "Enough", value: health.media.good, color: VIZ.good, icon: <CheckCircle2 className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
-                { label: "Running low", value: health.media.low, color: VIZ.warning, darkText: true, icon: <AlertTriangle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
-                { label: "Out", value: health.media.out, color: VIZ.critical, icon: <XCircle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
-              ]}
-            />
-          </ChartCard>
-          <ChartCard title="Account access" note="Whether we can get into each sub-account's profiles.">
-            <SegmentedBar
-              name="Account access"
-              unit={subAccounts}
-              parts={[
-                { label: "Connected", value: health.access.connected, color: VIZ.good, icon: <CheckCircle2 className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
-                { label: "Not confirmed", value: health.access.pending, color: VIZ.warning, darkText: true, icon: <AlertTriangle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
-                { label: "Problem", value: health.access.issue, color: VIZ.critical, icon: <XCircle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
-              ]}
-            />
-          </ChartCard>
-          <ChartCard className="md:col-span-2 xl:col-span-1" title="Where they post" note="Sub-accounts on each platform.">
-            <BarList unit={subAccounts} rows={platforms} />
-          </ChartCard>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <section className="card p-5">
@@ -185,7 +155,7 @@ export default async function ClientDashboardPage(props: { params: Promise<{ id:
             <ul className="mt-3 divide-y divide-ink-100">
               {upcoming.map((i) => (
                 <li key={i.id}>
-                  <Link href={accountHref(i.account_id, month)} className="flex items-center justify-between gap-3 py-2 hover:bg-ink-50/70">
+                  <Link href={`${clientHref("board",program.id,month)}&item=${i.id}`} className="flex items-center justify-between gap-3 py-2 hover:bg-ink-50/70">
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium text-ink-900">{i.title || KIND_LABEL[i.kind]}</span>
                       <span className="block truncate text-xs text-slate-500">
@@ -205,8 +175,54 @@ export default async function ClientDashboardPage(props: { params: Promise<{ id:
         <ClientNotes notes={notes} accountNames={Object.fromEntries(names)} changeRequests={changeRequests} checksHref={clientHref("checks", program.id, month)} />
       )}
 
-      <PlanMonth program={program} month={month} accountCount={summary.accounts} planned={summary.planned} owed={summary.owed} />
-      <OnboardingChecklist key={`onboarding-${program.id}`} program={program} />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <ChartCard className="xl:col-span-2" title={`${monthLabel(month)} by planned date`} note="How the month's pieces are spread across its days.">
+          {workspace.items.length === 0 ? (
+            <p className="text-sm text-slate-500">Plan the month and its pieces appear here by date.</p>
+          ) : (
+            <RhythmChart days={rhythm(workspace.items, month)} today={todayDay} month={monthLabel(month)} />
+          )}
+        </ChartCard>
+        <ChartCard title="Where every piece is" note="From first plan to live, in order.">
+          {workspace.items.length === 0 ? (
+            <p className="text-sm text-slate-500">Nothing is planned for this month yet.</p>
+          ) : (
+            <BarList unit={count("piece", "pieces")} rows={STATUSES.map((s) => ({ label: STATUS_LABEL[s], value: stages[s] }))} />
+          )}
+        </ChartCard>
+      </div>
+
+      {rows.length > 0 && (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <ChartCard title="Media supply" note="Sub-accounts by how much recent photo and video we hold.">
+            <SegmentedBar
+              name="Media supply"
+              unit={subAccounts}
+              parts={[
+                { label: "Enough", value: health.media.good, color: VIZ.good, icon: <CheckCircle2 className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+                { label: "Running low", value: health.media.low, color: VIZ.warning, darkText: true, icon: <AlertTriangle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+                { label: "Out", value: health.media.out, color: VIZ.critical, icon: <XCircle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+              ]}
+            />
+          </ChartCard>
+          <ChartCard title="Account access" note="Whether we can get into each sub-account's profiles.">
+            <SegmentedBar
+              name="Account access"
+              unit={subAccounts}
+              parts={[
+                { label: "Connected", value: health.access.connected, color: VIZ.good, icon: <CheckCircle2 className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+                { label: "Not confirmed", value: health.access.pending, color: VIZ.warning, darkText: true, icon: <AlertTriangle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+                { label: "Problem", value: health.access.issue, color: VIZ.critical, icon: <XCircle className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> },
+              ]}
+            />
+          </ChartCard>
+          <ChartCard className="md:col-span-2 xl:col-span-1" title="Where they post" note="Sub-accounts on each platform.">
+            <BarList unit={subAccounts} rows={platforms} />
+          </ChartCard>
+        </div>
+      )}
+
+      {summary.owed > 0 && <OnboardingChecklist key={program.id} program={program} />}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <ReportLink program={program} origin={appOrigin()} />

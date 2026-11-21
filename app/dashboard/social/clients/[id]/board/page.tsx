@@ -11,6 +11,8 @@ export const dynamic = "force-dynamic";
 
 export default async function ClientBoardPage(props: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { program, month, today, workspace, audit, summary, production } = await clientPage(props.params, props.searchParams);
+  const {item} = await props.searchParams;
+  const initialItem = typeof item === "string" && workspace.items.some(i => i.id === item) ? item : undefined;
   return (
     <StudioFrame view="board" program={program} month={month} production={production} accountCount={summary.accounts} checkErrors={summary.errors}>
       {workspace.items.length === 0 ? (
@@ -23,7 +25,7 @@ export default async function ClientBoardPage(props: { params: Promise<{ id: str
           />
         </div>
       ) : (
-        <Board items={workspace.items} accounts={workspace.accounts} team={workspace.team} today={today} audit={audit} />
+        <Board initialItem={initialItem} items={workspace.items} accounts={workspace.accounts} team={workspace.team} today={today} audit={audit} />
       )}
     </StudioFrame>
   );

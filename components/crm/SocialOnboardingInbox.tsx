@@ -14,15 +14,51 @@ const PUBLIC_PATH = "/social/start";
 
 export function SocialOnboardingInbox({
   initial,
-  production,
+  production, programs, more,
 }: {
   initial: SocialIntake[] | null;
   production: boolean;
+  programs: {id: string; name: string}[] | null;
+  more: boolean;
 }) {
   const [intakes, setIntakes] = useState(initial ?? []);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+
+  const [hasMore, setHasMore] = useState(more);
+  const [targets, setTargets] = useState<Record<string,string>>({});
+  async function loadMore() {
+    const last = intakes.at(-1);
+    if (!last) return;
+    setBusy("page"); setError("");
+    try {
+      const params = new URLSearchParams({ before: last.created_at, id: last.id });
+      const response = await fetch(`/api/crm/social-onboarding?${params}`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      setIntakes(list => [...list, ...result.intakes]);
+      setHasMore(result.hasMore);
+    } catch {
+      setError("Older intakes could not be loaded. Please retry.");
+    } finally { setBusy(null); }
+  }
+
+  async function link(id: string) {
+    if (!targets[id]) return;
+    const programId = targets[id] === "new" ? null : targets[id];
+    setBusy(id); setError("");
+    try {
+      const response = await fetch("/api/crm/social-onboarding", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "link_program", id, program_id: programId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to link this intake.");
+      setIntakes(list => list.map(i => i.id === id ? { ...i, program_id: data.program_id, status: "reviewed" } : i));
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to link this intake."); }
+    finally { setBusy(null); }
+  }
 
   async function setStatus(id: string, status: "new" | "reviewed") {
     setBusy(id);
@@ -163,6 +199,22 @@ export function SocialOnboardingInbox({
                         </ul>
                       </div>
                     ))}
+                    <div className="mt-5 space-y-2">
+                      {intake.program_id ? (
+                        <a className="btn-secondary" href={`/dashboard/social/clients/${intake.program_id}`}>Open Social Studio client</a>
+                      ) : programs ? (
+                        <>
+                          <label className="block text-sm font-medium">Social Studio client
+                            <select className="input mt-1" value={targets[intake.id] ?? ""} onChange={e => setTargets({...targets, [intake.id]: e.target.value})}>
+                              <option value="">Choose a client</option><option value="new">Create a new client</option>
+                              {programs.map(program => <option key={program.id} value={program.id}>{program.name}</option>)}
+                            </select>
+                          </label>
+                          <p className="text-xs text-slate-600">Linking applies this intake’s approval preference to the selected client.</p>
+                          <button type="button" className="btn-secondary" disabled={!production || busy === intake.id || !targets[intake.id]} onClick={() => link(intake.id)}>Link intake</button>
+                        </>
+                      ) : <p className="text-sm text-amber-800">The client list could not be loaded. Refresh to link this intake.</p>}
+                    </div>
                     <div className="mt-6 flex flex-wrap gap-2">
                       <a className="btn-secondary" href={`mailto:${intake.email}`}>
                         Email {intake.contact_name.split(/\s+/)[0]}
@@ -188,6 +240,7 @@ export function SocialOnboardingInbox({
           );
         })}
       </ul>
+      {hasMore && <button type="button" className="btn-secondary" disabled={busy === "page"} onClick={loadMore}>Load older intakes</button>}
     </div>
   );
 }

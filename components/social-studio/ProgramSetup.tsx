@@ -60,10 +60,10 @@ export function NewProgramForm() {
 }
 
 /** Put the month's pieces on the plan and set where the client stands. */
-export function PlanMonth({ program, month, accountCount, planned, owed }: { program: Program; month: string; accountCount: number; planned: number; owed: number }) {
+export function PlanMonth({ program, month, accountCount, missing, owed }: { program: Program; month: string; accountCount: number; missing: number; owed: number }) {
   const { run, busy, error } = useSocialAction();
   const [message, setMessage] = useState("");
-  const missing = Math.max(0, owed - planned);
+
 
   async function plan() {
     setMessage("");
@@ -79,9 +79,11 @@ export function PlanMonth({ program, month, accountCount, planned, owed }: { pro
           <p className="mt-0.5 text-sm text-slate-600">
             {accountCount === 0
               ? "Add sub-accounts first, then plan the month."
+              : owed === 0
+                ? "No deliverables are due for this month."
               : missing > 0
-                ? `${missing} of ${owed} pieces are not on the plan yet. Planning adds only what is missing and never changes existing work.`
-                : `All ${owed} pieces are on the plan.`}
+                ? `${missing} of ${owed} required slots still need a piece.`
+                : `All ${owed} required slots are on the plan.`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">

@@ -86,9 +86,12 @@ export function AccountProfile({ account }: { account: Account }) {
     tier: account.tier,
     platforms: account.platforms,
     posts_per_month: account.posts_per_month,
+    post_weekdays: account.post_weekdays ?? [],
     reels_per_month: account.reels_per_month,
     google_posts_per_month: account.google_posts_per_month,
     profile_links: account.profile_links as ProfileLinks,
+    provider_destinations: account.provider_destinations ?? {},
+    publishing_timezone: account.publishing_timezone ?? "",
     brand_kit_url: account.brand_kit_url,
     media_folder_url: account.media_folder_url,
     voice_notes: account.voice_notes,
@@ -133,8 +136,30 @@ export function AccountProfile({ account }: { account: Account }) {
           ))}
         </select>
       </label>
+      <label className="sm:col-span-6">
+        <span className="label">Post frequency</span>
+        <select className="input" value={form.post_weekdays.length ? "weekly" : "monthly"}
+          onChange={e => set("post_weekdays", e.target.value === "weekly" ? [2,5] : [])}>
+          <option value="monthly">Fixed number per month</option>
+          <option value="weekly">On selected weekdays</option>
+        </select>
+      </label>
+      {form.post_weekdays.length > 0 && <fieldset className="sm:col-span-6">
+        <legend className="label">Post days · {form.post_weekdays.length} per week</legend>
+        <div className="flex flex-wrap gap-2">
+          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((label,day) => {
+            const selected = form.post_weekdays.includes(day);
+            return <label key={label} className="inline-flex items-center gap-2 rounded-md border px-2 py-1">
+              <input type="checkbox" checked={selected} disabled={selected && form.post_weekdays.length === 1}
+                onChange={() => set("post_weekdays",selected ? form.post_weekdays.filter(d => d !== day) : [...form.post_weekdays,day].sort())} />
+              {label}
+            </label>;
+          })}
+        </div>
+        <p className="mt-1 text-xs text-slate-600">Each selected day adds one post to the monthly quota. Plan the month to create missing pieces. Existing pieces keep their dates.</p>
+      </fieldset>}
       <div className="grid grid-cols-3 gap-4 sm:col-span-6">
-        {quota("posts_per_month", "Posts a month", 60)}
+        {form.post_weekdays.length === 0 && quota("posts_per_month", "Posts a month", 60)}
         {quota("reels_per_month", "Reels a month", 20)}
         {quota("google_posts_per_month", "Google posts a month", 20)}
       </div>
@@ -149,14 +174,25 @@ export function AccountProfile({ account }: { account: Account }) {
           ))}
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="sm:col-span-2">
+            <span className="label">Property publishing timezone</span>
+            <input className="input" placeholder="America/New_York" value={form.publishing_timezone} onChange={(e) => set("publishing_timezone", e.target.value)} />
+          </label>
           {form.platforms.map((p) => (
-            <label key={p}>
+            <div key={p}>
+              <label>
               <span className="label flex items-center justify-between">
                 {PLATFORM_LABEL[p]} profile
                 {account.profile_links[p] && <a href={account.profile_links[p]} target="_blank" rel="noreferrer" className="normal-case tracking-normal text-ocean-700 hover:underline">Open</a>}
               </span>
               <input type="url" className="input" maxLength={500} placeholder="https://" value={form.profile_links[p] ?? ""} onChange={(e) => set("profile_links", { ...form.profile_links, [p]: e.target.value })} />
-            </label>
+              </label>
+              <label>
+              <span className="label mt-2">{PLATFORM_LABEL[p]} publishing provider profile ID</span>
+              <input className="input" maxLength={200} value={form.provider_destinations[p] ?? ""}
+                onChange={(e) => set("provider_destinations", { ...form.provider_destinations, [p]: e.target.value })} />
+              </label>
+            </div>
           ))}
         </div>
       </fieldset>

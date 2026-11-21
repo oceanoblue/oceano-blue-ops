@@ -52,6 +52,20 @@ property feature, local event, property feature, local story, flexible, so five
 posts give the 2-1-1-1 mix. It only adds what is missing: running it again, or
 after adding accounts or raising a quota, never duplicates or resets work.
 
+A sub-account can use a fixed monthly post count or selected weekdays. Switching
+to weekly starts with Tuesday and Friday, which staff can change. Each selected
+weekday in the service month counts once. For example, Tuesday and Friday give
+eight posts in February 2027 and nine in July. A mid-month agreement starts its
+first plan on or after the actual start date. Reels and Google posts keep their
+monthly quantities. Planning creates drafts only and preserves existing pieces.
+
+The contract term is counted in calendar months, including its starting month.
+Changed quotas, program status and account activity take effect in the current
+Eastern month. Closed months retain their recorded scope. For months before
+scope history was introduced, quantities are reconstructed from saved plan slots
+where they exist. The calendar follows each piece’s current publish date while
+the piece counts toward its original production month.
+
 ## Adding sub-accounts
 
 On the client's Sub-accounts tab, paste one sub-account per line and pick the type. A line can include the account's
@@ -152,12 +166,11 @@ client. It shows one month at a time, by sub-account. On it the client can:
   scheduled or live. A caption and design link appear only once a piece has
   reached client review.
 - **Approve a piece** that is waiting for their review, or **approve all** the
-  pieces waiting for one sub-account in the month on screen.
+  displayed revisions for one sub-account or day when the client uses batch approvals. Office-led clients follow progress and flag concerns while Oceano staff authorizes each saved revision.
 - **Ask for a change**, with a note. A piece under review goes back to "In
   design". A piece that is already approved, scheduled or live stays where it
   is, and a failed check ("The client asked for a change") holds it from
-  scheduling until the office makes the change and sends it back for review,
-  or opens the piece and chooses "Mark as handled".
+  scheduling until the office resolves the concern and obtains fresh authorization. Earlier feedback stays in the piece history.
 - **Send a note** to the team, optionally about one sub-account. Notes show in
   "From the client" on the client's dashboard until marked done.
 - **Send photos and video**: a button opens the link saved in "Where the
@@ -241,24 +254,27 @@ It goes to `SOCIAL_ALERT_EMAIL`, or the office reply address when that is not
 set. Running it twice in a day sends one email. Preview deployments never
 send.
 
-## Make bridge
+## Approval and publishing
 
-`/api/automations/social` lets a Make scenario schedule approved content. It
-uses the same `x-pos-automation-secret` header as the podcast bridge.
+In **Terms and brand rules**, choose who authorizes publication. **Office** clients follow along and can flag problems. Oceano staff authorizes the saved piece in the editor. **Individual** clients approve exact revisions. **Batch** clients may approve the specific pieces displayed for one property and day or month. Each decision preserves the caption, date, creative and destinations at the time. Changes to public copy, asset, schedule or destinations require fresh authorization. Open concerns must be handled first. Staff can edit private notes without invalidating sign-off.
 
-- `GET ?client=<client id>&month=YYYY-MM` returns `ready` (approved pieces
-  with account, platforms, profile links, caption, design link and publish
-  date) and `held` (approved pieces with an error, and why).
-- `POST { "id", "event": "scheduled" | "published", "published_url"? }` records
-  what the publishing tool did. A piece only moves forward (approved, then
-  scheduled, then published); repeats are accepted and anything else is refused.
+In each account profile, confirm publishing access, enter the property's IANA timezone, and map each selected platform to its verified profile ID in the publishing provider. The account's public profile URL and Meta analytics connection serve different purposes. In the piece editor, set the local time and attach the exported creative. Each upload is copied into an immutable object in private storage. A reel requires a video. The review page displays that exact copy.
 
-The bridge does not publish anything itself. Make reads the ready pieces, sends
-them to the publishing tool, and reports back.
+### Make / external publisher contract (protocol 2)
+
+The bridge at `/api/automations/social` requires the existing `x-pos-automation-secret` header. It is a handoff to an external worker such as Make. Provider authentication, an installed scenario and verified destination IDs are required for external delivery. A provider that cannot deduplicate sends or look up an uncertain attempt requires manual reconciliation.
+
+1. **Discover.** `GET ?client=<uuid>&month=YYYY-MM` gives `candidates` containing item ID, revision and platform, plus `held` reasons. The older `program` parameter still works. The legacy `ready` list is empty to prevent old scenarios sending unclaimed copies.
+2. **Test.** POST `{"action":"claim","client":"<uuid>","id":"<uuid>","month":"YYYY-MM","revision":1,"platform":"facebook","mode":"test"}`. A passing result contains `dispatch:false`, no media URL, no provider payload and no reservation. Test is the default.
+3. **Claim just before sending.** The live worker requests `"mode":"live"`. It requires a production deployment with `SOCIAL_PUBLISHING_ENABLED=true` and live handoff enabled on this specific client. Ops rechecks active contract, format quota, exact authorized revision, content checks, connected account, current destination, frozen file, date and timezone. One worker receives a stable `idempotency_key`, per-attempt `claim_id`, `lease_until`, the UTC-offset publish timestamp, caption and a time-limited media URL. Use that exact key as the provider's deduplication key. If the lease runs out, reconcile with the provider before submitting again.
+4. **Receipt.** POST `{"action":"receipt","idempotency_key":"<uuid>","claim_id":"<uuid>","event":"scheduled","provider_id":"<provider record>"}`. A later `published` receipt can include an HTTPS `published_url`. Repeated confirmations are idempotent. Each destination has independent state. A piece reaches Scheduled or Published after every intended destination confirms that stage.
+5. **Reconcile.** On a timeout, post `event:"uncertain"` and `detail`. Look up the key or provider record before sending anything again. Use `failed` with a reason only for a definitive rejection or verified absence at the provider. Only that destination can then be claimed again. Retries retain the idempotency key and receive a fresh attempt ID. The piece editor shows receipts and feedback history. Earlier-revision receipts stay attached to their original revision.
+
+Callbacks for the old whole-piece protocol return conflict. Callbacks for known deliveries still work when live handoff is disabled, so actual provider outcomes can be reconciled safely. Updating an already scheduled creative requires reconciliation at the publishing provider.
 
 ## Canva and publishing
 
-Canva and the publishing tool are linked, not connected. Each account stores its
+The Canva design link opens a working file. Attach the exported image or video to the piece so the reviewer sees the exact file that will be delivered. Each attachment creates an immutable version. Each account stores its
 Canva brand kit link and each piece stores its Canva design link, so the design
 is one click from the card. Posts are published from the client's publishing
 tool (for example Statusbrew); mark a piece Scheduled when it is loaded there
@@ -268,11 +284,13 @@ developer access and are not part of this version.
 
 ## Deployment
 
-Apply `20261118130000_social_studio.sql`,
+Apply the Social Studio migrations in chronological order, including `20261121111000_social_review_delivery.sql` after `20261121110000_social_monthly_scope.sql`. The original migrations are
+`20261118130000_social_studio.sql`,
 `20261120160000_social_studio_programs.sql`,
 `20261120190000_social_studio_clients.sql`,
-`20261120200000_social_studio_logos.sql` and
-`20261120210000_social_studio_client_side.sql`, in that order, before deploying the code. The first adds five
+`20261120200000_social_studio_logos.sql`,
+`20261120210000_social_studio_client_side.sql` and
+`20261121110000_social_monthly_scope.sql`, in that order, before deploying the code. The first adds five
 tables (`social_programs`, `social_accounts`, `social_content_items`,
 `social_media_batches`, `social_media_requests`); the second adds program terms,
 onboarding and avoid-term columns; the third adds the client report link and

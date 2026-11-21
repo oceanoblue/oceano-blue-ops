@@ -8,9 +8,13 @@ vi.mock("@/lib/crm/server", async () => ({
   ...(await vi.importActual<typeof import("@/lib/crm/server")>("@/lib/crm/server")),
   crmActor: mock.actor,
 }));
-vi.mock("./server", () => ({ runAction: mock.run, approvedPieces: mock.approved, recordPublishing: mock.record }));
+vi.mock("./server", () => ({ runAction: mock.run }));
 
 import { POST } from "@/app/api/social/route";
+vi.mock("./delivery", async () => ({
+  ...(await vi.importActual<typeof import("./delivery")>("./delivery")),
+  discoverDeliveries: mock.approved, recordReceipt: mock.record, claimDelivery: vi.fn(),
+}));
 import { GET as bridgeGet, POST as bridgePost } from "@/app/api/automations/social/route";
 import { CrmError } from "@/lib/crm/server";
 import {
@@ -236,16 +240,14 @@ describe("automation bridge", () => {
     expect(mock.approved).not.toHaveBeenCalled();
     expect(mock.record).not.toHaveBeenCalled();
   });
-  it("records scheduling and publishing on the live system only, and rejects other events and unsafe links", async () => {
-    const ok = await bridgePost(bridge("POST", "s3cret-value", { id, event: "published", published_url: "https://www.facebook.com/p/1" }));
-    expect(ok.status).toBe(200);
-    expect(mock.record).toHaveBeenCalledWith(id, "published", "https://www.facebook.com/p/1");
-    mock.record.mockClear();
-    expect((await bridgePost(bridge("POST", "s3cret-value", { id, event: "planned" }))).status).toBe(400);
-    expect((await bridgePost(bridge("POST", "s3cret-value", { id, event: "published", published_url: "javascript:alert(1)" }))).status).toBe(400);
-    vi.stubEnv("VERCEL_ENV", "preview");
-    expect((await bridgePost(bridge("POST", "s3cret-value", { id, event: "scheduled" }))).status).toBe(403);
+  it("requires a per-destination claim and provider receipt", async () => {
+    const legacy = await bridgePost(bridge("POST", "s3cret-value", { id, event: "published" }));
+    expect(legacy.status).toBe(409);
     expect(mock.record).not.toHaveBeenCalled();
+    const callback = { action: "receipt", claim_id: id, idempotency_key: id, event: "published", provider_id: "provider-1", detail: "", published_url: "https://example.com/p/1" };
+    expect((await bridgePost(bridge("POST", "s3cret-value", callback))).status).toBe(200);
+    expect(mock.record).toHaveBeenCalledWith(callback);
+    expect((await bridgePost(bridge("POST", "s3cret-value", { ...callback, published_url: "javascript:alert(1)" }))).status).toBe(400);
   });
 });
 

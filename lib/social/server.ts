@@ -1,22 +1,27 @@
+import { monthlyResult, type MonthlyResult, type ReportingMode } from "./reporting";
+import { readSocialPages } from "./db-pages";
+import { fulfilledQuota, noQuota, supplyAsOf, type MonthScope } from "./planning";
+import { reviewContext, reviewItems } from "./review";
 import { createHash, randomBytes } from "node:crypto";
 import { crmDb, CrmError } from "@/lib/crm/server";
 import { generateText, providerConfigured } from "@/lib/operations/providers";
 import { parseSettings } from "@/lib/operations/settings";
-import { CAPTION_LIMIT, auditMonth, hasError } from "./audit";
+import { CAPTION_LIMIT } from "./audit";
 import {
   COUNTERSIGN_CONSENT,
+  agreementPlaceholderCount,
   CLIENT_SIGNING_CONSENT,
   KIND_LABEL,
   MEDIA_WINDOW_DAYS,
   PILLAR_LABEL,
   TIER_DEFAULTS,
   monthStart,
-  planSlots,
   todayKey,
   clientStage,
   mediaHealth,
   quotaTotal,
   type AccessStatus,
+  type ApprovalMode,
   type AgreementStatus,
   type ClientAction,
   type ClientStage,
@@ -36,11 +41,15 @@ import {
 } from "./schema";
 
 export type Program = {
+  reporting_mode?: ReportingMode;
   id: string;
   name: string;
   contact_name: string;
   contact_email: string;
   publishing_tool: string;
+  approval_mode?: ApprovalMode;
+  publishing_enabled?: boolean;
+  updated_at?: string;
   status: ProgramStatus;
   notes: string;
   monthly_fee_cents: number;
@@ -85,9 +94,13 @@ export type Account = {
   tier: Tier;
   platforms: Platform[];
   posts_per_month: number;
+  post_weekdays?: number[];
   reels_per_month: number;
   google_posts_per_month: number;
   profile_links: ProfileLinks;
+  publishing_timezone?: string;
+  provider_destinations?: Partial<Record<Platform, string>>;
+  updated_at?: string;
   brand_kit_url: string;
   media_folder_url: string;
   voice_notes: string;
@@ -114,6 +127,12 @@ export type Item = {
   published_url: string;
   review_note: string;
   updated_at: string;
+  publish_time?: string | null;
+  review_revision?: number;
+  approved_revision?: number | null;
+  approved_by_role?: "office" | "client" | null;
+  creative_path?: string | null;
+  creative_type?: string | null;
   /** The client's latest answer: "approved", "changes", or blank. */
   client_decision: "" | "approved" | "changes";
   client_note: string;
@@ -151,11 +170,11 @@ export type MediaRequest = {
 export type Member = { id: string; full_name: string };
 
 const PROGRAM =
-  "id,name,contact_name,contact_email,publishing_tool,status,notes,monthly_fee_cents,account_rate_cents,minimum_fee_cents,term_start,term_months,media_due_day,agreement_url,onboarding,avoid_terms,report_token,logo_url,media_upload_url";
+  "id,name,contact_name,contact_email,publishing_tool,status,notes,monthly_fee_cents,account_rate_cents,minimum_fee_cents,term_start,term_months,media_due_day,agreement_url,onboarding,avoid_terms,report_token,logo_url,media_upload_url,reporting_mode,approval_mode,publishing_enabled,updated_at";
 const ACCOUNT =
-  "id,program_id,name,tier,platforms,posts_per_month,reels_per_month,google_posts_per_month,profile_links,brand_kit_url,media_folder_url,voice_notes,access_status,access_note,is_active,avoid_terms,logo_url";
+  "id,program_id,name,tier,platforms,posts_per_month,post_weekdays,reels_per_month,google_posts_per_month,profile_links,brand_kit_url,media_folder_url,voice_notes,access_status,access_note,is_active,avoid_terms,logo_url,provider_destinations,publishing_timezone,updated_at";
 const ITEM =
-  "id,account_id,month,kind,slot,pillar,title,caption,status,scheduled_for,assignee,design_url,published_url,review_note,updated_at,client_decision,client_note,client_reviewer,client_reviewed_at";
+  "id,account_id,month,kind,slot,pillar,title,caption,status,scheduled_for,assignee,design_url,published_url,review_note,updated_at,client_decision,client_note,client_reviewer,client_reviewed_at,review_revision,approved_revision,approved_by_role,creative_path,creative_type,publish_time";
 const BATCH = "id,account_id,received_on,source,photos,videos,link,note";
 const REQUEST = "id,account_id,ask,due_on,status,created_at";
 const AGREEMENT =
@@ -168,8 +187,7 @@ export const documentHash = (title: string, body: string) => createHash("sha256"
 const cleanBody = (body: string) => body.replace(/\r\n?/g, "\n").trim();
 
 const unavailable = () => new CrmError("Social Studio is unavailable. Please retry.", 503);
-/** Supabase returns at most 1,000 rows a request; a month of one program stays well under this. */
-const ROW_LIMIT = 1000;
+
 
 /** The first day of the media window, as YYYY-MM-DD. */
 export function mediaWindowStart(today: string = todayKey()): string {
@@ -179,9 +197,7 @@ export function mediaWindowStart(today: string = todayKey()): string {
 }
 
 export async function listPrograms(): Promise<Program[]> {
-  const { data, error } = await crmDb().from("social_programs").select(PROGRAM).order("created_at");
-  if (error) throw unavailable();
-  return (data ?? []) as unknown as Program[];
+  return readSocialPages<Program>((from, to) => crmDb().from("social_programs").select(PROGRAM).order("created_at").order("id").range(from, to));
 }
 
 /**
@@ -231,6 +247,8 @@ export async function listAgreements(programId: string): Promise<Agreement[]> {
 }
 
 export type Workspace = {
+  month: string;
+  entitlements: MonthScope[];
   accounts: Account[];
   items: Item[];
   /** Media received inside the supply window. */
@@ -243,32 +261,29 @@ export type Workspace = {
 /** Everything the overview, board and calendar need for one program and month. */
 export async function loadWorkspace(programId: string, month: string): Promise<Workspace> {
   const db = crmDb();
-  const accounts = await db.from("social_accounts").select(ACCOUNT).eq("program_id", programId).order("name");
-  if (accounts.error) throw unavailable();
-  const list = (accounts.data ?? []) as unknown as Account[];
-  const ids = list.map((a) => a.id);
-  const team = await db.from("team_members").select("id,full_name").eq("is_active", true).order("full_name");
-  if (team.error) throw unavailable();
-  if (ids.length === 0) return { accounts: [], items: [], media: [], requests: [], team: (team.data ?? []) as Member[] };
-  const [items, media, requests] = await Promise.all([
-    db.from("social_content_items").select(ITEM).in("account_id", ids).eq("month", monthStart(month))
-      .order("scheduled_for", { nullsFirst: false }).order("slot").limit(ROW_LIMIT),
-    db.from("social_media_batches").select(BATCH).in("account_id", ids).gte("received_on", mediaWindowStart())
-      .order("received_on", { ascending: false }).limit(ROW_LIMIT),
-    db.from("social_media_requests").select(REQUEST).in("account_id", ids).in("status", ["open", "sent"])
-      .order("created_at", { ascending: false }).limit(ROW_LIMIT),
+  const asOf = supplyAsOf(month, todayKey());
+  const [accounts, team, entitlements, items, media, requests] = await Promise.all([
+    readSocialPages<Account>((from, to) => db.from("social_accounts").select(ACCOUNT).eq("program_id", programId).order("name").order("id").range(from, to)),
+    readSocialPages<Member>((from, to) => db.from("team_members").select("id,full_name").eq("is_active", true).order("full_name").order("id").range(from, to)),
+    readSocialPages<MonthScope>((from,to) => db.rpc("social_month_scope", {p_program: programId,p_month: monthStart(month)}).order("account_id").range(from,to)),
+    readSocialPages<Item>((from,to) => db.from("social_content_items").select(ITEM+",social_accounts!inner(program_id)").eq("social_accounts.program_id",programId)
+      .eq("month",monthStart(month)).order("scheduled_for",{nullsFirst:false}).order("slot").order("id").range(from,to)),
+    readSocialPages<MediaBatch>((from,to) => db.from("social_media_batches").select(BATCH+",social_accounts!inner(program_id)").eq("social_accounts.program_id",programId)
+      .gte("received_on",mediaWindowStart(asOf)).lte("received_on",asOf).order("received_on",{ascending:false}).order("id").range(from,to)),
+    readSocialPages<MediaRequest>((from,to) => db.from("social_media_requests").select(REQUEST+",social_accounts!inner(program_id)").eq("social_accounts.program_id",programId)
+      .in("status",["open","sent"]).order("created_at",{ascending:false}).order("id").range(from,to)),
   ]);
-  if (items.error || media.error || requests.error) throw unavailable();
-  return {
-    accounts: list,
-    items: (items.data ?? []) as unknown as Item[],
-    media: (media.data ?? []) as unknown as MediaBatch[],
-    requests: (requests.data ?? []) as unknown as MediaRequest[],
-    team: (team.data ?? []) as Member[],
-  };
+  return {month,accounts,team,entitlements,items,media,requests};
+}
+
+/** Pieces scheduled in the displayed month, plus undated pieces allocated to it. */
+export async function calendarItems(programId: string, month: string): Promise<Item[]> {
+  return readSocialPages<Item>((from, to) => crmDb().rpc("social_calendar_items", {p_program:programId,p_month:monthStart(month)})
+    .select(ITEM).order("scheduled_for", { nullsFirst: false }).order("slot").order("id").range(from, to));
 }
 
 export type AccountDetail = {
+  entitlement: MonthScope | null;
   account: Account;
   program: Program;
   items: Item[];
@@ -283,7 +298,8 @@ export async function loadAccount(id: string, month: string): Promise<AccountDet
   if (account.error) throw unavailable();
   if (!account.data) return null;
   const a = account.data as unknown as Account;
-  const [program, items, media, requests, team] = await Promise.all([
+  const [entitlement, program, items, media, requests, team] = await Promise.all([
+    db.rpc("social_month_scope",{p_program:a.program_id,p_month:monthStart(month)}).eq("account_id",id).maybeSingle(),
     db.from("social_programs").select(PROGRAM).eq("id", a.program_id).maybeSingle(),
     db.from("social_content_items").select(ITEM).eq("account_id", id).eq("month", monthStart(month))
       .order("scheduled_for", { nullsFirst: false }).order("slot"),
@@ -291,9 +307,10 @@ export async function loadAccount(id: string, month: string): Promise<AccountDet
     db.from("social_media_requests").select(REQUEST).eq("account_id", id).order("created_at", { ascending: false }).limit(50),
     db.from("team_members").select("id,full_name").eq("is_active", true).order("full_name"),
   ]);
-  if (program.error || !program.data || items.error || media.error || requests.error || team.error) throw unavailable();
+  if (entitlement.error || program.error || !program.data || items.error || media.error || requests.error || team.error) throw unavailable();
   return {
     account: a,
+    entitlement: (entitlement.data as MonthScope | null),
     program: program.data as unknown as Program,
     items: (items.data ?? []) as unknown as Item[],
     media: (media.data ?? []) as unknown as MediaBatch[],
@@ -355,34 +372,21 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
       return {};
     }
     case "plan_month": {
-      const accounts = await db
-        .from("social_accounts")
-        .select("id,posts_per_month,reels_per_month,google_posts_per_month")
-        .eq("program_id", a.program_id)
-        .eq("is_active", true)
-        .order("name");
-      if (accounts.error) throw unavailable();
-      // Each account's position staggers its suggested dates across the month.
-      const rows = (accounts.data ?? []).flatMap((account, position) =>
-        planSlots(account, a.month, position).map((slot) => ({ ...slot, account_id: account.id, month: monthStart(a.month), updated_by: actor })),
-      );
-      if (rows.length === 0) return { created: 0 };
-      // Slots that already exist are skipped, so planning twice never duplicates or resets work.
-      const { data, error } = await db
-        .from("social_content_items")
-        .upsert(rows, { onConflict: "account_id,month,kind,slot", ignoreDuplicates: true })
-        .select("id");
+      const {data,error} = await db.rpc("social_plan_month", {p_program:a.program_id,p_month:monthStart(a.month),p_actor:actor});
       if (error) throw unavailable();
-      return { created: data?.length ?? 0 };
+      return {created: Number(data)};
     }
     case "update_item": {
+      if (a.patch.status && ["approved", "scheduled", "published"].includes(a.patch.status))
+        throw new CrmError("Use reviewer authorization and destination receipts to advance this piece.", 409);
       const { data, error } = await db
         .from("social_content_items")
         // Sending a piece to the client starts a new round, so their earlier answer no longer stands.
-        .update({ ...a.patch, ...(a.patch.status === "client_review" ? { client_decision: "" } : {}), updated_by: actor, updated_at: now })
+        .update({ ...a.patch, updated_by: actor, updated_at: now })
         .eq("id", a.id)
         .select("id");
       if (error) {
+        if (error.code === "P0001") throw new CrmError(error.message, 409);
         if (error.code === "23503") throw new CrmError("That team member is no longer available.", 409);
         throw unavailable();
       }
@@ -417,25 +421,17 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
       return {};
     }
     case "set_onboarding_step": {
-      const program = await db.from("social_programs").select("onboarding").eq("id", a.id).maybeSingle();
-      if (program.error) throw unavailable();
-      if (!program.data) throw new CrmError("That client no longer exists.", 404);
-      const onboarding: Onboarding = { ...((program.data.onboarding ?? {}) as Onboarding) };
-      if (a.done) onboarding[a.step] ??= todayKey();
-      else delete onboarding[a.step];
-      const { error } = await db.from("social_programs").update({ onboarding, updated_at: now }).eq("id", a.id);
+      const { data, error } = await db.rpc("social_set_onboarding_step", { p_program: a.id, p_step: a.step, p_done: a.done, p_day: todayKey() });
       if (error) throw unavailable();
+      if (!data) throw new CrmError("That client no longer exists.", 404);
       return {};
     }
-    case "resolve_client_feedback": {
-      const { data, error } = await db
-        .from("social_content_items")
-        .update({ client_decision: "", updated_by: actor, updated_at: now })
-        .eq("id", a.id)
-        .eq("client_decision", "changes")
-        .select("id");
-      if (error) throw unavailable();
-      if (!data?.length) throw new CrmError("There is no open request from the client on this piece.", 409);
+    case "resolve_client_feedback":
+    case "authorize_piece": {
+      const context = await reviewContext(a.id);
+      await reviewItems({ program: context.program_id, account: context.account_id, month: context.month,
+        items: [{ id: a.id, revision: a.revision }], role: "office", actor, name: "Oceano team", token: null,
+        event: a.action === "authorize_piece" ? "approved" : "handled", note: "" });
       return {};
     }
     case "resolve_client_note": {
@@ -507,6 +503,9 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
       if (draft.error) throw unavailable();
       if (!draft.data) throw new CrmError("That agreement no longer exists.", 404);
       if (draft.data.status !== "draft") throw new CrmError("This agreement was already sent.", 409);
+      if (agreementPlaceholderCount(draft.data.title, draft.data.body)) {
+        throw new CrmError("Fill in the bracketed agreement fields before creating a signing link.", 409);
+      }
       const token = newToken();
       // The last-saved time is matched again, so an edit that lands in between is never sent under the wrong fingerprint.
       const { data, error } = await db
@@ -548,18 +547,10 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
         .select("program_id");
       if (error) throw unavailable();
       if (!data?.length) throw new CrmError("The client has not signed this agreement yet.", 409);
-      // Tick the onboarding step. The signature stands even if this small update fails.
-      const programId = data[0].program_id as string;
-      const program = await db.from("social_programs").select("onboarding").eq("id", programId).maybeSingle();
-      const onboarding = { ...((program.data?.onboarding ?? {}) as Onboarding) };
-      if (!program.error && program.data && !onboarding.agreement_signed) {
-        onboarding.agreement_signed = todayKey();
-        await db.from("social_programs").update({ onboarding, updated_at: now }).eq("id", programId);
-      }
       return {};
     }
     case "draft_caption":
-      return { caption: await draftCaption(actor, a.id) };
+      return { caption: await draftCaption(actor, a.id, a.context) };
   }
 }
 
@@ -567,7 +558,7 @@ export async function runAction(actor: string, a: SocialAction): Promise<Record<
  * Ask the office's chosen AI model for a first-draft caption. The draft is
  * returned to the editor, never saved or published by this call.
  */
-async function draftCaption(actor: string, itemId: string): Promise<string> {
+async function draftCaption(actor: string, itemId: string, context?: {title:string;pillar:Pillar;scheduled_for:string|null}): Promise<string> {
   const db = crmDb();
   const item = await db.from("social_content_items").select("account_id,kind,pillar,title,scheduled_for").eq("id", itemId).maybeSingle();
   if (item.error) throw unavailable();
@@ -582,7 +573,8 @@ async function draftCaption(actor: string, itemId: string): Promise<string> {
   const agents = parseSettings(setting.data).agents;
   const choice = [agents.handoff, agents.planner, agents.delivery].find((c) => c.provider !== "rules" && providerConfigured(c.provider));
   if (!choice) throw new CrmError("Choose an AI model in Operations settings to draft captions.", 409);
-  const title = String(item.data.title ?? "").trim();
+  const draft = context ?? item.data;
+  const title = String(draft.title ?? "").trim();
   if (!title) throw new CrmError("Add a working title first, so the draft has something real to write about.", 400);
   const kind = item.data.kind as Kind;
   const platforms = (account.data.platforms as Platform[]).filter((p) => (kind === "google_post" ? p === "google" : p !== "google"));
@@ -598,9 +590,9 @@ async function draftCaption(actor: string, itemId: string): Promise<string> {
   const input = JSON.stringify({
     account: account.data.name,
     format: KIND_LABEL[kind],
-    content_type: PILLAR_LABEL[item.data.pillar as Pillar],
+    content_type: PILLAR_LABEL[draft.pillar as Pillar],
     topic: title,
-    publish_date: item.data.scheduled_for,
+    publish_date: draft.scheduled_for,
     platforms,
     max_characters: Math.min(limit, 900),
     hashtags: kind === "google_post" ? "none" : "3 to 6 relevant hashtags at the end",
@@ -618,78 +610,6 @@ async function draftCaption(actor: string, itemId: string): Promise<string> {
 // ---------------------------------------------------------------------------
 // Automation bridge (Make)
 // ---------------------------------------------------------------------------
-
-export type OutboundPiece = {
-  id: string;
-  account: string;
-  account_id: string;
-  platforms: Platform[];
-  profile_links: ProfileLinks;
-  kind: Kind;
-  content_type: Pillar;
-  title: string;
-  caption: string;
-  design_url: string;
-  publish_on: string | null;
-};
-
-/**
- * Approved pieces of a month that are ready to be scheduled, and the approved
- * pieces held back because a check found an error.
- */
-export async function approvedPieces(programId: string, month: string) {
-  const [programs, workspace] = await Promise.all([listPrograms(), loadWorkspace(programId, month)]);
-  const program = programs.find((p) => p.id === programId);
-  if (!program) throw new CrmError("That client does not exist.", 404);
-  const audit = auditMonth(workspace.items, workspace.accounts, program.avoid_terms, todayKey());
-  const byId = new Map(workspace.accounts.map((a) => [a.id, a]));
-  const ready: OutboundPiece[] = [];
-  const held: { id: string; account: string; issues: string[] }[] = [];
-  for (const item of workspace.items) {
-    if (item.status !== "approved") continue;
-    const account = byId.get(item.account_id);
-    if (!account || !account.is_active) continue;
-    if (hasError(audit[item.id])) {
-      held.push({ id: item.id, account: account.name, issues: audit[item.id].filter((i) => i.severity === "error").map((i) => i.message) });
-      continue;
-    }
-    ready.push({
-      id: item.id,
-      account: account.name,
-      account_id: account.id,
-      platforms: item.kind === "google_post" ? ["google"] : account.platforms.filter((p) => p !== "google"),
-      profile_links: account.profile_links,
-      kind: item.kind,
-      content_type: item.pillar,
-      title: item.title,
-      caption: item.caption,
-      design_url: item.design_url,
-      publish_on: item.scheduled_for,
-    });
-  }
-  return { program: program.name, month, ready, held };
-}
-
-/**
- * Record that a piece was scheduled or went live. Only moves a piece forward:
- * approved -> scheduled -> published. Anything else is refused, so a replayed
- * or out-of-order call cannot undo work.
- */
-export async function recordPublishing(id: string, event: "scheduled" | "published", publishedUrl: string) {
-  const db = crmDb();
-  const from: Status[] = event === "scheduled" ? ["approved"] : ["approved", "scheduled"];
-  const patch: Record<string, unknown> = { status: event, updated_at: new Date().toISOString() };
-  if (event === "published" && publishedUrl) patch.published_url = publishedUrl;
-  const { data, error } = await db.from("social_content_items").update(patch).eq("id", id).in("status", from).select("id");
-  if (error) throw unavailable();
-  if (data?.length) return { changed: true };
-  const current = await db.from("social_content_items").select("status").eq("id", id).maybeSingle();
-  if (current.error) throw unavailable();
-  if (!current.data) throw new CrmError("That piece does not exist.", 404);
-  // Already there (a retry) is fine; any other stage is a real conflict.
-  if (current.data.status === event || (event === "scheduled" && current.data.status === "published")) return { changed: false };
-  throw new CrmError(`This piece is at "${current.data.status}", so it cannot be marked ${event}.`, 409);
-}
 
 // ---------------------------------------------------------------------------
 // Pages a client opens with a private link (no sign-in)
@@ -765,6 +685,12 @@ export async function signAgreement(token: string, sign: SignRequest, ipHash: st
 }
 
 export type PublicPiece = {
+  revision: number;
+  creative_url: string;
+  publish_time: string;
+  timezone: string;
+  destinations: { platform: Platform; url: string }[];
+  creative_type: string;
   /** Set once the client can act on the piece (from review onward); blank before that. */
   id: string;
   kind: Kind;
@@ -779,12 +705,15 @@ export type PublicPiece = {
   feedback: { decision: "approved" | "changes"; note: string; by: string; at: string | null } | null;
 };
 export type PublicReport = {
+  reporting_mode?: ReportingMode;
+  performance_report?: MonthlyResult | null;
+  approval_mode: ApprovalMode;
   client: string;
   logo_url: string;
   /** Where the client sends photos and video, or blank. */
   media_upload_url: string;
   month: string;
-  totals: Record<ClientStage, number> & { owed: number };
+  totals: Record<ClientStage, number> & { owed: number; fulfilled: number };
   accounts: {
     id: string;
     name: string;
@@ -804,14 +733,16 @@ export type PublicReport = {
  */
 export async function publicReport(token: string, month: string): Promise<PublicReport | null> {
   if (!TOKEN_RE.test(token)) return null;
-  const { data, error } = await crmDb().from("social_programs").select("id,name,logo_url,media_upload_url").eq("report_token", token).maybeSingle();
+  const { data, error } = await crmDb().from("social_programs").select("id,name,logo_url,media_upload_url,reporting_mode,approval_mode,status").eq("report_token", token).maybeSingle();
   if (error) throw unavailable();
-  if (!data) return null;
+  if (!data || ["paused", "ended"].includes(data.status)) return null;
   const workspace = await loadWorkspace(data.id as string, month);
-  const totals = { owed: 0, in_progress: 0, for_review: 0, approved: 0, scheduled: 0, live: 0 };
+  const totals = { owed: 0, fulfilled: 0, in_progress: 0, for_review: 0, approved: 0, scheduled: 0, live: 0 };
+  const scope = new Map(workspace.entitlements.map(row => [row.account_id,row]));
   const accounts = workspace.accounts
-    .filter((a) => a.is_active)
+    .filter((a) => scope.has(a.id))
     .map((account) => {
+      const quota = scope.get(account.id) ?? noQuota;
       const recent = workspace.media.filter((m) => m.account_id === account.id);
       const pieces = workspace.items
         .filter((i) => i.account_id === account.id)
@@ -821,6 +752,14 @@ export async function publicReport(token: string, month: string): Promise<Public
           const visible = stage !== "in_progress";
           return {
             id: visible ? i.id : "",
+            revision: i.review_revision ?? 1,
+            publish_time: i.publish_time?.slice(0, 5) ?? "",
+            timezone: account.publishing_timezone ?? "",
+            destinations: visible ? (account.platforms ?? []).filter(p => (i.kind === "google_post") === (p === "google")).map(platform => ({
+              platform, url: account.profile_links?.[platform] ?? "",
+            })) : [],
+            creative_url: visible && i.creative_path ? `/api/social/creative/${i.id}?revision=${i.review_revision}` : "",
+            creative_type: visible ? i.creative_type ?? "" : "",
             kind: i.kind,
             title: i.title,
             date: i.scheduled_for,
@@ -831,13 +770,15 @@ export async function publicReport(token: string, month: string): Promise<Public
             feedback: visible && i.client_decision ? { decision: i.client_decision, note: i.client_note ?? "", by: i.client_reviewer ?? "", at: i.client_reviewed_at ?? null } : null,
           };
         });
-      totals.owed += quotaTotal(account);
+      totals.owed += quotaTotal(quota);
+      totals.fulfilled += fulfilledQuota(quota, workspace.items.filter(i =>
+        i.account_id === account.id && (i.status === "scheduled" || i.status === "published")));
       return {
         id: account.id,
         name: account.name,
         logo_url: account.logo_url ?? "",
-        owed: quotaTotal(account),
-        media: mediaHealth(account, {
+        owed: quotaTotal(quota),
+        media: mediaHealth(quota, {
           photos: recent.reduce((n, m) => n + m.photos, 0),
           videos: recent.reduce((n, m) => n + m.videos, 0),
         }),
@@ -846,7 +787,10 @@ export async function publicReport(token: string, month: string): Promise<Public
       };
     });
   return {
+    reporting_mode: data.reporting_mode ?? "progress",
+    performance_report: data.reporting_mode === "agency_report" ? await monthlyResult(data.id as string, month) : null,
     client: data.name as string,
+    approval_mode: data.approval_mode ?? "individual",
     logo_url: (data.logo_url as string) ?? "",
     media_upload_url: (data.media_upload_url as string) ?? "",
     month,
@@ -876,9 +820,9 @@ const SHOWN_TO_CLIENT: Status[] = ["client_review", "approved", "scheduled", "pu
 export async function clientAction(token: string, a: ClientAction): Promise<ClientActionResult> {
   if (!TOKEN_RE.test(token)) throw new CrmError("This link is not valid.", 404);
   const db = crmDb();
-  const program = await db.from("social_programs").select("id,name").eq("report_token", token).maybeSingle();
+  const program = await db.from("social_programs").select("id,name,status").eq("report_token", token).maybeSingle();
   if (program.error) throw unavailable();
-  if (!program.data) throw new CrmError("This link is no longer valid.", 404);
+  if (!program.data || ["paused", "ended"].includes(program.data.status)) throw new CrmError("This link is no longer valid.", 404);
   const programId = program.data.id as string;
   const result: ClientActionResult = { client: program.data.name as string, program_id: programId, approved: 0, notify: null };
   const now = new Date().toISOString();
@@ -900,48 +844,22 @@ export async function clientAction(token: string, a: ClientAction): Promise<Clie
       return result;
     }
     case "approve_all": {
-      const account = await ownAccount(a.account_id);
-      const { data, error } = await db
-        .from("social_content_items")
-        .update({ status: "approved", client_decision: "approved", client_note: "", client_reviewer: a.name, client_reviewed_at: now, updated_at: now })
-        .eq("account_id", account.id)
-        .eq("month", monthStart(a.month))
-        .eq("status", "client_review")
-        .select("id");
-      if (error) throw unavailable();
-      result.approved = data?.length ?? 0;
+      await ownAccount(a.account_id);
+      result.approved = await reviewItems({ program: programId, account: a.account_id, month: monthStart(a.month),
+        items: a.items, role: "client", actor: null, name: a.name, token, event: "approved", note: "" });
       return result;
     }
     case "approve":
     case "request_changes": {
-      const item = await db.from("social_content_items").select("id,account_id,title,status").eq("id", a.item_id).maybeSingle();
-      if (item.error) throw unavailable();
-      // A piece the client has not been shown is treated exactly like one that does not exist.
-      if (!item.data || !SHOWN_TO_CLIENT.includes(item.data.status as Status)) throw new CrmError("That piece was not found.", 404);
-      const account = await ownAccount(item.data.account_id as string);
-      if (a.action === "approve") {
-        const { data, error } = await db
-          .from("social_content_items")
-          .update({ status: "approved", client_decision: "approved", client_note: "", client_reviewer: a.name, client_reviewed_at: now, updated_at: now })
-          .eq("id", a.item_id)
-          .eq("status", "client_review")
-          .select("id");
-        if (error) throw unavailable();
-        if (!data?.length) throw new CrmError("This piece is no longer waiting for your review. Reload the page to see where it is.", 409);
-        result.approved = 1;
-        return result;
-      }
-      // Asking for a change sends a piece under review back to design. One that is already approved,
-      // scheduled or live stays where it is: the office decides what to do, and it is held from scheduling meanwhile.
-      const patch = { client_decision: "changes", client_note: a.note, client_reviewer: a.name, client_reviewed_at: now, updated_at: now };
-      const back = await db.from("social_content_items").update({ ...patch, status: "in_design" }).eq("id", a.item_id).eq("status", "client_review").select("id");
-      if (back.error) throw unavailable();
-      if (!back.data?.length) {
-        const kept = await db.from("social_content_items").update(patch).eq("id", a.item_id).in("status", ["approved", "scheduled", "published"]).select("id");
-        if (kept.error) throw unavailable();
-        if (!kept.data?.length) throw new CrmError("That piece was not found.", 404);
-      }
-      result.notify = { kind: "changes", by: a.name, account: account.name, title: (item.data.title as string) || "Untitled piece", text: a.note };
+      const item = await reviewContext(a.item_id);
+      if (!SHOWN_TO_CLIENT.includes(item.status as Status)) throw new CrmError("That piece was not found.", 404);
+      const account = await ownAccount(item.account_id);
+      const approve = a.action === "approve";
+      const n = await reviewItems({ program: programId, account: account.id, month: item.month,
+        items: [{ id: a.item_id, revision: a.revision }], role: "client", actor: null, name: a.name, token,
+        event: approve ? "approved" : "changes", note: approve ? "" : a.note });
+      if (approve) result.approved = n;
+      else result.notify = { kind: "changes", by: a.name, account: account.name, title: item.title || "Untitled piece", text: a.note };
       return result;
     }
   }

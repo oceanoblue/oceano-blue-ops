@@ -1,3 +1,4 @@
+import { coveredSlots, fulfilledQuota, noQuota, type MonthScope } from "./planning";
 import { auditMonth, hasError, type Issue } from "./audit";
 import {
   DONE,
@@ -19,7 +20,7 @@ import {
 import type { Account, Item, MediaBatch, MediaRequest, Program } from "./server";
 
 /** What the summary needs from a loaded month. */
-export type MonthData = { accounts: Account[]; items: Item[]; media: MediaBatch[]; requests: MediaRequest[] };
+export type MonthData = { month?: string; entitlements?: MonthScope[]; accounts: Account[]; items: Item[]; media: MediaBatch[]; requests: MediaRequest[] };
 
 /** One sub-account's month at a glance. */
 export type AccountRow = {
@@ -27,6 +28,7 @@ export type AccountRow = {
   counts: StatusCounts;
   /** Pieces on the plan this month. */
   planned: number;
+  missing: number;
   /** Pieces the account is owed each month. */
   owed: number;
   done: number;
@@ -39,21 +41,24 @@ export type AccountRow = {
 
 /** One row per active sub-account, in the order the accounts were given. */
 export function accountRows(data: MonthData, audit: Record<string, Issue[]>, today: string): AccountRow[] {
+  const scope = data.entitlements && new Map(data.entitlements.map(s => [s.account_id, s]));
   return data.accounts
-    .filter((a) => a.is_active)
+    .filter((a) => scope?.has(a.id) || (a.is_active && (!data.month || data.month >= today.slice(0,7))))
     .map((account) => {
       const items = data.items.filter((i) => i.account_id === account.id);
       const recent = data.media.filter((m) => m.account_id === account.id);
       const counts = countByStatus(items);
+      const quota = scope ? scope.get(account.id) ?? noQuota : account;
       return {
         account,
         counts,
         planned: items.length,
-        owed: quotaTotal(account),
-        done: sumOf(counts, DONE),
+        owed: quotaTotal(quota),
+        missing: quotaTotal(quota) - coveredSlots(quota,items),
+        done: fulfilledQuota(quota, items.filter(i => DONE.includes(i.status))),
         late: items.filter((i) => isLate(i, today)).length,
         errors: items.filter((i) => hasError(audit[i.id])).length,
-        health: mediaHealth(account, {
+        health: mediaHealth(quota, {
           photos: recent.reduce((n, m) => n + m.photos, 0),
           videos: recent.reduce((n, m) => n + m.videos, 0),
         }),
@@ -67,6 +72,7 @@ export type ClientSummary = {
   accounts: number;
   owed: number;
   planned: number;
+  missing: number;
   done: number;
   inProduction: number;
   withClient: number;
@@ -94,6 +100,7 @@ export function summarize(program: Pick<Program, "onboarding">, rows: AccountRow
   return {
     accounts: rows.length,
     owed,
+    missing: rows.reduce((n, r) => n + r.missing, 0),
     planned: rows.reduce((n, r) => n + r.planned, 0),
     done,
     inProduction: sumOf(totals, IN_PRODUCTION),

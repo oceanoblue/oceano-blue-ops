@@ -1,12 +1,11 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { z } from "zod";
 import { crmDb, CrmError } from "@/lib/crm/server";
 import { inquiryOfficeConfig } from "@/lib/crm/inquiry-server";
 import { escapeEmail } from "@/lib/crm/acquisition-mail";
+import { captureError } from "@/lib/observability/report";
 import { sendEmail, isEmailConfigured } from "@/lib/email/resend";
 import {
-  MAX_FILES,
-  MAX_SUBMISSION_BYTES,
   SOCIAL_BUCKET,
   UPLOAD_WINDOW_HOURS,
   answerRows,
@@ -19,8 +18,6 @@ import {
   type submitSchema,
 } from "./schema";
 
-/** Ceiling on upload requests across all clients in any 24 hours. */
-const DAILY_FILE_CAP = 400;
 const sha = (v: string) => createHash("sha256").update(v).digest("hex");
 const sameHash = (a: string, b: string) =>
   a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -38,6 +35,7 @@ export type SocialFile = {
 };
 export type SocialIntake = {
   id: string;
+  program_id: string | null;
   business_name: string;
   contact_name: string;
   email: string;
@@ -105,15 +103,16 @@ async function notifyOffice(id: string, a: SocialAnswers, expectedFiles: number)
     )
     .join("");
   try {
-    await sendEmail({
+    const sent = await sendEmail({
       to: office.recipient,
       subject: `Social media onboarding: ${a.business_name.replace(/[\r\n]/g, " ")}`,
       html: `<p>${escapeEmail(a.contact_name)} sent the social media onboarding form${expectedFiles ? ` and is uploading ${expectedFiles} file${expectedFiles === 1 ? "" : "s"}` : ""}.</p><table style="border-collapse:collapse;font-size:14px">${rows}</table><p><a href="https://app.oceanoblue.net/dashboard/crm/social-onboarding">Open social onboarding</a></p>`,
       replyTo: a.email,
       idempotencyKey: `social-onboarding/${id}`,
     });
+    if (sent.status !== "sent") captureError("social.intake_notification", new Error(sent.status), { intake_id: id });
   } catch {
-    // The intake is saved and visible in the dashboard either way.
+    captureError("social.intake_notification", new Error("Delivery unavailable"), { intake_id: id });
   }
 }
 
@@ -141,44 +140,30 @@ export async function signFileUpload(req: Extract<FileRequest, { action: "sign" 
   const db = crmDb();
   const path = `${req.submission_id}/${req.file_id}-${safeFileName(req.name)}`;
 
-  const current = await db
-    .from("social_onboarding_files")
-    .select("id,status,declared_bytes,storage_path")
-    .eq("submission_id", req.submission_id);
-  if (current.error) throw new CrmError("Uploads are temporarily unavailable.", 503);
-  const existing = current.data.find((f) => f.id === req.file_id);
-  if (existing?.status === "uploaded") return { already_uploaded: true as const };
-  if (existing && existing.storage_path !== path)
-    throw new CrmError("Remove this file and add it again.", 409);
-  if (!existing) {
-    if (current.data.length >= MAX_FILES)
-      throw new CrmError(`You can upload up to ${MAX_FILES} files here. Share a folder link for the rest.`);
-    const total = current.data.reduce((n, f) => n + Number(f.declared_bytes), 0);
-    if (total + req.size > MAX_SUBMISSION_BYTES)
-      throw new CrmError("That's more than 10 GB in total. Share a folder link for the rest.");
-    const day = new Date(Date.now() - 24 * 3600_000).toISOString();
-    const recent = await db
-      .from("social_onboarding_files")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", day);
-    if (recent.error || (recent.count ?? 0) >= DAILY_FILE_CAP)
-      throw new CrmError("Uploads are busy right now. Please try again later.", 503);
-    const inserted = await db.from("social_onboarding_files").insert({
-      id: req.file_id,
-      submission_id: req.submission_id,
-      kind: fileKind(req.name)!,
-      original_name: req.name,
-      storage_path: path,
-      content_type: req.content_type,
-      declared_bytes: req.size,
-    });
-    // A file id that already belongs to another intake is never re-signed.
-    if (inserted.error) throw new CrmError("Remove this file and add it again.", 409);
+  const reservation = await db.rpc("social_reserve_intake_file", {
+    p_intake: req.submission_id, p_file: req.file_id, p_path: path, p_name: req.name,
+    p_kind: fileKind(req.name)!, p_mime: req.content_type, p_bytes: req.size,
+  });
+  if (reservation.error) {
+    switch (reservation.error.message) {
+      case "file_changed": throw new CrmError("Remove this file and add it again.", 409);
+      case "file_count": throw new CrmError("You can upload up to 40 files. Share a folder link for the rest.");
+      case "intake_bytes": throw new CrmError("That's more than 10 GB in total. Share a folder link for the rest.");
+      case "daily_capacity": throw new CrmError("Uploads are busy right now. Please try again later.", 503);
+      default: throw new CrmError("Uploads are temporarily unavailable.", 503);
+    }
   }
-  // upsert lets a failed attempt be retried against the same path.
-  const signed = await db.storage
-    .from(SOCIAL_BUCKET)
-    .createSignedUploadUrl(path, { upsert: true });
+  if (reservation.data === "uploaded") return { already_uploaded: true as const };
+  const bucket = db.storage.from(SOCIAL_BUCKET);
+  if (reservation.data === "pending") {
+    // The browser can lose a response after Storage accepted the bytes. Finish that attempt first.
+    const previous = await bucket.info(path);
+    if (previous.data) {
+      await confirmFileUpload({ action: "done", submission_id: req.submission_id, upload_token: req.upload_token, file_id: req.file_id });
+      return { already_uploaded: true as const };
+    }
+  }
+  const signed = await bucket.createSignedUploadUrl(path, { upsert: false });
   if (signed.error || !signed.data)
     throw new CrmError("Uploads are temporarily unavailable.", 503);
   return {
@@ -195,56 +180,113 @@ export async function confirmFileUpload(req: Extract<FileRequest, { action: "don
   const db = crmDb();
   const { data: file, error } = await db
     .from("social_onboarding_files")
-    .select("id,status,storage_path")
+    .select("id,status,storage_path,declared_bytes")
     .eq("id", req.file_id)
     .eq("submission_id", req.submission_id)
     .maybeSingle();
   if (error) throw new CrmError("Uploads are temporarily unavailable.", 503);
   if (!file) throw new CrmError("Remove this file and add it again.", 404);
   if (file.status === "uploaded") return;
-  // Trust storage, not the browser, about whether the file arrived.
-  const info = await db.storage.from(SOCIAL_BUCKET).info(file.storage_path);
-  if (info.error || !info.data)
+  const bucket = db.storage.from(SOCIAL_BUCKET);
+  const remove = async (path: string) => {
+    const result = await bucket.remove([path]);
+    if (result.error) throw new CrmError("Uploads are temporarily unavailable.", 503);
+  };
+  const staged = await bucket.info(file.storage_path);
+  if (staged.error || !staged.data) {
+    // Another confirmation may have committed and removed staging while this request was checking.
+    const current = await db.from("social_onboarding_files").select("status").eq("id", file.id).maybeSingle();
+    if (current.data?.status === "uploaded") return;
     throw new CrmError("That file didn't finish uploading. Try it again.", 409);
-  const saved = await db
-    .from("social_onboarding_files")
-    .update({
-      status: "uploaded",
-      size_bytes: info.data.size ?? null,
-      uploaded_at: new Date().toISOString(),
-    })
-    .eq("id", file.id);
-  if (saved.error) throw new CrmError("Uploads are temporarily unavailable.", 503);
+  }
+  if (staged.data.size !== Number(file.declared_bytes)) {
+    if (staged.data.size == null) throw new CrmError("We couldn't verify the file size. Please retry.", 503);
+    await remove(file.storage_path);
+    throw new CrmError("The received file size differs from the selected file. Please retry the upload.", 409);
+  }
+  // Existing upload tickets may allow replacement. The verified copy has no upload ticket.
+  const finalPath = `verified/${req.submission_id}/${file.id}/${randomUUID()}`;
+  const copied = await bucket.copy(file.storage_path, finalPath);
+  if (copied.error) {
+    const current = await db.from("social_onboarding_files").select("status").eq("id", file.id).maybeSingle();
+    if (current.data?.status === "uploaded") return;
+    throw new CrmError("We couldn't finish saving this file. Please retry.", 503);
+  }
+  const verified = await bucket.info(finalPath);
+  if (verified.error || verified.data?.size !== Number(file.declared_bytes)) {
+    await remove(finalPath);
+    throw new CrmError("We couldn't verify the saved file. Please retry.", 503);
+  }
+  const saved = await db.from("social_onboarding_files")
+    .update({ status: "uploaded", storage_path: finalPath, size_bytes: verified.data.size, uploaded_at: new Date().toISOString() })
+    .eq("id", file.id).eq("status", "pending").select("id");
+  if (saved.error) {
+    // A connection can fail after the update commits. Check which copy won before cleanup.
+    const current = await db.from("social_onboarding_files").select("status,storage_path").eq("id", file.id).maybeSingle();
+    if (current.error) throw new CrmError("Uploads are temporarily unavailable.", 503);
+    if (current.data?.storage_path !== finalPath) await remove(finalPath);
+    if (current.data?.status !== "uploaded") throw new CrmError("Uploads are temporarily unavailable.", 503);
+  } else if (!saved.data?.length) {
+    await remove(finalPath);
+    return;
+  }
+  // The verified copy is committed; staging cleanup can be retried by the daily maintenance task.
+  const cleanup = await bucket.remove([file.storage_path]);
+  if (cleanup.error) captureError("social.intake_staging_cleanup", new Error("Storage removal failed"), { file_id: file.id });
+}
+
+export async function cleanExpiredIntakeObjects(): Promise<number> {
+  if (process.env.VERCEL_ENV !== "production") return 0;
+  const db = crmDb();
+  const { data, error } = await db.rpc("social_expired_intake_objects");
+  if (error) throw new Error("Expired social uploads could not be listed.");
+  const paths = (data as {object_path: string}[]).map(row => row.object_path);
+  if (!paths.length) return 0;
+  const removed = await db.storage.from(SOCIAL_BUCKET).remove(paths);
+  if (removed.error) throw new Error("Expired social uploads could not be removed.");
+  return paths.length;
 }
 
 // ---------------------------------------------------------------------------
 // Office
 // ---------------------------------------------------------------------------
 
-export async function listIntakes(): Promise<SocialIntake[]> {
+export const INTAKE_PAGE_SIZE = 20;
+export async function listIntakes(options: { id?: string; before?: { date: string; id: string } } = {}): Promise<SocialIntake[]> {
   const db = crmDb();
-  const { data, error } = await db
-    .from("social_onboarding_submissions")
-    .select(
-      "id,business_name,contact_name,email,phone,package,answers,expected_files,status,reviewed_at,created_at",
-    )
-    .order("created_at", { ascending: false })
-    .limit(100);
+  let query = db.from("social_onboarding_submissions")
+    .select("id,program_id,business_name,contact_name,email,phone,package,answers,expected_files,status,reviewed_at,created_at");
+  if (options.id) query = query.eq("id", options.id);
+  if (options.before) {
+    const { date, id } = options.before;
+    query = query.or(`created_at.lt.${date},and(created_at.eq.${date},id.lt.${id})`);
+  }
+  const { data, error } = await query.order("created_at", { ascending: false }).order("id", { ascending: false }).limit(INTAKE_PAGE_SIZE);
   if (error) throw new CrmError("Social onboarding is temporarily unavailable.", 503);
   if (!data.length) return [];
-  const files = await db
-    .from("social_onboarding_files")
+  // 20 intakes of up to 40 files stay below the Storage API's row limit.
+  const files = await db.from("social_onboarding_files")
     .select("id,submission_id,kind,original_name,size_bytes,declared_bytes,status")
-    .in(
-      "submission_id",
-      data.map((d) => d.id),
-    )
-    .order("created_at");
+    .in("submission_id", data.map(d => d.id)).order("created_at");
   if (files.error) throw new CrmError("Social onboarding is temporarily unavailable.", 503);
-  return data.map((d) => ({
-    ...d,
-    files: files.data.filter((f) => f.submission_id === d.id),
-  })) as SocialIntake[];
+  return data.map(d => ({ ...d, files: files.data.filter(f => f.submission_id === d.id) })) as SocialIntake[];
+}
+
+export async function listIntakeProgramChoices(): Promise<{ id: string; name: string }[]> {
+  const rows: { id: string; name: string }[] = [];
+  for (let start = 0; ; start += 500) {
+    const { data, error } = await crmDb().from("social_programs").select("id,name").order("name").order("id").range(start, start + 499);
+    if (error) throw new CrmError("Social clients could not be loaded.", 503);
+    rows.push(...data);
+    if (data.length < 500) return rows;
+  }
+}
+
+export async function linkedIntakes(programId: string): Promise<{ id: string; business_name: string; created_at: string }[]> {
+  const { data, error } = await crmDb().from("social_onboarding_submissions").select("id,business_name,created_at")
+    .eq("program_id", programId).order("created_at", {ascending: false});
+  if (error) throw new CrmError("Linked intakes could not be loaded.", 503);
+  return data;
 }
 
 export async function setIntakeStatus(actor: string, id: string, status: "new" | "reviewed") {
@@ -260,6 +302,16 @@ export async function setIntakeStatus(actor: string, id: string, status: "new" |
     .maybeSingle();
   if (error) throw new CrmError("Unable to save. Please retry.", 503);
   if (!data) throw new CrmError("Intake not found.", 404);
+}
+
+/** Convert a submitted form only after the office selects its client. Safe to retry. */
+export async function linkIntake(actor: string, id: string, programId: string | null): Promise<string> {
+  const { data, error } = await crmDb().rpc("social_link_intake", { p_intake: id, p_program: programId, p_actor: actor });
+  if (!error && typeof data === "string") return data;
+  if (error?.code === "P0002") throw new CrmError("The intake or client could not be found.", 404);
+  if (error?.message === "already_linked") throw new CrmError("This intake is already linked to a different client.", 409);
+  if (error?.message === "unknown_approval_preference") throw new CrmError("The intake has an unrecognized approval preference.", 409);
+  throw new CrmError("The intake could not be linked. Please retry.", 503);
 }
 
 /** Five-minute download link for one uploaded file. */

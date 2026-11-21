@@ -641,7 +641,7 @@ export function SocialOnboarding({ readOnly = false }: { readOnly?: boolean }) {
               ["We confirm access", "We check that we can reach each account and help with any that need it."],
               ["We set your look", "Post designs in your colors and fonts, built from your brand guide or created for you."],
               ["We plan and post", "Your content goes out on a steady schedule, with your approval the way you asked for it."],
-              ["You get a monthly report", "Views and clicks for every post, so we can make more of what's working."],
+              ["Reporting", "We’ll agree on the metrics, reporting schedule and who pulls the numbers for your accounts."],
             ].map(([title, body], i) => (
               <li key={title} className="border-t-2 border-ink-950 pt-4">
                 <p className="font-display text-2xl text-ocean-700">{i + 1}</p>

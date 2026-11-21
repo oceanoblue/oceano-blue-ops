@@ -13,6 +13,8 @@ import {
   type Status,
 } from "@/lib/social/schema";
 import type { Item, Member } from "@/lib/social/server";
+import { CreativeReview } from "./CreativeReview";
+import { DeliveryHistory } from "./DeliveryHistory";
 import { useSocialAction } from "./useSocialAction";
 
 type Draft = {
@@ -21,6 +23,7 @@ type Draft = {
   pillar: Pillar;
   status: Status;
   scheduled_for: string;
+  publish_time: string;
   assignee: string;
   design_url: string;
   published_url: string;
@@ -32,6 +35,7 @@ const draftOf = (i: Item): Draft => ({
   pillar: i.pillar,
   status: i.status,
   scheduled_for: i.scheduled_for ?? "",
+  publish_time: i.publish_time?.slice(0, 5) ?? "",
   assignee: i.assignee ?? "",
   design_url: i.design_url,
   published_url: i.published_url,
@@ -62,15 +66,27 @@ export function ItemEditor({
   const firstField = useRef<HTMLInputElement>(null);
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
+  const dialog = useRef<HTMLDialogElement>(null);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(draftOf(item));
+  function dismiss() {
+    if (!dirty || window.confirm("Discard your unsaved changes?")) onClose();
+  }
   useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const element = dialog.current;
+    element?.showModal();
     firstField.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    return () => { element?.close(); previous?.focus(); };
+  }, []);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload",warn);
+    return () => window.removeEventListener("beforeunload",warn);
+  },[dirty]);
 
   async function draftCaption() {
-    const result = await drafting.run({ action: "draft_caption", id: item.id });
+    const result = await drafting.run({ action: "draft_caption", id: item.id, context: {title:draft.title,pillar:draft.pillar,scheduled_for:draft.scheduled_for || null} });
     if (result && typeof result.caption === "string") set("caption", result.caption);
   }
 
@@ -80,18 +96,16 @@ export function ItemEditor({
     const patch: Record<string, unknown> = {};
     for (const key of Object.keys(draft) as (keyof Draft)[]) {
       if (draft[key] === before[key]) continue;
-      patch[key] = key === "scheduled_for" || key === "assignee" ? draft[key] || null : draft[key];
+      patch[key] = key === "scheduled_for" || key === "publish_time" || key === "assignee" ? draft[key] || null : draft[key];
     }
     if (Object.keys(patch).length === 0) return onClose();
     if (await run({ action: "update_item", id: item.id, patch })) onClose();
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-950/50 p-0 sm:items-center sm:p-6" onClick={onClose}>
+    <dialog ref={dialog} aria-labelledby={titleId} onCancel={e=>{e.preventDefault();dismiss();}} className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none bg-transparent p-0 backdrop:bg-ink-950/50">
+      <div className="flex h-full items-end justify-center sm:items-center sm:p-6" onClick={dismiss}>
       <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
         onSubmit={save}
         onClick={(e) => e.stopPropagation()}
         className="card flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-b-none sm:rounded-b-xl"
@@ -105,7 +119,7 @@ export function ItemEditor({
               {accountName}
             </h2>
           </div>
-          <button type="button" onClick={onClose} className="btn-ghost px-2" aria-label="Close">
+          <button type="button" onClick={dismiss} className="btn-ghost px-2" aria-label="Close">
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </header>
@@ -133,8 +147,8 @@ export function ItemEditor({
               {item.client_decision === "changes" && (
                 <>
                   {item.client_note && <p className="mt-1 whitespace-pre-line">&ldquo;{item.client_note}&rdquo;</p>}
-                  <p className="mt-2 text-xs text-amber-900/80">Sending the piece back to client review clears this. If no change is needed, mark it handled.</p>
-                  <button type="button" className="btn-secondary mt-2" disabled={busy} onClick={async () => (await run({ action: "resolve_client_feedback", id: item.id })) && onClose()}>
+                  <p className="mt-2 text-xs text-amber-900/80">The concern stays on record. Mark it handled after reviewing it. A fresh authorization is required before the piece can be released.</p>
+                  <button type="button" className="btn-secondary mt-2" disabled={busy} onClick={async () => (await run({ action: "resolve_client_feedback", id: item.id, revision: item.review_revision })) && onClose()}>
                     Mark as handled
                   </button>
                 </>
@@ -148,7 +162,7 @@ export function ItemEditor({
           <label>
             <span className="label">Stage</span>
             <select className="input" value={draft.status} onChange={(e) => set("status", e.target.value as Status)}>
-              {STATUSES.map((s) => (
+              {STATUSES.filter((s) => s === item.status || !["approved", "scheduled", "published"].includes(s)).map((s) => (
                 <option key={s} value={s}>{STATUS_LABEL[s]}</option>
               ))}
             </select>
@@ -156,6 +170,10 @@ export function ItemEditor({
           <label>
             <span className="label">Publish date</span>
             <input type="date" className="input" value={draft.scheduled_for} onChange={(e) => set("scheduled_for", e.target.value)} />
+          </label>
+          <label>
+            <span className="label">Publish time at the property</span>
+            <input type="time" className="input" value={draft.publish_time} onChange={e => set("publish_time", e.target.value)} />
           </label>
           <label>
             <span className="label">Content type</span>
@@ -205,6 +223,8 @@ export function ItemEditor({
             </span>
             <input type="url" className="input" maxLength={500} value={draft.design_url} onChange={(e) => set("design_url", e.target.value)} placeholder="https://www.canva.com/design/..." />
           </label>
+          <CreativeReview item={item} onSaved={onClose} disabled={dirty} />
+          <DeliveryHistory item={item} close={onClose} disabled={dirty} />
           <label className="sm:col-span-2">
             <span className="label">Live post link</span>
             <input type="url" className="input" maxLength={500} value={draft.published_url} onChange={(e) => set("published_url", e.target.value)} placeholder="https://" />
@@ -218,11 +238,12 @@ export function ItemEditor({
         <footer className="flex items-center justify-between gap-3 border-t border-ink-100 bg-ink-50/60 px-5 py-3">
           <p role="alert" className="min-h-5 text-sm text-rose-700">{error}</p>
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+            <button type="button" onClick={dismiss} className="btn-secondary">Cancel</button>
             <button type="submit" disabled={busy} className="btn-primary">{busy ? "Saving..." : "Save"}</button>
           </div>
         </footer>
       </form>
-    </div>
+      </div>
+    </dialog>
   );
 }

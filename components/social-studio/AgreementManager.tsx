@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ExternalLink, FilePlus2, PenLine, Send } from "lucide-react";
+import { agreementPlaceholderCount } from "@/lib/social/schema";
 import { agreementHref } from "@/lib/social/links";
 import { AGREEMENT_LABEL, AGREEMENT_PILL, COUNTERSIGN_CONSENT } from "@/lib/social/schema";
 import type { Agreement, Program } from "@/lib/social/server";
@@ -16,7 +17,7 @@ function DraftForm({ programId, draft, onDone }: { programId: string; draft?: Ag
   const { run, busy, error } = useSocialAction();
   const [title, setTitle] = useState(draft?.title ?? "Social Media Management Agreement");
   const [body, setBody] = useState(draft?.body ?? "");
-  const open = (body.match(/\[[^\]\n]{1,200}\]/g) ?? []).length;
+  const open = agreementPlaceholderCount(title, body);
   return (
     <form
       className="space-y-4"
@@ -56,7 +57,7 @@ function AgreementCard({ agreement, origin }: { agreement: Agreement; origin: st
   const [title, setTitle] = useState("");
   const [consent, setConsent] = useState(false);
   const url = agreement.token ? `${origin}${agreementHref(agreement.token)}` : "";
-  const open = (agreement.body.match(/\[[^\]\n]{1,200}\]/g) ?? []).length;
+  const open = agreementPlaceholderCount(agreement.title, agreement.body);
 
   if (mode === "edit")
     return (
@@ -87,7 +88,7 @@ function AgreementCard({ agreement, origin }: { agreement: Agreement; origin: st
           <button type="button" className="btn-secondary" onClick={() => setMode("edit")}>
             <PenLine className="h-4 w-4" aria-hidden="true" /> Edit
           </button>
-          <button type="button" className="btn-primary" onClick={() => setMode("send")}>
+          <button type="button" className="btn-primary" disabled={open > 0} onClick={() => setMode("send")}>
             <Send className="h-4 w-4" aria-hidden="true" /> Get the signing link
           </button>
           <button type="button" className="btn-ghost" onClick={() => setMode("void")}>Cancel this draft</button>
@@ -102,7 +103,7 @@ function AgreementCard({ agreement, origin }: { agreement: Agreement; origin: st
             {open > 0 && <strong> The text still has {open} item{open === 1 ? "" : "s"} in [square brackets].</strong>}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className="btn-primary" disabled={busy} onClick={async () => (await run({ action: "send_agreement", id: agreement.id })) && setMode("view")}>
+            <button type="button" className="btn-primary" disabled={busy || open > 0} onClick={async () => (await run({ action: "send_agreement", id: agreement.id })) && setMode("view")}>
               {busy ? "Working..." : "Lock the text and create the link"}
             </button>
             <button type="button" className="btn-ghost" disabled={busy} onClick={() => setMode("view")}>Not yet</button>

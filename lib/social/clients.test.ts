@@ -377,7 +377,7 @@ describe("client page API", () => {
       }),
       { params: Promise.resolve({ token }) },
     );
-  const approve = { action: "approve", item_id: id, name: "Pat Lee" };
+  const approve = { action: "approve", revision: 1, item_id: id, name: "Pat Lee" };
   beforeEach(() => {
     mock.rpc.mockResolvedValue({ data: 1, error: null });
     mock.send.mockResolvedValue({ status: "sent", id: "e1" });
@@ -393,7 +393,7 @@ describe("client page API", () => {
   });
   it("emails the office when the client asks for a change or sends a note, and survives a mail failure", async () => {
     mock.client.mockResolvedValue({ client: "Test Hotels", program_id: id, approved: 0, notify: { kind: "changes", by: "Pat <b>Lee</b>", account: "Hotel A", title: "Lobby", text: "Use the pool photo" } });
-    expect((await act({ action: "request_changes", item_id: id, name: "Pat Lee", note: "Use the pool photo" })).status).toBe(200);
+    expect((await act({ action: "request_changes", revision: 1, item_id: id, name: "Pat Lee", note: "Use the pool photo" })).status).toBe(200);
     const mail = mock.send.mock.calls[0][0];
     expect(mail).toMatchObject({ to: "office@example.test", subject: "Test Hotels asked for a change (Hotel A: Lobby)" });
     expect(mail.html).toContain("Use the pool photo");
@@ -404,8 +404,8 @@ describe("client page API", () => {
   });
   it("refuses previews, other sites, bad forms and floods before anything is read or changed", async () => {
     expect((await act(approve, "https://evil.test")).status).toBe(403);
-    expect((await act({ action: "approve", item_id: id, name: "P" })).status).toBe(400);
-    expect((await act({ action: "request_changes", item_id: id, name: "Pat Lee", note: "" })).status).toBe(400);
+    expect((await act({ action: "approve", revision: 1, item_id: id, name: "P" })).status).toBe(400);
+    expect((await act({ action: "request_changes", revision: 1, item_id: id, name: "Pat Lee", note: "" })).status).toBe(400);
     expect((await act({ action: "delete_everything", name: "Pat Lee" })).status).toBe(400);
     mock.rpc.mockResolvedValue({ data: 301, error: null });
     expect((await act(approve)).status).toBe(429);
@@ -414,8 +414,8 @@ describe("client page API", () => {
     expect(mock.client).not.toHaveBeenCalled();
   });
   it("accepts only the four things a client may do", () => {
-    expect(clientActionSchema.safeParse({ action: "approve_all", account_id: id, month: "2027-01", name: "Pat Lee" }).success).toBe(true);
-    expect(clientActionSchema.safeParse({ action: "approve_all", account_id: id, month: "2027-13", name: "Pat Lee" }).success).toBe(false);
+    expect(clientActionSchema.safeParse({ action: "approve_all", items: [{ id, revision: 1 }], account_id: id, month: "2027-01", name: "Pat Lee" }).success).toBe(true);
+    expect(clientActionSchema.safeParse({ action: "approve_all", items: [{ id, revision: 1 }], account_id: id, month: "2027-13", name: "Pat Lee" }).success).toBe(false);
     expect(clientActionSchema.safeParse({ action: "note", name: "Pat Lee", message: "Hello there" }).success).toBe(true);
     for (const action of ["update_item", "set_report_link", "update_program", "plan_month"])
       expect(clientActionSchema.safeParse({ action, id, item_id: id, account_id: id, name: "Pat Lee", note: "x y z", message: "x y z" }).success).toBe(false);

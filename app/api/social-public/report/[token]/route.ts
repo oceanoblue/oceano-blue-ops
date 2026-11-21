@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     if (process.env.VERCEL_ENV !== "production") throw new CrmError("Use the live page to send this.", 403);
     if (req.headers.get("origin") !== new URL(req.url).origin) throw new CrmError("Reload the page and try again.", 403);
     const { token } = await params;
-    const parsed = clientActionSchema.safeParse(await readJson(req, 8000));
+    const parsed = clientActionSchema.safeParse(await readJson(req, 20000));
     if (!parsed.success) throw new CrmError(parsed.error.issues[0]?.message || "Check the form and try again.");
     const ipHash = createHash("sha256").update(clientIp(req)).digest("hex");
     const limited = await crmDb().rpc("bump_rate_limit", {

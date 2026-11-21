@@ -71,7 +71,7 @@ function NameField({ value, onChange }: { value: string; onChange: (v: string) =
  * What a client can do with one piece: approve it or ask for a change while
  * it is waiting for their review, or ask for a change afterwards.
  */
-export function PieceActions({ token, itemId, canApprove, readOnly }: { token: string; itemId: string; canApprove: boolean; readOnly: boolean }) {
+export function PieceActions({ token, itemId, revision, canApprove, readOnly }: { token: string; itemId: string; revision: number; canApprove: boolean; readOnly: boolean }) {
   const { send, busy, error } = useClientAction(token, readOnly);
   const [mode, setMode] = useState<"idle" | "approve" | "changes">("idle");
   const [name, setName] = useState("");
@@ -81,7 +81,7 @@ export function PieceActions({ token, itemId, canApprove, readOnly }: { token: s
     const known = name || rememberedName();
     setName(known);
     // With a name already on file, approving is one tap.
-    if (next === "approve" && known.trim().length >= 2) return void send({ action: "approve", item_id: itemId, name: known.trim() });
+    if (next === "approve" && known.trim().length >= 2) return void send({ action: "approve", item_id: itemId, revision, name: known.trim() });
     setMode(next);
   }
 
@@ -107,7 +107,7 @@ export function PieceActions({ token, itemId, canApprove, readOnly }: { token: s
       className="mt-3 space-y-3 rounded-xl bg-ink-50 p-4 ring-1 ring-ink-100 print:hidden"
       onSubmit={async (e) => {
         e.preventDefault();
-        const ok = await send(mode === "approve" ? { action: "approve", item_id: itemId, name: name.trim() } : { action: "request_changes", item_id: itemId, name: name.trim(), note: note.trim() });
+        const ok = await send(mode === "approve" ? { action: "approve", item_id: itemId, revision, name: name.trim() } : { action: "request_changes", item_id: itemId, revision, name: name.trim(), note: note.trim() });
         if (ok) {
           setMode("idle");
           setNote("");
@@ -135,9 +135,12 @@ export function PieceActions({ token, itemId, canApprove, readOnly }: { token: s
 }
 
 /** Approve every piece waiting for review for one account, in the month on screen. */
-export function ApproveAll({ token, accountId, month, count, readOnly }: { token: string; accountId: string; month: string; count: number; readOnly: boolean }) {
+export function ApproveAll({ token, accountId, month, items, readOnly }: { token: string; accountId: string; month: string; items: { id: string; revision: number; date: string | null; title: string }[]; readOnly: boolean }) {
   const { send, busy, error } = useClientAction(token, readOnly);
   const [asking, setAsking] = useState(false);
+  const [date, setDate] = useState("");
+  const selected = date ? items.filter(item => item.date === date) : items;
+  const dates = [...new Set(items.flatMap(item => item.date ? [item.date] : []))].sort();
   const [name, setName] = useState("");
   if (!asking)
     return (
@@ -150,7 +153,7 @@ export function ApproveAll({ token, accountId, month, count, readOnly }: { token
             setAsking(true);
           }}
         >
-          <Check className="h-4 w-4" aria-hidden="true" /> Approve all {count}
+          <Check className="h-4 w-4" aria-hidden="true" /> Approve all {items.length}
         </button>
       </div>
     );
@@ -159,13 +162,19 @@ export function ApproveAll({ token, accountId, month, count, readOnly }: { token
       className="w-full space-y-3 rounded-xl bg-ink-50 p-4 ring-1 ring-ink-100 print:hidden"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (await send({ action: "approve_all", account_id: accountId, month, name: name.trim() })) setAsking(false);
+        if (await send({ action: "approve_all", account_id: accountId, month, items: selected.map(({ id, revision }) => ({ id, revision })), name: name.trim() })) setAsking(false);
       }}
     >
-      <p className="text-sm text-slate-700">This approves all {count} pieces waiting for your review for this account this month.</p>
+      <label className="block"><span className="label">Pieces to approve</span>
+        <select className="input" value={date} onChange={e => setDate(e.target.value)}>
+          <option value="">All displayed dates this month</option>
+          {dates.map(day => <option key={day} value={day}>{day}</option>)}
+        </select>
+      </label>
+      <ul className="list-inside list-disc text-sm">{selected.map(item => <li key={item.id}>{item.title || "Untitled piece"} · {item.date || "Unscheduled"} · revision {item.revision}</li>)}</ul>
       <NameField value={name} onChange={setName} />
       <div className="flex flex-wrap gap-2">
-        <button className="btn-primary" disabled={busy}>{busy ? "Approving..." : `Approve all ${count}`}</button>
+        <button className="btn-primary" disabled={busy}>{busy ? "Approving..." : `Approve ${selected.length} displayed pieces`}</button>
         <button type="button" className="btn-ghost" disabled={busy} onClick={() => setAsking(false)}>Cancel</button>
       </div>
       {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
